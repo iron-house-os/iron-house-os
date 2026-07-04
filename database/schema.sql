@@ -64,6 +64,49 @@ CREATE TABLE IF NOT EXISTS rfqs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS rfq_packages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255),
+    scope_summary TEXT,
+    due_at TIMESTAMPTZ,
+    status VARCHAR(80) NOT NULL DEFAULT 'draft',
+    supplier_category_targets JSONB NOT NULL DEFAULT '[]',
+    metadata_json JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS rfq_package_supplier_recipients (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rfq_package_id UUID NOT NULL REFERENCES rfq_packages(id),
+    supplier_id VARCHAR(120) NOT NULL,
+    supplier_name VARCHAR(255) NOT NULL,
+    category VARCHAR(120),
+    status VARCHAR(80) NOT NULL DEFAULT 'selected',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_rfq_package_supplier_recipients_package
+ON rfq_package_supplier_recipients(rfq_package_id);
+
+CREATE TABLE IF NOT EXISTS rfq_package_documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rfq_package_id UUID NOT NULL REFERENCES rfq_packages(id),
+    document_type VARCHAR(120) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    required BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(80) NOT NULL DEFAULT 'registered',
+    storage_uri VARCHAR(500),
+    metadata_json JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_rfq_package_documents_package
+ON rfq_package_documents(rfq_package_id);
+
 CREATE TABLE IF NOT EXISTS quotes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     rfq_id UUID NOT NULL REFERENCES rfqs(id),

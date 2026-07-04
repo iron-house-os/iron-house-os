@@ -39,8 +39,8 @@ export const modules: AppModule[] = [
     label: "RFQ Builder",
     path: "/rfq-builder",
     icon: FileStack,
-    description: "Future workspace for assembling supplier quote packages.",
-    status: "Reserved",
+    description: "Create RFQ packages, select suppliers, register documents, and check readiness.",
+    status: "Phase 2 foundation",
   },
   {
     label: "Supplier Database",
