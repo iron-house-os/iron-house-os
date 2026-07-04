@@ -38,11 +38,30 @@ FROM municipalities
 WHERE name = 'City of Surrey'
 ON CONFLICT (project_number) DO NOTHING;
 
-INSERT INTO tenders (municipality_id, source, reference_number, title, status, source_url, summary)
-SELECT id, 'manual', 'T-0001', 'Sample Civil Works Tender', 'watching', 'https://example.com/tenders/t-0001', 'Seed tender for Phase 2 tracker design.'
+INSERT INTO tenders (
+    municipality_id,
+    source,
+    tender_number,
+    title,
+    status,
+    source_url,
+    owner,
+    municipality,
+    description
+)
+SELECT
+    id,
+    'manual',
+    'T-0001',
+    'Sample Civil Works Tender',
+    'new',
+    'https://example.com/tenders/t-0001',
+    'City of Surrey',
+    'Surrey',
+    'Seed tender for intake workflow design.'
 FROM municipalities
 WHERE name = 'City of Surrey'
-ON CONFLICT (reference_number) DO NOTHING;
+ON CONFLICT (tender_number) DO NOTHING;
 
 INSERT INTO equipment (name, equipment_type, identifier, status, hourly_rate)
 VALUES

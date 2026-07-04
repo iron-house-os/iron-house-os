@@ -60,8 +60,8 @@ export const modules: AppModule[] = [
     label: "Tender Tracker",
     path: "/tenders",
     icon: Building2,
-    description: "Tender watchlist and municipality opportunity intake.",
-    status: "Model ready",
+    description: "Manual tender intake and opportunity-to-project workspace flow.",
+    status: "Phase 5",
   },
   {
     label: "Document Library",

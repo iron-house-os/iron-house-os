@@ -30,6 +30,7 @@ def list_documents(
     status: str | None = None,
     project_id: UUID | None = None,
     rfq_package_id: UUID | None = None,
+    tender_id: UUID | None = None,
 ) -> DocumentList:
     statement = select(Document).order_by(Document.created_at.desc())
     if category:
@@ -40,6 +41,8 @@ def list_documents(
         statement = statement.where(Document.project_id == project_id)
     if rfq_package_id:
         statement = statement.where(Document.rfq_package_id == rfq_package_id)
+    if tender_id:
+        statement = statement.where(Document.tender_id == tender_id)
     items = [_to_schema(document) for document in db.scalars(statement).all()]
     return DocumentList(items=items, total=len(items))
 
@@ -94,6 +97,7 @@ def _document_values(payload: DocumentCreate) -> dict:
         "status": payload.status.value,
         "project_id": payload.project_id,
         "rfq_package_id": payload.rfq_package_id,
+        "tender_id": payload.tender_id,
         "supplier_id": payload.supplier_id,
         "storage_uri": payload.storage_uri,
         "description": payload.description,
@@ -141,6 +145,7 @@ def _to_schema(document: Document) -> DocumentRead:
         status=DocumentStatus(document.status),
         project_id=document.project_id,
         rfq_package_id=document.rfq_package_id,
+        tender_id=document.tender_id,
         supplier_id=document.supplier_id,
         storage_uri=document.storage_uri,
         description=document.description,

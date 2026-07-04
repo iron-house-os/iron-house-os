@@ -39,6 +39,7 @@ class DocumentCreate(BaseModel):
     status: DocumentStatus = DocumentStatus.registered
     project_id: UUID | None = None
     rfq_package_id: UUID | None = None
+    tender_id: UUID | None = None
     supplier_id: UUID | None = None
     storage_uri: str | None = None
     description: str | None = None
@@ -52,6 +53,7 @@ class DocumentUpdate(BaseModel):
     status: DocumentStatus | None = None
     project_id: UUID | None = None
     rfq_package_id: UUID | None = None
+    tender_id: UUID | None = None
     supplier_id: UUID | None = None
     storage_uri: str | None = None
     description: str | None = None
@@ -70,6 +72,7 @@ class DocumentRead(BaseModel):
     status: DocumentStatus
     project_id: UUID | None
     rfq_package_id: UUID | None
+    tender_id: UUID | None
     supplier_id: UUID | None
     storage_uri: str | None
     description: str | None

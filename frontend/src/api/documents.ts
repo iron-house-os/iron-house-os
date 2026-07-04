@@ -27,6 +27,7 @@ export type LibraryDocument = {
   status: DocumentStatus;
   project_id: string | null;
   rfq_package_id: string | null;
+  tender_id: string | null;
   supplier_id: string | null;
   storage_uri: string | null;
   description: string | null;
@@ -47,6 +48,7 @@ export type DocumentCreatePayload = {
   status?: DocumentStatus;
   project_id?: string;
   rfq_package_id?: string;
+  tender_id?: string;
   supplier_id?: string;
   storage_uri?: string;
   description?: string;
@@ -97,6 +99,7 @@ export const documentsApi = {
     status?: string;
     project_id?: string;
     rfq_package_id?: string;
+    tender_id?: string;
   }) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {

@@ -32,6 +32,7 @@ def list_documents(
     status: OptionalQuery = None,
     project_id: OptionalUUIDQuery = None,
     rfq_package_id: OptionalUUIDQuery = None,
+    tender_id: OptionalUUIDQuery = None,
 ) -> DocumentList:
     return documents.list_documents(
         db,
@@ -39,6 +40,7 @@ def list_documents(
         status=status,
         project_id=project_id,
         rfq_package_id=rfq_package_id,
+        tender_id=tender_id,
     )
 
 

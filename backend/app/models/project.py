@@ -33,6 +33,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     municipality_ref = relationship("Municipality", back_populates="projects")
+    tenders = relationship("Tender", back_populates="project")
     rfqs = relationship("RFQ", back_populates="project")
     rfq_packages = relationship("RFQPackage", back_populates="project")
     bids = relationship("Bid", back_populates="project")

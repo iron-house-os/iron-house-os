@@ -146,13 +146,22 @@ CREATE TABLE IF NOT EXISTS quotes (
 CREATE TABLE IF NOT EXISTS tenders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     municipality_id UUID REFERENCES municipalities(id),
-    source VARCHAR(120),
-    reference_number VARCHAR(120) UNIQUE,
+    project_id UUID REFERENCES projects(id),
+    rfq_package_id UUID REFERENCES rfq_packages(id),
     title VARCHAR(255) NOT NULL,
-    status VARCHAR(80) NOT NULL DEFAULT 'watching',
-    closes_at TIMESTAMPTZ,
+    tender_number VARCHAR(120) UNIQUE,
+    source VARCHAR(120),
     source_url VARCHAR(500),
-    summary TEXT,
+    owner VARCHAR(255),
+    municipality VARCHAR(255),
+    closing_date DATE,
+    site_meeting_date DATE,
+    question_deadline DATE,
+    project_address VARCHAR(500),
+    description TEXT,
+    status VARCHAR(80) NOT NULL DEFAULT 'new',
+    estimated_value NUMERIC(14, 2),
+    metadata_json JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -177,6 +186,7 @@ CREATE TABLE IF NOT EXISTS documents (
     status VARCHAR(80) NOT NULL DEFAULT 'registered',
     project_id UUID REFERENCES projects(id),
     rfq_package_id UUID REFERENCES rfq_packages(id),
+    tender_id UUID REFERENCES tenders(id),
     supplier_id UUID REFERENCES suppliers(id),
     storage_uri VARCHAR(500),
     description TEXT,
@@ -194,6 +204,7 @@ CREATE INDEX IF NOT EXISTS ix_documents_category ON documents(category);
 CREATE INDEX IF NOT EXISTS ix_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS ix_documents_project ON documents(project_id);
 CREATE INDEX IF NOT EXISTS ix_documents_rfq_package ON documents(rfq_package_id);
+CREATE INDEX IF NOT EXISTS ix_documents_tender ON documents(tender_id);
 
 CREATE TABLE IF NOT EXISTS drawings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

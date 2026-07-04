@@ -7,10 +7,14 @@ import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
+import { TenderIntakePage } from "./pages/TenderIntakePage";
 
 export function App() {
   const placeholderModules = modules.filter(
-    (module) => !["/rfq-builder", "/suppliers", "/documents", "/projects"].includes(module.path),
+    (module) =>
+      !["/rfq-builder", "/suppliers", "/documents", "/projects", "/tenders"].includes(
+        module.path,
+      ),
   );
 
   return (
@@ -25,6 +29,8 @@ export function App() {
         <Route path="/documents/:documentId" element={<DocumentLibraryPage />} />
         <Route path="/projects" element={<ProjectWorkspacePage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspacePage />} />
+        <Route path="/tenders" element={<TenderIntakePage />} />
+        <Route path="/tenders/:tenderId" element={<TenderIntakePage />} />
         {placeholderModules.map((module) => (
           <Route
             key={module.path}

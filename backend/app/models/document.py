@@ -17,6 +17,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(80), default="registered", index=True)
     project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"))
     rfq_package_id: Mapped[UUID | None] = mapped_column(ForeignKey("rfq_packages.id"))
+    tender_id: Mapped[UUID | None] = mapped_column(ForeignKey("tenders.id"))
     supplier_id: Mapped[UUID | None] = mapped_column(ForeignKey("suppliers.id"))
     storage_uri: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
@@ -26,6 +27,8 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     revision: Mapped[str | None] = mapped_column(String(80))
     issue_date: Mapped[date | None] = mapped_column(Date)
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
+
+    tender = relationship("Tender", back_populates="documents")
 
 
 class Drawing(UUIDPrimaryKeyMixin, TimestampMixin, Base):
