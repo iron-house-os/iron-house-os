@@ -1,10 +1,10 @@
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.types import JSONType
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
@@ -16,7 +16,7 @@ class Drawing(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     discipline: Mapped[str | None] = mapped_column(String(120))
     revision: Mapped[str | None] = mapped_column(String(80))
     storage_uri: Mapped[str | None] = mapped_column(String(500))
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     project = relationship("Project", back_populates="drawings")
 
@@ -28,6 +28,6 @@ class Takeoff(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     drawing_id: Mapped[UUID | None] = mapped_column(ForeignKey("drawings.id"))
     status: Mapped[str] = mapped_column(String(80), default="pending")
     notes: Mapped[str | None] = mapped_column(Text)
-    quantities_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    quantities_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     project = relationship("Project", back_populates="takeoffs")

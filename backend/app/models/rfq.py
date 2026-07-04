@@ -2,10 +2,10 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.types import JSONType
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
@@ -17,7 +17,7 @@ class RFQ(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(80), default="draft")
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scope_summary: Mapped[str | None] = mapped_column(Text)
-    package_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    package_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     project = relationship("Project", back_populates="rfqs")
     quotes = relationship("Quote", back_populates="rfq")
@@ -44,11 +44,19 @@ class RFQPackage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     scope_summary: Mapped[str | None] = mapped_column(Text)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(80), default="draft")
-    supplier_category_targets: Mapped[list[str]] = mapped_column(JSONB, default=list)
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    supplier_category_targets: Mapped[list[str]] = mapped_column(JSONType, default=list)
+    metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
-    recipients = relationship("RFQPackageSupplierRecipient", back_populates="rfq_package")
-    documents = relationship("RFQPackageDocument", back_populates="rfq_package")
+    recipients = relationship(
+        "RFQPackageSupplierRecipient",
+        back_populates="rfq_package",
+        cascade="all, delete-orphan",
+    )
+    documents = relationship(
+        "RFQPackageDocument",
+        back_populates="rfq_package",
+        cascade="all, delete-orphan",
+    )
 
 
 class RFQPackageSupplierRecipient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -72,6 +80,6 @@ class RFQPackageDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     required: Mapped[bool] = mapped_column(default=True)
     status: Mapped[str] = mapped_column(String(80), default="registered")
     storage_uri: Mapped[str | None] = mapped_column(String(500))
-    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
     rfq_package = relationship("RFQPackage", back_populates="documents")

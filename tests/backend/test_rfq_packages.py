@@ -1,14 +1,9 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.rfq_packages import rfq_package_store
 
 
 client = TestClient(app)
-
-
-def setup_function() -> None:
-    rfq_package_store.reset()
 
 
 def create_package() -> dict:
@@ -144,3 +139,44 @@ def test_rfq_package_readiness_summary() -> None:
     assert response.json()["ready"] is True
     assert response.json()["score"] == 100
     assert len(response.json()["items"]) == 3
+
+
+def test_rfq_package_persists_across_requests() -> None:
+    rfq_package = create_package()
+
+    first_response = client.get(f"/api/v1/rfqs/{rfq_package['id']}")
+    second_response = client.get(f"/api/v1/rfqs/{rfq_package['id']}")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json()["id"] == rfq_package["id"]
+
+
+def test_rfq_package_children_persist_across_requests() -> None:
+    rfq_package = create_package()
+    client.put(
+        f"/api/v1/rfqs/{rfq_package['id']}/suppliers",
+        json=[
+            {
+                "supplier_id": "supplier-001",
+                "supplier_name": "Pacific Pipe Supply",
+                "category": "pipe",
+            }
+        ],
+    )
+    client.put(
+        f"/api/v1/rfqs/{rfq_package['id']}/documents",
+        json=[
+            {
+                "document_type": "drawing",
+                "title": "C-101 Utility Plan",
+                "required": True,
+            }
+        ],
+    )
+
+    response = client.get(f"/api/v1/rfqs/{rfq_package['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["recipients"][0]["supplier_name"] == "Pacific Pipe Supply"
+    assert response.json()["documents"][0]["title"] == "C-101 Utility Plan"
