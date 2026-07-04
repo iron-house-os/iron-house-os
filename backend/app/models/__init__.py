@@ -3,7 +3,7 @@ from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
 from app.models.municipality import Municipality
-from app.models.project import Project
+from app.models.project import Project, ProjectSupplier
 from app.models.rfq import (
     RFQ,
     Quote,
@@ -24,6 +24,7 @@ __all__ = [
     "Equipment",
     "Municipality",
     "Project",
+    "ProjectSupplier",
     "Quote",
     "RFQ",
     "RFQPackage",

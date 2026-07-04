@@ -32,8 +32,8 @@ export const modules: AppModule[] = [
     label: "Projects",
     path: "/projects",
     icon: FolderKanban,
-    description: "Project records, scopes, milestones, and linked bid activity.",
-    status: "Model ready",
+    description: "Central workspace for RFQs, documents, suppliers, drawings, bids, and readiness.",
+    status: "Phase 4 foundation",
   },
   {
     label: "RFQ Builder",

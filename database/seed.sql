@@ -17,8 +17,23 @@ FROM suppliers
 WHERE name = 'Pacific Pipe Supply'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO projects (name, project_number, status, municipality_id, description)
-SELECT 'Phase 1 Demonstration Project', 'IHO-0001', 'planning', id, 'Seed project for scaffold validation.'
+INSERT INTO projects (
+    name,
+    client_owner,
+    municipality,
+    project_number,
+    status,
+    municipality_id,
+    notes
+)
+SELECT
+    'Phase 1 Demonstration Project',
+    'City of Surrey',
+    'Surrey',
+    'IHO-0001',
+    'opportunity',
+    id,
+    'Seed project for scaffold validation.'
 FROM municipalities
 WHERE name = 'City of Surrey'
 ON CONFLICT (project_number) DO NOTHING;

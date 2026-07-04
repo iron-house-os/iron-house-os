@@ -39,6 +39,7 @@ class Quote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class RFQPackage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "rfq_packages"
 
+    project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     project_name: Mapped[str | None] = mapped_column(String(255))
     scope_summary: Mapped[str | None] = mapped_column(Text)
@@ -47,6 +48,7 @@ class RFQPackage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     supplier_category_targets: Mapped[list[str]] = mapped_column(JSONType, default=list)
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
+    project = relationship("Project", back_populates="rfq_packages")
     recipients = relationship(
         "RFQPackageSupplierRecipient",
         back_populates="rfq_package",

@@ -21,6 +21,7 @@ from app.schemas.rfq_package import (
 
 def create_rfq_package(db: Session, payload: RFQPackageCreate) -> RFQPackageRead:
     rfq_package = RFQPackage(
+        project_id=payload.project_id,
         title=payload.title,
         project_name=payload.project_name,
         scope_summary=payload.scope_summary,
@@ -167,6 +168,7 @@ def _load_package(db: Session, rfq_package_id: UUID) -> RFQPackage:
 def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
     return RFQPackageRead(
         id=rfq_package.id,
+        project_id=rfq_package.project_id,
         title=rfq_package.title,
         project_name=rfq_package.project_name,
         scope_summary=rfq_package.scope_summary,

@@ -15,5 +15,5 @@ class Municipality(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     standards_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
-    projects = relationship("Project", back_populates="municipality")
+    projects = relationship("Project", back_populates="municipality_ref")
     tenders = relationship("Tender", back_populates="municipality")

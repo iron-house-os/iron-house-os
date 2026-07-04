@@ -14,14 +14,38 @@ CREATE TABLE IF NOT EXISTS municipalities (
 CREATE TABLE IF NOT EXISTS projects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
+    client_owner VARCHAR(255),
+    municipality VARCHAR(255),
     project_number VARCHAR(80) UNIQUE,
-    status VARCHAR(80) NOT NULL DEFAULT 'planning',
+    tender_number VARCHAR(120),
+    tender_source VARCHAR(255),
+    tender_closing_date DATE,
+    bid_due_date DATE,
+    estimated_construction_start DATE,
+    estimated_construction_finish DATE,
+    project_address VARCHAR(500),
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    contract_value NUMERIC(14, 2),
+    status VARCHAR(80) NOT NULL DEFAULT 'opportunity',
     municipality_id UUID REFERENCES municipalities(id),
     description TEXT,
+    notes TEXT,
     metadata_json JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS project_suppliers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id),
+    supplier_id UUID NOT NULL REFERENCES suppliers(id),
+    role VARCHAR(120),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_project_suppliers_project ON project_suppliers(project_id);
 
 CREATE TABLE IF NOT EXISTS suppliers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -66,6 +90,7 @@ CREATE TABLE IF NOT EXISTS rfqs (
 
 CREATE TABLE IF NOT EXISTS rfq_packages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID REFERENCES projects(id),
     title VARCHAR(255) NOT NULL,
     project_name VARCHAR(255),
     scope_summary TEXT,

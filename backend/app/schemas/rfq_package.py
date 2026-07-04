@@ -39,6 +39,7 @@ class RFQPackageDocumentRead(RFQPackageDocumentCreate):
 
 class RFQPackageCreate(BaseModel):
     title: str = Field(min_length=1)
+    project_id: UUID | None = None
     project_name: str | None = None
     scope_summary: str | None = None
     due_at: datetime | None = None
@@ -52,6 +53,7 @@ class RFQPackageUpdateStatus(BaseModel):
 
 class RFQPackageRead(BaseModel):
     id: UUID
+    project_id: UUID | None
     title: str
     project_name: str | None
     scope_summary: str | None
