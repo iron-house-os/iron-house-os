@@ -13,5 +13,8 @@ class PlaceholderList(BaseModel):
 
 
 def placeholder_list(module_name: str) -> PlaceholderList:
-    item = PlaceholderItem(id=f"{module_name}-placeholder", name=f"{module_name.title()} placeholder")
+    item = PlaceholderItem(
+        id=f"{module_name}-placeholder",
+        name=f"{module_name.title()} placeholder",
+    )
     return PlaceholderList(items=[item], total=1)

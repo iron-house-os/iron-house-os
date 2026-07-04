@@ -11,6 +11,9 @@ class AgentCapability:
 PHASE_TWO_AGENT_CAPABILITIES = [
     AgentCapability("drawing_ingestion", "Parse drawing packages and prepare takeoff inputs."),
     AgentCapability("supplier_outreach", "Coordinate RFQ communication with supplier contacts."),
-    AgentCapability("tender_monitoring", "Track public tender sources and normalize opportunities."),
+    AgentCapability(
+        "tender_monitoring",
+        "Track public tender sources and normalize opportunities.",
+    ),
     AgentCapability("standards_lookup", "Map municipality standards to project requirements."),
 ]
