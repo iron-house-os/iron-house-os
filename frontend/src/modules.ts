@@ -67,8 +67,8 @@ export const modules: AppModule[] = [
     label: "Document Library",
     path: "/documents",
     icon: BookOpen,
-    description: "Drawings, specifications, addenda, and bid files.",
-    status: "Model ready",
+    description: "Metadata library for drawings, specs, addenda, RFQs, and future storage sync.",
+    status: "Phase 3 foundation",
   },
   {
     label: "Equipment",

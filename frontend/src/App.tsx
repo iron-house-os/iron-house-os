@@ -3,12 +3,13 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { modules } from "./modules";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 
 export function App() {
   const placeholderModules = modules.filter(
-    (module) => !["/rfq-builder", "/suppliers"].includes(module.path),
+    (module) => !["/rfq-builder", "/suppliers", "/documents"].includes(module.path),
   );
 
   return (
@@ -19,6 +20,8 @@ export function App() {
         <Route path="/rfq-builder/:rfqPackageId" element={<RFQBuilderPage />} />
         <Route path="/suppliers" element={<SupplierDatabasePage />} />
         <Route path="/suppliers/:supplierId" element={<SupplierDatabasePage />} />
+        <Route path="/documents" element={<DocumentLibraryPage />} />
+        <Route path="/documents/:documentId" element={<DocumentLibraryPage />} />
         {placeholderModules.map((module) => (
           <Route
             key={module.path}

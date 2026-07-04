@@ -1,6 +1,6 @@
 from app.models.bid import Bid
 from app.models.contact import Contact
-from app.models.document import Drawing, Takeoff
+from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
 from app.models.municipality import Municipality
 from app.models.project import Project
@@ -18,6 +18,7 @@ from app.models.user import Employee
 __all__ = [
     "Bid",
     "Contact",
+    "Document",
     "Drawing",
     "Employee",
     "Equipment",

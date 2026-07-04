@@ -145,6 +145,31 @@ CREATE TABLE IF NOT EXISTS bids (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(80) NOT NULL,
+    status VARCHAR(80) NOT NULL DEFAULT 'registered',
+    project_id UUID REFERENCES projects(id),
+    rfq_package_id UUID REFERENCES rfq_packages(id),
+    supplier_id UUID REFERENCES suppliers(id),
+    storage_uri VARCHAR(500),
+    description TEXT,
+    sheet_number VARCHAR(80),
+    drawing_title VARCHAR(255),
+    discipline VARCHAR(120),
+    revision VARCHAR(80),
+    issue_date DATE,
+    metadata_json JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_documents_category ON documents(category);
+CREATE INDEX IF NOT EXISTS ix_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS ix_documents_project ON documents(project_id);
+CREATE INDEX IF NOT EXISTS ix_documents_rfq_package ON documents(rfq_package_id);
+
 CREATE TABLE IF NOT EXISTS drawings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL REFERENCES projects(id),
