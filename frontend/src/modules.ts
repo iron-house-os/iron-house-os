@@ -46,8 +46,8 @@ export const modules: AppModule[] = [
     label: "Supplier Database",
     path: "/suppliers",
     icon: Database,
-    description: "Supplier profiles, contacts, categories, and coverage areas.",
-    status: "Model ready",
+    description: "Supplier profiles, contacts, categories, and service area search.",
+    status: "Phase 2 foundation",
   },
   {
     label: "Estimating",

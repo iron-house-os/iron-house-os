@@ -16,5 +16,5 @@ class Supplier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
-    contacts = relationship("Contact", back_populates="supplier")
+    contacts = relationship("Contact", back_populates="supplier", cascade="all, delete-orphan")
     quotes = relationship("Quote", back_populates="supplier")
