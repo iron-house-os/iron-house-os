@@ -13,7 +13,8 @@ from app.schemas.supplier import (
     SupplierRead,
     SupplierUpdate,
 )
-from app.services import suppliers
+from app.schemas.supplier_selection import SupplierRFQCandidateList, SupplierRFQCandidateRequest
+from app.services import supplier_selection, suppliers
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -44,6 +45,15 @@ def list_suppliers(
         service_area=service_area,
     )
     return SupplierList(items=items, total=len(items))
+
+
+@router.post("/rfq-candidates", response_model=SupplierRFQCandidateList)
+def select_rfq_candidates(
+    payload: SupplierRFQCandidateRequest,
+    db: DBSession,
+) -> SupplierRFQCandidateList:
+    items = supplier_selection.select_rfq_candidates(db, payload)
+    return SupplierRFQCandidateList(items=items, total=len(items))
 
 
 @router.get("/{supplier_id}", response_model=SupplierRead)
