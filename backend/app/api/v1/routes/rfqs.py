@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.schemas.rfq_draft import RFQDraftRequest, RFQDraftResponse
 from app.schemas.rfq_package import (
     RFQPackageCreate,
     RFQPackageDocumentCreate,
@@ -14,7 +15,7 @@ from app.schemas.rfq_package import (
     RFQPackageUpdateStatus,
     SupplierRecipientCreate,
 )
-from app.services import rfq_packages
+from app.services import rfq_drafts, rfq_packages
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -32,6 +33,11 @@ def create_rfq_package(
 def list_rfq_packages(db: DBSession) -> RFQPackageList:
     items = rfq_packages.list_rfq_packages(db)
     return RFQPackageList(items=items, total=len(items))
+
+
+@router.post("/draft", response_model=RFQDraftResponse)
+def build_rfq_draft(payload: RFQDraftRequest) -> RFQDraftResponse:
+    return rfq_drafts.build_rfq_draft(payload)
 
 
 @router.get("/{rfq_package_id}", response_model=RFQPackageRead)
