@@ -12,7 +12,8 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
-from app.services import projects
+from app.schemas.project_folder import ProjectFolderManifest, ProjectFolderRequest
+from app.services import project_folders, projects
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -27,6 +28,11 @@ def create_project(payload: ProjectCreate, db: DBSession) -> ProjectRead:
 @router.get("", response_model=ProjectList)
 def list_projects(db: DBSession, status: OptionalStatusQuery = None) -> ProjectList:
     return projects.list_projects(db, status=status)
+
+
+@router.post("/folder-manifest", response_model=ProjectFolderManifest)
+def build_folder_manifest(payload: ProjectFolderRequest) -> ProjectFolderManifest:
+    return project_folders.build_project_folder_manifest(payload)
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
