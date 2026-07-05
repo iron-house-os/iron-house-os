@@ -13,8 +13,9 @@ from app.schemas.supplier import (
     SupplierRead,
     SupplierUpdate,
 )
+from app.schemas.supplier_import import SupplierImportPreviewRequest, SupplierImportPreviewResponse
 from app.schemas.supplier_selection import SupplierRFQCandidateList, SupplierRFQCandidateRequest
-from app.services import supplier_selection, suppliers
+from app.services import supplier_import, supplier_selection, suppliers
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -29,6 +30,11 @@ def create_supplier(payload: SupplierCreate, db: DBSession) -> SupplierRead:
 def bulk_create_suppliers(payload: SupplierBulkCreate, db: DBSession) -> SupplierList:
     items = suppliers.bulk_create_suppliers(db, payload.suppliers)
     return SupplierList(items=items, total=len(items))
+
+
+@router.post("/import-preview", response_model=SupplierImportPreviewResponse)
+def preview_supplier_import(payload: SupplierImportPreviewRequest) -> SupplierImportPreviewResponse:
+    return supplier_import.preview_supplier_import(payload)
 
 
 @router.get("", response_model=SupplierList)
