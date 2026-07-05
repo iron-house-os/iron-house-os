@@ -1,0 +1,29 @@
+[project]
+name = "iron-house-os"
+version = "0.1.0"
+description = "Operating system for Iron House civil construction tender discovery, estimating, RFQs, and supplier tracking."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "openpyxl>=3.1",
+    "pandas>=2.2",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+ironhouse = "iron_house_os.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
