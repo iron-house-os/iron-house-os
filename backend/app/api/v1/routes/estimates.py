@@ -1,6 +1,12 @@
 from fastapi import APIRouter
 
-from app.schemas.estimate import EstimateCreate, EstimateLineItem, EstimateLineItemCost, EstimateSummary, RateLibrary
+from app.schemas.estimate import (
+    EstimateCreate,
+    EstimateLineItem,
+    EstimateLineItemCost,
+    EstimateSummary,
+    RateLibrary,
+)
 from app.services import estimates
 
 router = APIRouter()
