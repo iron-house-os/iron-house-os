@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import re
 
-from app.schemas.supplier import ContactCreate, SupplierCreate
+from sqlalchemy.orm import Session
+
+from app.core.errors import AppError
+from app.schemas.supplier import ContactCreate, SupplierCreate, SupplierList
 from app.schemas.supplier_import import (
+    SupplierImportCommitRequest,
+    SupplierImportCommitResponse,
     SupplierImportPreviewItem,
     SupplierImportPreviewRequest,
     SupplierImportPreviewResponse,
     SupplierImportRow,
 )
+from app.services import suppliers
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -56,6 +62,24 @@ def preview_supplier_import(payload: SupplierImportPreviewRequest) -> SupplierIm
         valid_count=sum(1 for item in items if item.valid),
         error_count=sum(len(item.errors) for item in items),
         warning_count=sum(len(item.warnings) for item in items),
+    )
+
+
+def commit_supplier_import(db: Session, payload: SupplierImportCommitRequest) -> SupplierImportCommitResponse:
+    preview = preview_supplier_import(payload)
+    invalid_items = [item for item in preview.items if not item.valid]
+    warning_items = [item for item in preview.items if item.warnings]
+
+    if invalid_items and not payload.skip_invalid:
+        raise AppError("Supplier import contains invalid rows", status_code=422)
+
+    supplier_payloads = [item.supplier for item in preview.items if item.valid and item.supplier is not None]
+    created_items = suppliers.bulk_create_suppliers(db, supplier_payloads)
+
+    return SupplierImportCommitResponse(
+        created=SupplierList(items=created_items, total=len(created_items)),
+        skipped_rows=invalid_items,
+        warning_rows=warning_items,
     )
 
 
