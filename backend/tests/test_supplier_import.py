@@ -1,5 +1,14 @@
-from app.schemas.supplier_import import SupplierImportPreviewRequest, SupplierImportRow
-from app.services.supplier_import import normalize_category, normalize_import_row, normalize_status, preview_supplier_import
+import pytest
+
+from app.core.errors import AppError
+from app.schemas.supplier_import import SupplierImportCommitRequest, SupplierImportPreviewRequest, SupplierImportRow
+from app.services.supplier_import import (
+    commit_supplier_import,
+    normalize_category,
+    normalize_import_row,
+    normalize_status,
+    preview_supplier_import,
+)
 
 
 def test_normalize_category_maps_common_aliases() -> None:
@@ -81,3 +90,30 @@ def test_preview_supplier_import_counts_valid_errors_and_warnings() -> None:
     assert result.valid_count == 2
     assert result.error_count == 1
     assert result.warning_count == 1
+
+
+def test_commit_supplier_import_skips_invalid_rows(db_session) -> None:
+    payload = SupplierImportCommitRequest(
+        rows=[
+            SupplierImportRow(company="EMCO", category="pipe", email="estimating@example.com"),
+            SupplierImportRow(category="testing", email="bad-email"),
+        ],
+        skip_invalid=True,
+    )
+
+    result = commit_supplier_import(db_session, payload)
+
+    assert result.created.total == 1
+    assert result.created.items[0].name == "EMCO"
+    assert len(result.skipped_rows) == 1
+    assert result.skipped_rows[0].row_number == 2
+
+
+def test_commit_supplier_import_raises_when_invalid_rows_not_skipped(db_session) -> None:
+    payload = SupplierImportCommitRequest(
+        rows=[SupplierImportRow(category="testing", email="bad-email")],
+        skip_invalid=False,
+    )
+
+    with pytest.raises(AppError):
+        commit_supplier_import(db_session, payload)
