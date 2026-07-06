@@ -13,7 +13,12 @@ from app.schemas.supplier import (
     SupplierRead,
     SupplierUpdate,
 )
-from app.schemas.supplier_import import SupplierImportPreviewRequest, SupplierImportPreviewResponse
+from app.schemas.supplier_import import (
+    SupplierImportCommitRequest,
+    SupplierImportCommitResponse,
+    SupplierImportPreviewRequest,
+    SupplierImportPreviewResponse,
+)
 from app.schemas.supplier_selection import SupplierRFQCandidateList, SupplierRFQCandidateRequest
 from app.services import supplier_import, supplier_selection, suppliers
 
@@ -35,6 +40,14 @@ def bulk_create_suppliers(payload: SupplierBulkCreate, db: DBSession) -> Supplie
 @router.post("/import-preview", response_model=SupplierImportPreviewResponse)
 def preview_supplier_import(payload: SupplierImportPreviewRequest) -> SupplierImportPreviewResponse:
     return supplier_import.preview_supplier_import(payload)
+
+
+@router.post("/import-commit", response_model=SupplierImportCommitResponse, status_code=status.HTTP_201_CREATED)
+def commit_supplier_import(
+    payload: SupplierImportCommitRequest,
+    db: DBSession,
+) -> SupplierImportCommitResponse:
+    return supplier_import.commit_supplier_import(db, payload)
 
 
 @router.get("", response_model=SupplierList)
