@@ -53,8 +53,8 @@ export const modules: AppModule[] = [
     label: "Estimating",
     path: "/estimating",
     icon: ClipboardList,
-    description: "Future takeoff, production, and cost database workspace.",
-    status: "Reserved",
+    description: "Production rate estimate builder with markups, risk, summary, and workbook export.",
+    status: "Phase 6 foundation",
   },
   {
     label: "Tender Tracker",
