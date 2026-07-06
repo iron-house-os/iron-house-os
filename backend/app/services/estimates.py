@@ -18,17 +18,28 @@ from app.schemas.estimate import (
 DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
     DefaultProductionActivity.pipe_installation: ProductionRate(
         activity=DefaultProductionActivity.pipe_installation,
-        description="Install municipal pipe including trench, bedding, pipe placement, and initial backfill",
+        description=(
+            "Install municipal pipe including trench, bedding, pipe placement, "
+            "and initial backfill"
+        ),
         unit=EstimateUnit.metre,
         production_rate_per_hour=7.5,
         crew=[
-            LabourCrewMember(role="Foreman/operator", quantity=1, hourly_rate=58, burden_percent=25),
-            LabourCrewMember(role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25),
+            LabourCrewMember(
+                role="Foreman/operator", quantity=1, hourly_rate=58, burden_percent=25
+            ),
+            LabourCrewMember(
+                role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25
+            ),
             LabourCrewMember(role="Labourer", quantity=2, hourly_rate=36, burden_percent=25),
         ],
         equipment=[
-            EquipmentResource(name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented"),
-            EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"),
+            EquipmentResource(
+                name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented"
+            ),
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            ),
         ],
         notes="Default assumes normal depth, open access, and no dewatering or shoring.",
     ),
@@ -39,9 +50,15 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
         production_rate_per_hour=30,
         crew=[
             LabourCrewMember(role="Operator", quantity=1, hourly_rate=55, burden_percent=25),
-            LabourCrewMember(role="Labourer/spotter", quantity=1, hourly_rate=36, burden_percent=25),
+            LabourCrewMember(
+                role="Labourer/spotter", quantity=1, hourly_rate=36, burden_percent=25
+            ),
         ],
-        equipment=[EquipmentResource(name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented")],
+        equipment=[
+            EquipmentResource(
+                name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.bedding: ProductionRate(
         activity=DefaultProductionActivity.bedding,
@@ -52,7 +69,11 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
             LabourCrewMember(role="Operator", quantity=1, hourly_rate=55, burden_percent=25),
             LabourCrewMember(role="Labourer", quantity=2, hourly_rate=36, burden_percent=25),
         ],
-        equipment=[EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented")],
+        equipment=[
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.backfill: ProductionRate(
         activity=DefaultProductionActivity.backfill,
@@ -64,8 +85,15 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
             LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25),
         ],
         equipment=[
-            EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"),
-            EquipmentResource(name="Plate tamper/packer", quantity=1, hourly_rate=18, owned_or_rented="rented"),
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            ),
+            EquipmentResource(
+                name="Plate tamper/packer",
+                quantity=1,
+                hourly_rate=18,
+                owned_or_rented="rented",
+            ),
         ],
     ),
     DefaultProductionActivity.asphalt_removal: ProductionRate(
@@ -78,7 +106,12 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
             LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25),
         ],
         equipment=[
-            EquipmentResource(name="Skid steer with breaker/bucket", quantity=1, hourly_rate=95, owned_or_rented="rented")
+            EquipmentResource(
+                name="Skid steer with breaker/bucket",
+                quantity=1,
+                hourly_rate=95,
+                owned_or_rented="rented",
+            )
         ],
     ),
     DefaultProductionActivity.concrete_removal: ProductionRate(
@@ -91,7 +124,12 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
             LabourCrewMember(role="Labourer", quantity=2, hourly_rate=36, burden_percent=25),
         ],
         equipment=[
-            EquipmentResource(name="Skid steer with breaker/bucket", quantity=1, hourly_rate=95, owned_or_rented="rented")
+            EquipmentResource(
+                name="Skid steer with breaker/bucket",
+                quantity=1,
+                hourly_rate=95,
+                owned_or_rented="rented",
+            )
         ],
     ),
     DefaultProductionActivity.manhole_installation: ProductionRate(
@@ -100,11 +138,19 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
         unit=EstimateUnit.each,
         production_rate_per_hour=0.45,
         crew=[
-            LabourCrewMember(role="Foreman/operator", quantity=1, hourly_rate=58, burden_percent=25),
-            LabourCrewMember(role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25),
+            LabourCrewMember(
+                role="Foreman/operator", quantity=1, hourly_rate=58, burden_percent=25
+            ),
+            LabourCrewMember(
+                role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25
+            ),
             LabourCrewMember(role="Labourer", quantity=2, hourly_rate=36, burden_percent=25),
         ],
-        equipment=[EquipmentResource(name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented")],
+        equipment=[
+            EquipmentResource(
+                name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.catch_basin_installation: ProductionRate(
         activity=DefaultProductionActivity.catch_basin_installation,
@@ -113,26 +159,44 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
         production_rate_per_hour=0.75,
         crew=[
             LabourCrewMember(role="Operator", quantity=1, hourly_rate=55, burden_percent=25),
-            LabourCrewMember(role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25),
+            LabourCrewMember(
+                role="Pipe layer", quantity=1, hourly_rate=44, burden_percent=25
+            ),
             LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25),
         ],
-        equipment=[EquipmentResource(name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented")],
+        equipment=[
+            EquipmentResource(
+                name="Excavator", quantity=1, hourly_rate=145, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.sidewalk: ProductionRate(
         activity=DefaultProductionActivity.sidewalk,
         description="Prep and place sidewalk by concrete subcontractor support crew",
         unit=EstimateUnit.square_metre,
         production_rate_per_hour=20,
-        crew=[LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25)],
-        equipment=[EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented")],
+        crew=[
+            LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25)
+        ],
+        equipment=[
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.curb: ProductionRate(
         activity=DefaultProductionActivity.curb,
         description="Prep curb line by concrete subcontractor support crew",
         unit=EstimateUnit.metre,
         production_rate_per_hour=25,
-        crew=[LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25)],
-        equipment=[EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented")],
+        crew=[
+            LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25)
+        ],
+        equipment=[
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            )
+        ],
     ),
     DefaultProductionActivity.traffic_control: ProductionRate(
         activity=DefaultProductionActivity.traffic_control,
@@ -151,7 +215,11 @@ DEFAULT_PRODUCTION_RATES: dict[DefaultProductionActivity, ProductionRate] = {
             LabourCrewMember(role="Operator", quantity=1, hourly_rate=55, burden_percent=25),
             LabourCrewMember(role="Labourer", quantity=1, hourly_rate=36, burden_percent=25),
         ],
-        equipment=[EquipmentResource(name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented")],
+        equipment=[
+            EquipmentResource(
+                name="Skid steer", quantity=1, hourly_rate=85, owned_or_rented="rented"
+            )
+        ],
     ),
 }
 
@@ -171,7 +239,8 @@ def calculate_estimate(payload: EstimateCreate) -> EstimateSummary:
     subtotal_before_markup = direct_cost + indirect_cost + risk_cost
     contingency = subtotal_before_markup * payload.markup.contingency_percent / 100
     bonding = (subtotal_before_markup + contingency) * payload.markup.bonding_percent / 100
-    insurance = (subtotal_before_markup + contingency + bonding) * payload.markup.insurance_percent / 100
+    insurance_base = subtotal_before_markup + contingency + bonding
+    insurance = insurance_base * payload.markup.insurance_percent / 100
     overhead_base = subtotal_before_markup + contingency + bonding + insurance
     overhead = overhead_base * payload.markup.overhead_percent / 100
     profit_base = overhead_base + overhead
@@ -206,18 +275,32 @@ def calculate_line_item(item: EstimateLineItem) -> EstimateLineItemCost:
     labour_cost = sum(
         member.quantity * member.burdened_hourly_rate * hours for member in item.labour
     )
-    equipment_cost = sum(resource.quantity * resource.hourly_rate * hours for resource in item.equipment)
+    equipment_cost = sum(
+        resource.quantity * resource.hourly_rate * hours for resource in item.equipment
+    )
     material_cost = sum(
         material.quantity * material.unit_cost * (1 + material.waste_percent / 100)
         for material in item.materials
     )
-    disposal_cost = sum(disposal.quantity * (disposal.unit_cost + disposal.haul_cost) for disposal in item.disposal)
+    disposal_cost = sum(
+        disposal.quantity * (disposal.unit_cost + disposal.haul_cost)
+        for disposal in item.disposal
+    )
     selected_quote = _selected_vendor_quote(item)
     subcontract_cost = selected_quote.amount if selected_quote else 0
     if not selected_quote and item.subcontract:
         subcontract_cost = item.subcontract.quoted_amount
-    explicit_direct_cost = item.direct_unit_cost * item.quantity if item.direct_unit_cost is not None else 0
-    direct_cost = labour_cost + equipment_cost + material_cost + disposal_cost + subcontract_cost + explicit_direct_cost
+    explicit_direct_cost = (
+        item.direct_unit_cost * item.quantity if item.direct_unit_cost is not None else 0
+    )
+    direct_cost = (
+        labour_cost
+        + equipment_cost
+        + material_cost
+        + disposal_cost
+        + subcontract_cost
+        + explicit_direct_cost
+    )
     unit_cost = direct_cost / item.quantity if item.quantity else 0
 
     return EstimateLineItemCost(
