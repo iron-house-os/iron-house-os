@@ -22,9 +22,13 @@ def test_calculate_line_item_self_perform_costs() -> None:
         quantity=100,
         unit=EstimateUnit.metre,
         production_rate_per_hour=10,
-        labour=[LabourCrewMember(role="Pipe layer", quantity=2, hourly_rate=40, burden_percent=25)],
+        labour=[
+            LabourCrewMember(role="Pipe layer", quantity=2, hourly_rate=40, burden_percent=25)
+        ],
         equipment=[EquipmentResource(name="Excavator", quantity=1, hourly_rate=85)],
-        materials=[MaterialInput(name="PVC pipe", quantity=100, unit=EstimateUnit.metre, unit_cost=35)],
+        materials=[
+            MaterialInput(name="PVC pipe", quantity=100, unit=EstimateUnit.metre, unit_cost=35)
+        ],
     )
 
     result = calculate_line_item(item)
@@ -42,8 +46,12 @@ def test_calculate_line_item_material_waste_disposal_and_subcontract() -> None:
         description="Asphalt paving",
         quantity=1,
         materials=[MaterialInput(name="Tack coat", quantity=100, unit_cost=2, waste_percent=10)],
-        disposal=[DisposalInput(material="Asphalt grindings", quantity=12, unit_cost=18, haul_cost=7)],
-        subcontract=SubcontractInput(subcontractor="Superior Paving", scope="Pave", quoted_amount=15000),
+        disposal=[
+            DisposalInput(material="Asphalt grindings", quantity=12, unit_cost=18, haul_cost=7)
+        ],
+        subcontract=SubcontractInput(
+            subcontractor="Superior Paving", scope="Pave", quoted_amount=15000
+        ),
     )
 
     result = calculate_line_item(item)
@@ -76,7 +84,9 @@ def test_vendor_quotes_respect_selected_quote() -> None:
         quantity=1,
         vendor_quotes=[
             VendorQuoteInput(supplier="Lowest", scope="Paving", amount=10000),
-            VendorQuoteInput(supplier="Qualified selected", scope="Paving", amount=11250, is_selected=True),
+            VendorQuoteInput(
+                supplier="Qualified selected", scope="Paving", amount=11250, is_selected=True
+            ),
         ],
     )
 
