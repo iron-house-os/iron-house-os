@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.schemas.supplier import SupplierCreate
+from app.schemas.supplier import SupplierCreate, SupplierList
 
 
 class SupplierImportRow(BaseModel):
@@ -38,3 +38,13 @@ class SupplierImportPreviewResponse(BaseModel):
     valid_count: int
     error_count: int
     warning_count: int
+
+
+class SupplierImportCommitRequest(SupplierImportPreviewRequest):
+    skip_invalid: bool = True
+
+
+class SupplierImportCommitResponse(BaseModel):
+    created: SupplierList
+    skipped_rows: list[SupplierImportPreviewItem] = Field(default_factory=list)
+    warning_rows: list[SupplierImportPreviewItem] = Field(default_factory=list)
