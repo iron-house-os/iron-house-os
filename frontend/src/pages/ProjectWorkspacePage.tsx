@@ -1,4 +1,4 @@
-import { Activity, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw } from "lucide-react";
+import { Activity, BookOpen, Calculator, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw, ShieldCheck, Table2, Users } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -11,7 +11,20 @@ import {
   projectsApi,
 } from "../api/projects";
 
-const tabs = ["Overview", "RFQs", "Documents", "Suppliers", "Drawings", "Estimating", "Activity"];
+const tabs = [
+  "Overview",
+  "Tender Info",
+  "Documents",
+  "Drawings",
+  "RFQs",
+  "Suppliers",
+  "Quotes",
+  "Estimate",
+  "Schedule",
+  "Municipality",
+  "Bid Package",
+  "Activity",
+];
 
 export function ProjectWorkspacePage() {
   const { projectId } = useParams();
@@ -82,7 +95,7 @@ export function ProjectWorkspacePage() {
         <div>
           <h1 className="text-3xl font-semibold text-iron-950">Project Workspace</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Central hub for RFQs, suppliers, documents, drawings, bids, and project readiness.
+            Command center for a live bid: tender intake, documents, RFQs, suppliers, quotes, estimate, risk, and bid package.
           </p>
         </div>
         <button
@@ -102,11 +115,7 @@ export function ProjectWorkspacePage() {
         <div className="space-y-6">
           <ProjectFilters status={statusFilter} onStatusChange={setStatusFilter} />
           <CreateProjectForm onSubmit={(payload) => void createProject(payload)} />
-          <ProjectList
-            projects={projects}
-            selectedId={projectId}
-            dashboards={dashboardByProjectId}
-          />
+          <ProjectList projects={projects} selectedId={projectId} dashboards={dashboardByProjectId} />
         </div>
         {selectedProject && dashboard ? (
           <ProjectDetail
@@ -130,13 +139,7 @@ export function ProjectWorkspacePage() {
   );
 }
 
-function ProjectFilters({
-  status,
-  onStatusChange,
-}: {
-  status: string;
-  onStatusChange: (value: string) => void;
-}) {
+function ProjectFilters({ status, onStatusChange }: { status: string; onStatusChange: (value: string) => void }) {
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Project Filters</h2>
@@ -238,8 +241,8 @@ function ProjectList({
               <th className="py-2 pr-4">Municipality</th>
               <th className="py-2 pr-4">Status</th>
               <th className="py-2 pr-4">Bid Due</th>
-              <th className="py-2 pr-4">RFQ Progress</th>
-              <th className="py-2 pr-4">Document Count</th>
+              <th className="py-2 pr-4">Ready</th>
+              <th className="py-2 pr-4">Docs</th>
             </tr>
           </thead>
           <tbody>
@@ -248,25 +251,18 @@ function ProjectList({
               return (
                 <tr
                   key={project.id}
-                  className={[
-                    "border-b border-iron-100 last:border-b-0",
-                    selectedId === project.id ? "bg-iron-50" : "",
-                  ].join(" ")}
+                  className={["border-b border-iron-100 last:border-b-0", selectedId === project.id ? "bg-iron-50" : ""].join(
+                    " ",
+                  )}
                 >
                   <td className="py-3 pr-4 font-medium text-iron-950">
                     <Link to={`/projects/${project.id}`}>{project.name}</Link>
                   </td>
-                  <td className="py-3 pr-4 text-iron-800">
-                    {project.municipality ?? "Unassigned"}
-                  </td>
+                  <td className="py-3 pr-4 text-iron-800">{project.municipality ?? "Unassigned"}</td>
                   <td className="py-3 pr-4 text-iron-800">{label(project.status)}</td>
                   <td className="py-3 pr-4 text-iron-800">{project.bid_due_date ?? "Not set"}</td>
-                  <td className="py-3 pr-4 text-iron-800">
-                    {summary ? `${summary.readiness_percentage}%` : "Loading"}
-                  </td>
-                  <td className="py-3 pr-4 text-iron-800">
-                    {summary ? summary.document_count : "Loading"}
-                  </td>
+                  <td className="py-3 pr-4 text-iron-800">{summary ? `${summary.readiness_percentage}%` : "Loading"}</td>
+                  <td className="py-3 pr-4 text-iron-800">{summary ? summary.document_count : "Loading"}</td>
                 </tr>
               );
             })}
@@ -304,9 +300,7 @@ function ProjectDetail({
       <div className="rounded-md border border-iron-100 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-iron-500">
-              {project.project_number ?? "Project"}
-            </div>
+            <div className="text-xs uppercase tracking-wide text-iron-500">{project.project_number ?? "Project"}</div>
             <h2 className="mt-1 text-2xl font-semibold text-iron-950">{project.name}</h2>
             <p className="mt-2 text-sm text-iron-500">
               {project.client_owner ?? "No client set"} - {project.municipality ?? "No municipality"}
@@ -336,6 +330,7 @@ function ProjectDetail({
       </div>
 
       <DashboardWidgets dashboard={dashboard} project={project} />
+      <CommandCenter project={project} dashboard={dashboard} />
 
       <div className="rounded-md border border-iron-100 bg-white">
         <div className="flex overflow-x-auto border-b border-iron-100">
@@ -344,10 +339,9 @@ function ProjectDetail({
               key={tab}
               type="button"
               onClick={() => onTabChange(tab)}
-              className={[
-                "px-4 py-3 text-sm font-medium",
-                activeTab === tab ? "text-iron-950" : "text-iron-500",
-              ].join(" ")}
+              className={["whitespace-nowrap px-4 py-3 text-sm font-medium", activeTab === tab ? "text-iron-950" : "text-iron-500"].join(
+                " ",
+              )}
             >
               {tab}
             </button>
@@ -366,13 +360,50 @@ function DashboardWidgets({ dashboard, project }: { dashboard: ProjectDashboard;
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Widget icon={<Activity className="h-4 w-4" />} label="RFQ readiness" value={`${dashboard.readiness_percentage}%`} />
       <Widget icon={<FileStack className="h-4 w-4" />} label="Documents" value={String(dashboard.document_count)} />
-      <Widget icon={<FolderKanban className="h-4 w-4" />} label="Supplier coverage" value={String(dashboard.supplier_count)} />
+      <Widget icon={<Users className="h-4 w-4" />} label="Supplier coverage" value={String(dashboard.supplier_count)} />
       <Widget icon={<CalendarDays className="h-4 w-4" />} label="Bid due" value={project.bid_due_date ?? "Not set"} />
       <Widget icon={<FileStack className="h-4 w-4" />} label="Drawings" value={String(dashboard.drawing_count)} />
       <Widget icon={<Activity className="h-4 w-4" />} label="RFQs" value={String(dashboard.rfq_count)} />
       <Widget icon={<Activity className="h-4 w-4" />} label="Bid status" value={label(dashboard.bid_status)} />
       <Widget icon={<CalendarDays className="h-4 w-4" />} label="Tender close" value={project.tender_closing_date ?? "Not set"} />
     </div>
+  );
+}
+
+function CommandCenter({ project, dashboard }: { project: Project; dashboard: ProjectDashboard }) {
+  const nextStep = getNextStep(project, dashboard);
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-iron-950">Command Center</h2>
+          <p className="mt-1 text-sm leading-6 text-iron-500">Next practical move: {nextStep}</p>
+        </div>
+        <div className="text-sm font-semibold text-iron-950">Readiness {dashboard.readiness_percentage}%</div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ActionCard icon={<FileStack className="h-4 w-4" />} label="RFQs" description="Create packages and draft supplier requests." href="/rfq-builder" />
+        <ActionCard icon={<BookOpen className="h-4 w-4" />} label="Documents" description="Register drawings, specs, addenda, and RFQ files." href="/documents" />
+        <ActionCard icon={<Users className="h-4 w-4" />} label="Suppliers" description="Find or add suppliers for the project scope." href="/suppliers" />
+        <ActionCard icon={<Table2 className="h-4 w-4" />} label="Quotes" description="Compare supplier pricing and selection reasons." href="/quotes" />
+        <ActionCard icon={<Calculator className="h-4 w-4" />} label="Estimate" description="Build price, markups, risk, and workbook export." href="/estimating" />
+        <ActionCard icon={<ShieldCheck className="h-4 w-4" />} label="Municipality" description="Track standards, permits, inspections, and risks." href="/documents" />
+        <ActionCard icon={<CalendarDays className="h-4 w-4" />} label="Schedule" description="Track bid due date, quote deadlines, and work windows." href="/projects" />
+        <ActionCard icon={<FolderKanban className="h-4 w-4" />} label="Bid Package" description="Assemble final scope, estimate, assumptions, and exclusions." href="/estimating" />
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({ icon, label: itemLabel, description, href }: { icon: React.ReactNode; label: string; description: string; href: string }) {
+  return (
+    <Link to={href} className="rounded-md border border-iron-100 p-4 hover:bg-iron-50">
+      <div className="flex items-center gap-2 text-sm font-semibold text-iron-950">
+        {icon}
+        {itemLabel}
+      </div>
+      <p className="mt-2 text-xs leading-5 text-iron-500">{description}</p>
+    </Link>
   );
 }
 
@@ -388,25 +419,87 @@ function Widget({ icon, label: itemLabel, value }: { icon: React.ReactNode; labe
   );
 }
 
-function TabBody({
-  tab,
-  project,
-  dashboard,
-}: {
-  tab: string;
-  project: Project;
-  dashboard: ProjectDashboard;
-}) {
-  const summaries: Record<string, string> = {
-    Overview: project.notes ?? "Project overview notes will live here.",
-    RFQs: `${dashboard.rfq_count} RFQ packages linked to this project.`,
-    Documents: `${dashboard.document_count} documents linked to this project.`,
-    Suppliers: `${dashboard.supplier_count} suppliers linked to this project.`,
-    Drawings: `${dashboard.drawing_count} drawings linked to this project.`,
-    Estimating: "Estimating workspace is reserved for future takeoff and costing.",
-    Activity: "Activity stream is reserved for future audit events.",
+function TabBody({ tab, project, dashboard }: { tab: string; project: Project; dashboard: ProjectDashboard }) {
+  const details: Record<string, { summary: string; actions: { label: string; href: string }[] }> = {
+    Overview: {
+      summary: project.notes ?? "Project overview notes will live here. Use this tab to capture bid decisions and assumptions.",
+      actions: [
+        { label: "Open estimate", href: "/estimating" },
+        { label: "Open RFQs", href: "/rfq-builder" },
+      ],
+    },
+    "Tender Info": {
+      summary: `Owner: ${project.client_owner ?? "Not set"}. Municipality: ${project.municipality ?? "Not set"}. Tender close: ${project.tender_closing_date ?? "Not set"}.`,
+      actions: [{ label: "Open tender tracker", href: "/tenders" }],
+    },
+    Documents: {
+      summary: `${dashboard.document_count} documents linked to this project. Register drawings, specs, addenda, and RFQ files before pricing.`,
+      actions: [{ label: "Open document library", href: "/documents" }],
+    },
+    Drawings: {
+      summary: `${dashboard.drawing_count} drawings linked to this project. Future drawing intelligence will extract quantities and conflicts from here.`,
+      actions: [{ label: "Open document library", href: "/documents" }],
+    },
+    RFQs: {
+      summary: `${dashboard.rfq_count} RFQ packages linked to this project. Build package scopes and track supplier readiness here.`,
+      actions: [{ label: "Open RFQ builder", href: "/rfq-builder" }],
+    },
+    Suppliers: {
+      summary: `${dashboard.supplier_count} suppliers linked to this project. Add missing suppliers before sending RFQs.`,
+      actions: [{ label: "Open supplier database", href: "/suppliers" }],
+    },
+    Quotes: {
+      summary: "Compare received quotes by line item and preserve selection reasons when not using the lowest price.",
+      actions: [{ label: "Open quote comparison", href: "/quotes" }],
+    },
+    Estimate: {
+      summary: "Build the bid price using line items, production defaults, risk, contingency, bonding, insurance, overhead, profit, and workbook export.",
+      actions: [{ label: "Open estimating", href: "/estimating" }],
+    },
+    Schedule: {
+      summary: `Bid due: ${project.bid_due_date ?? "Not set"}. Track quote deadlines, expected award, and construction window here as the schedule module matures.`,
+      actions: [{ label: "Review project list", href: "/projects" }],
+    },
+    Municipality: {
+      summary: `Municipality: ${project.municipality ?? "Not set"}. Track supplementary standards, permit requirements, inspections, approved materials, restoration, and testing requirements here.`,
+      actions: [{ label: "Open documents", href: "/documents" }],
+    },
+    "Bid Package": {
+      summary: "Final package should include scope, price, schedule, assumptions, exclusions, addenda review, bonds/insurance, and RFQ quote backup.",
+      actions: [
+        { label: "Open estimating", href: "/estimating" },
+        { label: "Open documents", href: "/documents" },
+      ],
+    },
+    Activity: {
+      summary: "Activity stream is reserved for future audit events, status changes, quote receipts, RFQ sends, and bid decisions.",
+      actions: [],
+    },
   };
-  return <p className="text-sm leading-6 text-iron-500">{summaries[tab]}</p>;
+  const content = details[tab] ?? details.Overview;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm leading-6 text-iron-500">{content.summary}</p>
+      {content.actions.length ? (
+        <div className="flex flex-wrap gap-2">
+          {content.actions.map((action) => (
+            <Link key={action.label} to={action.href} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
+              {action.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getNextStep(project: Project, dashboard: ProjectDashboard) {
+  if (!project.bid_due_date) return "set the bid due date so quote and estimate deadlines are anchored.";
+  if (dashboard.document_count === 0) return "register the drawings, specs, and addenda in the document library.";
+  if (dashboard.supplier_count === 0) return "add supplier coverage for the main scopes.";
+  if (dashboard.rfq_count === 0) return "create RFQ packages for pipe, aggregates, asphalt, concrete, testing, and specialty scopes.";
+  if (dashboard.readiness_percentage < 80) return "finish RFQ readiness items before final pricing.";
+  return "build the estimate, compare quotes, and assemble the bid package.";
 }
 
 function Field({ label: itemLabel, children }: { label: string; children: React.ReactNode }) {
@@ -419,10 +512,7 @@ function Field({ label: itemLabel, children }: { label: string; children: React.
 }
 
 function Notice({ tone, message }: { tone: "neutral" | "error"; message: string }) {
-  const className =
-    tone === "error"
-      ? "border-signal-red bg-white text-signal-red"
-      : "border-iron-100 bg-white text-iron-500";
+  const className = tone === "error" ? "border-signal-red bg-white text-signal-red" : "border-iron-100 bg-white text-iron-500";
   return <div className={`rounded-md border px-4 py-3 text-sm ${className}`}>{message}</div>;
 }
 
