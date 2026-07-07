@@ -7,6 +7,7 @@ import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
+import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
@@ -22,6 +23,7 @@ export function App() {
         "/projects",
         "/tenders",
         "/estimating",
+        "/quotes",
       ].includes(module.path),
   );
 
@@ -41,6 +43,7 @@ export function App() {
         <Route path="/tenders" element={<TenderIntakePage />} />
         <Route path="/tenders/:tenderId" element={<TenderIntakePage />} />
         <Route path="/estimating" element={<EstimatingPage />} />
+        <Route path="/quotes" element={<QuoteComparisonPage />} />
         {placeholderModules.map((module) => (
           <Route key={module.path} path={module.path} element={<PlaceholderPage module={module} />} />
         ))}
