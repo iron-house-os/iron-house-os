@@ -5,7 +5,7 @@
     {
       "id": "mvp-dashboard-page",
       "priority": 10,
-      "status": "open",
+      "status": "done",
       "title": "Build MVP dashboard page",
       "summary": "Replace the placeholder dashboard with operating cards for projects, RFQs, suppliers, tenders, and next actions.",
       "acceptance_criteria": [
@@ -17,7 +17,7 @@
     {
       "id": "quote-comparison-ui",
       "priority": 20,
-      "status": "open",
+      "status": "done",
       "title": "Build quote comparison UI",
       "summary": "Add a simple manual quote comparison page or panel connected to POST /api/v1/quotes/compare.",
       "acceptance_criteria": [
@@ -27,8 +27,33 @@
       ]
     },
     {
-      "id": "estimating-ui-complete-fields",
+      "id": "project-workspace-command-center",
+      "priority": 25,
+      "status": "done",
+      "title": "Upgrade Project Workspace into command center",
+      "summary": "Make one project record the hub for tender info, documents, drawings, RFQs, suppliers, quotes, estimate, schedule, municipality requirements, bid package, and activity.",
+      "acceptance_criteria": [
+        "Project detail shows command-center action cards",
+        "Project detail links to RFQs, documents, suppliers, quotes, and estimating",
+        "Project detail provides next practical step guidance"
+      ]
+    },
+    {
+      "id": "project-scoped-module-links",
       "priority": 30,
+      "status": "open",
+      "title": "Add project-scoped module links",
+      "summary": "Pass project context from Project Workspace into RFQs, documents, quotes, and estimating using project query parameters or route state so users stay inside one bid workspace.",
+      "acceptance_criteria": [
+        "Command Center links include selected project id where useful",
+        "RFQ Builder can preselect or display selected project context",
+        "Documents and estimating pages can show selected project context",
+        "Frontend build passes"
+      ]
+    },
+    {
+      "id": "estimating-ui-complete-fields",
+      "priority": 40,
       "status": "open",
       "title": "Complete estimating UI fields",
       "summary": "Add disposal, vendor quote, risk probability, and category breakdown to the Estimating page.",
@@ -41,7 +66,7 @@
     },
     {
       "id": "deployment-readiness",
-      "priority": 40,
+      "priority": 50,
       "status": "open",
       "title": "Prepare MVP deployment",
       "summary": "Add deployment docs and environment checklist for running frontend, backend, and Postgres in production.",
