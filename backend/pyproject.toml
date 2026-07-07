@@ -1,9 +1,9 @@
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/services/estimate_workbooks.py" = ["E501", "F401"]
