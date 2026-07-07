@@ -7,6 +7,7 @@ from app.api.v1.routes import (
     equipment,
     estimates,
     projects,
+    quotes,
     rfqs,
     suppliers,
     tenders,
@@ -20,6 +21,7 @@ api_router.include_router(suppliers.router, prefix="/suppliers", tags=["supplier
 api_router.include_router(rfqs.router, prefix="/rfqs", tags=["rfqs"])
 api_router.include_router(bids.router, prefix="/bids", tags=["bids"])
 api_router.include_router(estimates.router, prefix="/estimates", tags=["estimates"])
+api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(tenders.router, prefix="/tenders", tags=["tenders"])
 api_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
