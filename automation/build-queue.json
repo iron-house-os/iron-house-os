@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "strategy": "mvp-first",
+  "tasks": [
+    {
+      "id": "mvp-dashboard-page",
+      "priority": 10,
+      "status": "open",
+      "title": "Build MVP dashboard page",
+      "summary": "Replace the placeholder dashboard with operating cards for projects, RFQs, suppliers, tenders, and next actions.",
+      "acceptance_criteria": [
+        "Dashboard route shows real app data where available",
+        "Cards link to working modules",
+        "Frontend build passes"
+      ]
+    },
+    {
+      "id": "quote-comparison-ui",
+      "priority": 20,
+      "status": "open",
+      "title": "Build quote comparison UI",
+      "summary": "Add a simple manual quote comparison page or panel connected to POST /api/v1/quotes/compare.",
+      "acceptance_criteria": [
+        "User can enter supplier, scope, amount, and selected flag",
+        "UI displays lowest total, selected total, and delta",
+        "Frontend build passes"
+      ]
+    },
+    {
+      "id": "estimating-ui-complete-fields",
+      "priority": 30,
+      "status": "open",
+      "title": "Complete estimating UI fields",
+      "summary": "Add disposal, vendor quote, risk probability, and category breakdown to the Estimating page.",
+      "acceptance_criteria": [
+        "Estimate payload supports disposal inputs",
+        "Estimate payload supports vendor quote inputs",
+        "Summary shows category breakdown",
+        "Workbook download remains functional"
+      ]
+    },
+    {
+      "id": "deployment-readiness",
+      "priority": 40,
+      "status": "open",
+      "title": "Prepare MVP deployment",
+      "summary": "Add deployment docs and environment checklist for running frontend, backend, and Postgres in production.",
+      "acceptance_criteria": [
+        "Production environment variables documented",
+        "Backend deployment steps documented",
+        "Frontend deployment steps documented"
+      ]
+    }
+  ]
+}
