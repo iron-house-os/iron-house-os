@@ -26,11 +26,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Configure Git
-        run: |
-          git config user.name "iron-house-build-agent"
-          git config user.email "build-agent@ironhouse.local"
-
       - name: Install backend dependencies
         working-directory: backend
         run: |
@@ -42,46 +37,10 @@ jobs:
         run: npm install
 
       - name: Run Build Agent
-        env:
-          BUILD_AGENT_COMMAND: ${{ secrets.BUILD_AGENT_COMMAND }}
         run: python automation/iron_house_build_agent.py
 
-      - name: Detect changes
-        id: changes
+      - name: Show Build Agent output
         run: |
-          if git diff --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create branch and commit
-        if: steps.changes.outputs.changed == 'true'
-        run: |
-          BRANCH="build-agent/$(date -u +%Y%m%d-%H%M%S)"
-          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
-          git checkout -b "$BRANCH"
-          git add .
-          git commit -m "Run Iron House Build Agent"
-          git push origin "$BRANCH"
-
-      - name: Open pull request
-        if: steps.changes.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          BODY="Automated Build Agent run. Review before merging."
           if [ -f automation/build-agent-output.json ]; then
-            BODY="$BODY
-
-Output:
-
-\`\`\`json
-$(cat automation/build-agent-output.json)
-\`\`\`"
+            cat automation/build-agent-output.json
           fi
-          gh pr create \
-            --title "Iron House Build Agent update" \
-            --body "$BODY" \
-            --head "$BRANCH" \
-            --base main
