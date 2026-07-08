@@ -139,7 +139,7 @@ export type EstimateLineItemCost = {
   direct_cost: number;
   unit_cost: number;
   selected_quote_supplier?: string | null;
-  selected_quote_amount?: string | null;
+  selected_quote_amount?: number | null;
 };
 
 export type EstimateCategoryBreakdown = {
