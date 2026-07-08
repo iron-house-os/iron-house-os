@@ -9,6 +9,7 @@ import { EstimatingPage } from "./pages/EstimatingPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
+import { QuantityTakeoffPage } from "./pages/QuantityTakeoffPage";
 import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
@@ -27,6 +28,7 @@ export function App() {
         "/estimating",
         "/quotes",
         "/drawing-intelligence",
+        "/quantity-takeoff",
       ].includes(module.path),
   );
 
@@ -49,6 +51,7 @@ export function App() {
         <Route path="/estimating" element={<EstimatingPage />} />
         <Route path="/quotes" element={<QuoteComparisonPage />} />
         <Route path="/drawing-intelligence" element={<DrawingIntelligencePage />} />
+        <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />
         {placeholderModules.map((module) => (
           <Route key={module.path} path={module.path} element={<PlaceholderPage module={module} />} />
         ))}
