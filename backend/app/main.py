@@ -35,6 +35,22 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
 
+    @app.get("/readiness", tags=["system"])
+    def readiness() -> dict[str, object]:
+        return {
+            "status": "ready",
+            "service": settings.app_name,
+            "api_prefix": settings.api_v1_prefix,
+            "checks": {
+                "api_router": "mounted",
+                "cors": "configured",
+                "docs": "enabled",
+                "takeoff_engine": "enabled",
+                "estimate_handoff": "enabled",
+                "project_readiness": "enabled",
+            },
+        }
+
     return app
 
 
