@@ -4,6 +4,7 @@ import { AppLayout } from "./components/AppLayout";
 import { modules } from "./modules";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
+import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -25,6 +26,7 @@ export function App() {
         "/tenders",
         "/estimating",
         "/quotes",
+        "/drawing-intelligence",
       ].includes(module.path),
   );
 
@@ -46,6 +48,7 @@ export function App() {
         <Route path="/tenders/:tenderId" element={<TenderIntakePage />} />
         <Route path="/estimating" element={<EstimatingPage />} />
         <Route path="/quotes" element={<QuoteComparisonPage />} />
+        <Route path="/drawing-intelligence" element={<DrawingIntelligencePage />} />
         {placeholderModules.map((module) => (
           <Route key={module.path} path={module.path} element={<PlaceholderPage module={module} />} />
         ))}
