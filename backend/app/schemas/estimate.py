@@ -152,6 +152,32 @@ class EstimateCreate(BaseModel):
     exclusions: list[str] = Field(default_factory=list)
 
 
+class TakeoffHandoffItem(BaseModel):
+    code: str | None = None
+    description: str = Field(min_length=1)
+    category: str
+    quantity: float = Field(ge=0)
+    unit: EstimateUnit
+    source: str | None = None
+    confidence: float = Field(default=1, ge=0, le=1)
+    drawing_reference: str | None = None
+    notes: str | None = None
+
+
+class EstimateHandoffRequest(BaseModel):
+    project_name: str = Field(default="Iron House Estimate", min_length=1)
+    project_code: str | None = None
+    items: list[TakeoffHandoffItem] = Field(default_factory=list)
+
+
+class EstimateHandoffResponse(BaseModel):
+    project_name: str
+    project_code: str | None = None
+    line_items: list[EstimateLineItem]
+    warnings: list[str]
+    assumptions: list[str]
+
+
 class EstimateLineItemCost(BaseModel):
     code: str | None = None
     description: str
