@@ -1,8 +1,12 @@
 from io import BytesIO
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.db.session import get_db
 from app.schemas.estimate import (
     EstimateCreate,
     EstimateHandoffRequest,
@@ -12,9 +16,11 @@ from app.schemas.estimate import (
     EstimateSummary,
     RateLibrary,
 )
-from app.services import estimate_handoff, estimate_workbooks, estimates
+from app.schemas.estimate_workspace import EstimateWorkspaceList, EstimateWorkspaceRead, EstimateWorkspaceSaveRequest
+from app.services import estimate_handoff, estimate_workspace, estimate_workbooks, estimates
 
 router = APIRouter()
+DBSession = Annotated[Session, Depends(get_db)]
 
 
 @router.get("/rate-library", response_model=RateLibrary)
@@ -30,6 +36,21 @@ def calculate_line_item(payload: EstimateLineItem) -> EstimateLineItemCost:
 @router.post("/handoff", response_model=EstimateHandoffResponse)
 def build_handoff(payload: EstimateHandoffRequest) -> EstimateHandoffResponse:
     return estimate_handoff.build_estimate_handoff(payload)
+
+
+@router.post("/workspace", response_model=EstimateWorkspaceRead, status_code=status.HTTP_201_CREATED)
+def save_workspace(payload: EstimateWorkspaceSaveRequest, db: DBSession) -> EstimateWorkspaceRead:
+    return estimate_workspace.save_workspace(db, payload)
+
+
+@router.get("/workspace/project/{project_id}", response_model=EstimateWorkspaceList)
+def list_project_workspaces(project_id: UUID, db: DBSession) -> EstimateWorkspaceList:
+    return estimate_workspace.list_project_workspaces(db, project_id)
+
+
+@router.get("/workspace/{workspace_id}", response_model=EstimateWorkspaceRead)
+def read_workspace(workspace_id: UUID, db: DBSession) -> EstimateWorkspaceRead:
+    return estimate_workspace.get_workspace(db, workspace_id)
 
 
 @router.post("/summary", response_model=EstimateSummary)
