@@ -33,6 +33,13 @@ export const modules: AppModule[] = [
     status: "MVP active",
   },
   {
+    label: "MVP Workflow",
+    path: "/mvp-workflow",
+    icon: ClipboardList,
+    description: "Step-by-step internal workflow from project setup to final bid package.",
+    status: "Build 51 active",
+  },
+  {
     label: "Projects",
     path: "/projects",
     icon: FolderKanban,
