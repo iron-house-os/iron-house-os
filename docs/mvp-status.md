@@ -1,112 +1,48 @@
 # Iron House OS MVP Status
 
-## Current MVP Readiness
+## Current status
 
-Iron House OS is closer to a working web app than a pure scaffold. Several vertical slices already exist.
+IHOS is now an internal web-app MVP scaffold with connected modules for project setup, documents, takeoff, estimating, RFQ drafting, bid packaging, and readiness checks.
 
-## Working / Mostly Working
+## Working backend path
 
-### Project Workspace
+- Projects can be created and opened.
+- Takeoff engine can generate and summarize quantities.
+- Takeoffs can be saved to project records.
+- Estimate handoff can convert takeoff quantities into estimate lines.
+- Estimate workspaces can be saved to project bid records.
+- RFQ package drafts can be generated from takeoff/estimate items.
+- Project readiness can check minimum bid workflow completion.
+- System readiness reports enabled MVP services.
 
-Status: MVP-ready foundation
+## Working frontend path
 
-Capabilities:
+- Project workspace exists.
+- MVP workflow page exists.
+- Takeoff engine panel exists.
+- Estimate workspace panel exists.
+- RFQ linkage panel exists.
+- Project readiness panel exists.
 
-- Create projects
-- Filter projects by status
-- View project detail dashboard
-- Update status
-- Archive projects
-- See linked workspace tabs for RFQs, documents, suppliers, drawings, estimating, and activity
+## Needs fast MVP work
 
-### Supplier Database
-
-Status: MVP-ready foundation
-
-Capabilities:
-
-- Create suppliers
-- Search suppliers
-- Filter by category
-- View supplier detail
-- Update supplier profile
-- Replace estimating contacts
-
-### RFQ Builder
-
-Status: MVP-ready foundation
-
-Capabilities:
-
-- Create RFQ packages
-- List RFQ packages
-- Read RFQ packages
-- Select supplier recipients
-- Register required documents
-- Check RFQ readiness
-- Generate single supplier RFQ draft text
-
-### Estimating
-
-Status: MVP-ready foundation
-
-Capabilities:
-
-- Load production rate library
-- Add line items
-- Use production activity defaults
-- Enter direct unit costs
-- Add mobilization and risk allowance
-- Calculate contingency, overhead, profit, bonding, insurance, and final bid
-- Export estimate workbook
-
-### Quote Comparison
-
-Status: Backend foundation
-
-Capabilities:
-
-- Compare quotes by line item and scope
-- Use lowest quote by default
-- Respect manually selected quote
-- Track reason for non-low selected quote
-- Calculate selected-total delta from lowest-total
-
-## Needs Fast MVP Work
-
-1. Dashboard
-   - Replace placeholder with simple operating dashboard cards.
-   - Show counts for projects, suppliers, RFQs, tenders, and active estimates where available.
-
-2. Quote comparison UI
-   - Add a simple quote comparison panel or page.
-   - Manual quote entry is enough for MVP.
-
-3. Estimating UI completion
-   - Add disposal input.
-   - Add vendor quote input.
-   - Add risk probability.
-   - Show category breakdown.
-
-4. Deployment readiness
-   - Confirm backend and frontend dependency installs.
-   - Document local launch and production deployment steps.
-
-5. RFQ package draft expansion
-   - Existing single-supplier draft is good enough for MVP.
-   - Batch draft generation can wait.
+1. Wire new panels into the project workspace tabs.
+2. Add real file upload/storage for drawings and tender documents.
+3. Review database schema/migrations against current SQLAlchemy models.
+4. Run CI and fix any lint/test failures.
+5. Harden authentication and permissions before external exposure.
+6. Add end-to-end browser smoke testing.
 
 ## Defer
 
-- Background agents
-- Gmail auto-send
-- Google Drive sync
-- AI drawing takeoff
-- Municipality standards automation
-- Accounting integrations
-- Mobile employee app
-- Full supplier scraping automation
+- Background agents.
+- Gmail auto-send.
+- Google Drive sync.
+- AI vector drawing takeoff.
+- Field mobile app.
+- Accounting integrations.
+- Full supplier scraping automation.
 
-## Next Build Action
+## Recommended first live use
 
-Build dashboard cards and MVP launch checklist next.
+Use IHOS as an estimator-controlled assistant for the first live bid. Keep estimator review mandatory for all quantities, pricing, RFQs, assumptions, exclusions, and final bid output.
