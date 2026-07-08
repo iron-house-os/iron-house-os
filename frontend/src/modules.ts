@@ -68,11 +68,11 @@ export const modules: AppModule[] = [
     status: "Build 24 active",
   },
   {
-    label: "Quantity Takeoff",
+    label: "Quantity Takeoff Engine",
     path: "/quantity-takeoff",
     icon: Ruler,
-    description: "Manual and future drawing-extracted quantity register with estimate-ready summaries.",
-    status: "Build 25 active",
+    description: "Manual register plus takeoff engine for BOQ rollups, readiness checks, conflicts, and estimating handoff.",
+    status: "Build 29 active",
   },
   {
     label: "Municipality Intelligence",
