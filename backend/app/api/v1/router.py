@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import (
     auth,
+    bid_package,
     bids,
     documents,
     drawing_intelligence,
@@ -24,6 +25,7 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 api_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
 api_router.include_router(rfqs.router, prefix="/rfqs", tags=["rfqs"])
 api_router.include_router(rfq_automation.router, prefix="/rfq-automation", tags=["rfq-automation"])
+api_router.include_router(bid_package.router, prefix="/bid-package", tags=["bid-package"])
 api_router.include_router(bids.router, prefix="/bids", tags=["bids"])
 api_router.include_router(estimates.router, prefix="/estimates", tags=["estimates"])
 api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
