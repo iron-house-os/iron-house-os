@@ -7,6 +7,7 @@ from app.api.v1.routes import (
     drawing_intelligence,
     equipment,
     estimates,
+    municipality,
     projects,
     quotes,
     rfqs,
@@ -27,6 +28,7 @@ api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(drawing_intelligence.router, prefix="/drawing-intelligence", tags=["drawing-intelligence"])
 api_router.include_router(takeoff.router, prefix="/takeoff", tags=["takeoff"])
+api_router.include_router(municipality.router, prefix="/municipality", tags=["municipality"])
 api_router.include_router(tenders.router, prefix="/tenders", tags=["tenders"])
 api_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
