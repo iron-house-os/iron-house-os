@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { modules } from "./modules";
+import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
@@ -24,6 +25,7 @@ export function App() {
         "/dashboard",
         "/rfq-builder",
         "/rfq-automation",
+        "/bid-package",
         "/suppliers",
         "/documents",
         "/projects",
@@ -44,6 +46,7 @@ export function App() {
         <Route path="/rfq-builder" element={<RFQBuilderPage />} />
         <Route path="/rfq-builder/:rfqPackageId" element={<RFQBuilderPage />} />
         <Route path="/rfq-automation" element={<RFQAutomationPage />} />
+        <Route path="/bid-package" element={<BidPackageGeneratorPage />} />
         <Route path="/suppliers" element={<SupplierDatabasePage />} />
         <Route path="/suppliers/:supplierId" element={<SupplierDatabasePage />} />
         <Route path="/documents" element={<DocumentLibraryPage />} />
