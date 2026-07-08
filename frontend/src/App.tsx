@@ -8,6 +8,7 @@ import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
+import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
@@ -23,6 +24,7 @@ export function App() {
     (module) =>
       ![
         "/dashboard",
+        "/mvp-workflow",
         "/rfq-builder",
         "/rfq-automation",
         "/bid-package",
@@ -43,6 +45,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/rfq-builder" element={<RFQBuilderPage />} />
         <Route path="/rfq-builder/:rfqPackageId" element={<RFQBuilderPage />} />
         <Route path="/rfq-automation" element={<RFQAutomationPage />} />
