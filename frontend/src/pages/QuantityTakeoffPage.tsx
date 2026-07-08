@@ -11,11 +11,12 @@ import {
   takeoffApi,
 } from "../api/takeoff";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
+import { TakeoffEnginePanel } from "../components/TakeoffEnginePanel";
 import { readProjectContext } from "../utils/projectContext";
 
 const categories: QuantityCategory[] = ["pipe", "structures", "asphalt", "concrete", "earthworks", "landscape", "traffic", "misc"];
 const units: QuantityUnit[] = ["LS", "EA", "m", "m2", "m3", "t", "hr", "day"];
-const sources: QuantitySource[] = ["manual", "drawing_intelligence", "ocr", "import", "estimate_override"];
+const sources: QuantitySource[] = ["manual", "drawing_intelligence", "ocr", "import", "estimate_override", "takeoff_engine"];
 
 function blankItem(): QuantityItem {
   return {
@@ -86,14 +87,15 @@ export function QuantityTakeoffPage() {
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-iron-950">Quantity Takeoff</h1>
+          <h1 className="text-3xl font-semibold text-iron-950">Quantity Takeoff Engine</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Build 25 quantity register for manual takeoff entries now and drawing-extracted quantities later.
+            Build 29 quantity register and takeoff engine for manual entries, generated BOQ items, readiness checks, conflicts, and estimating handoff.
           </p>
         </div>
       </div>
 
       <ProjectScopeNotice name={projectContext.projectName} />
+      <TakeoffEnginePanel projectName={projectName} projectId={projectContext.projectId} manualItems={items.filter((item) => item.description.trim())} />
 
       <form className="space-y-6" onSubmit={summarize}>
         <div className="rounded-md border border-iron-100 bg-white p-5">
@@ -107,7 +109,7 @@ export function QuantityTakeoffPage() {
         <div className="rounded-md border border-iron-100 bg-white p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-iron-950">Quantity Register</h2>
+              <h2 className="text-base font-semibold text-iron-950">Manual Quantity Register</h2>
               <p className="mt-1 text-sm text-iron-500">Track quantities by category, unit, source, confidence, and estimate readiness.</p>
             </div>
             <button type="button" onClick={() => setItems((current) => [...current, blankItem()])} className="inline-flex items-center gap-2 rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
