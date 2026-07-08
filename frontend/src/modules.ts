@@ -8,6 +8,7 @@ import {
   FileStack,
   FolderKanban,
   Gauge,
+  Ruler,
   Settings,
   Table2,
   Truck,
@@ -64,6 +65,13 @@ export const modules: AppModule[] = [
     icon: FileSearch,
     description: "Classify drawing sheets, detect revisions, scales, disciplines, municipalities, and drawing-set warnings.",
     status: "Build 24 active",
+  },
+  {
+    label: "Quantity Takeoff",
+    path: "/quantity-takeoff",
+    icon: Ruler,
+    description: "Manual and future drawing-extracted quantity register with estimate-ready summaries.",
+    status: "Build 25 active",
   },
   {
     label: "Quote Comparison",
