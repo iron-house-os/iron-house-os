@@ -13,7 +13,8 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.schemas.project_folder import ProjectFolderManifest, ProjectFolderRequest
-from app.services import project_folders, projects
+from app.schemas.project_readiness import ProjectReadinessResponse
+from app.services import project_folders, project_readiness, projects
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -53,3 +54,8 @@ def archive_project(project_id: UUID, db: DBSession) -> ProjectRead:
 @router.get("/{project_id}/dashboard", response_model=ProjectDashboard)
 def read_project_dashboard(project_id: UUID, db: DBSession) -> ProjectDashboard:
     return projects.get_project_dashboard(db, project_id)
+
+
+@router.get("/{project_id}/readiness", response_model=ProjectReadinessResponse)
+def read_project_readiness(project_id: UUID, db: DBSession) -> ProjectReadinessResponse:
+    return project_readiness.get_project_readiness(db, project_id)
