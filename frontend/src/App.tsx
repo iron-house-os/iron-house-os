@@ -12,6 +12,7 @@ import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
 import { QuantityTakeoffPage } from "./pages/QuantityTakeoffPage";
 import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
+import { RFQAutomationPage } from "./pages/RFQAutomationPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
@@ -22,6 +23,7 @@ export function App() {
       ![
         "/dashboard",
         "/rfq-builder",
+        "/rfq-automation",
         "/suppliers",
         "/documents",
         "/projects",
@@ -41,6 +43,7 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/rfq-builder" element={<RFQBuilderPage />} />
         <Route path="/rfq-builder/:rfqPackageId" element={<RFQBuilderPage />} />
+        <Route path="/rfq-automation" element={<RFQAutomationPage />} />
         <Route path="/suppliers" element={<SupplierDatabasePage />} />
         <Route path="/suppliers/:supplierId" element={<SupplierDatabasePage />} />
         <Route path="/documents" element={<DocumentLibraryPage />} />
