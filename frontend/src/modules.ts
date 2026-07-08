@@ -4,6 +4,7 @@ import {
   Building2,
   ClipboardList,
   Database,
+  FileSearch,
   FileStack,
   FolderKanban,
   Gauge,
@@ -56,6 +57,13 @@ export const modules: AppModule[] = [
     icon: ClipboardList,
     description: "Production rate estimate builder with markups, risk, summary, and workbook export.",
     status: "MVP active",
+  },
+  {
+    label: "Drawing Intelligence",
+    path: "/drawing-intelligence",
+    icon: FileSearch,
+    description: "Classify drawing sheets, detect revisions, scales, disciplines, municipalities, and drawing-set warnings.",
+    status: "Build 24 active",
   },
   {
     label: "Quote Comparison",
