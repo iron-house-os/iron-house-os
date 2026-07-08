@@ -98,6 +98,32 @@ export type EstimateCreate = {
   exclusions: string[];
 };
 
+export type TakeoffHandoffItem = {
+  code?: string | null;
+  description: string;
+  category: string;
+  quantity: number;
+  unit: EstimateUnit;
+  source?: string | null;
+  confidence: number;
+  drawing_reference?: string | null;
+  notes?: string | null;
+};
+
+export type EstimateHandoffRequest = {
+  project_name: string;
+  project_code?: string | null;
+  items: TakeoffHandoffItem[];
+};
+
+export type EstimateHandoffResponse = {
+  project_name: string;
+  project_code?: string | null;
+  line_items: EstimateLineItem[];
+  warnings: string[];
+  assumptions: string[];
+};
+
 export type EstimateLineItemCost = {
   code?: string | null;
   description: string;
@@ -113,7 +139,7 @@ export type EstimateLineItemCost = {
   direct_cost: number;
   unit_cost: number;
   selected_quote_supplier?: string | null;
-  selected_quote_amount?: number | null;
+  selected_quote_amount?: string | null;
 };
 
 export type EstimateCategoryBreakdown = {
@@ -180,6 +206,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const estimatesApi = {
   rateLibrary: () => request<RateLibrary>("/estimates/rate-library"),
+  handoff: (payload: EstimateHandoffRequest) =>
+    request<EstimateHandoffResponse>("/estimates/handoff", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   summary: (payload: EstimateCreate) =>
     request<EstimateSummary>("/estimates/summary", {
       method: "POST",
