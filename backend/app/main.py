@@ -5,6 +5,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.services.system_readiness import get_system_readiness
 
 
 def create_app() -> FastAPI:
@@ -37,19 +38,7 @@ def create_app() -> FastAPI:
 
     @app.get("/readiness", tags=["system"])
     def readiness() -> dict[str, object]:
-        return {
-            "status": "ready",
-            "service": settings.app_name,
-            "api_prefix": settings.api_v1_prefix,
-            "checks": {
-                "api_router": "mounted",
-                "cors": "configured",
-                "docs": "enabled",
-                "takeoff_engine": "enabled",
-                "estimate_handoff": "enabled",
-                "project_readiness": "enabled",
-            },
-        }
+        return get_system_readiness()
 
     return app
 
