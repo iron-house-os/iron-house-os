@@ -8,6 +8,7 @@ import {
   FileStack,
   FolderKanban,
   Gauge,
+  Landmark,
   Ruler,
   Settings,
   Table2,
@@ -72,6 +73,13 @@ export const modules: AppModule[] = [
     icon: Ruler,
     description: "Manual and future drawing-extracted quantity register with estimate-ready summaries.",
     status: "Build 25 active",
+  },
+  {
+    label: "Municipality Intelligence",
+    path: "/municipality-intelligence",
+    icon: Landmark,
+    description: "Municipal standards checklist with cost-impact flags, estimating notes, and RFQ notes.",
+    status: "Build 26 active",
   },
   {
     label: "Quote Comparison",
