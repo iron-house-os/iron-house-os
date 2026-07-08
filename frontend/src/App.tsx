@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
 import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
@@ -40,6 +41,7 @@ export function App() {
         <Route path="/documents/:documentId" element={<DocumentLibraryPage />} />
         <Route path="/projects" element={<ProjectWorkspacePage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspacePage />} />
+        <Route path="/p/:projectId/:tool" element={<ProjectScopedLauncherPage />} />
         <Route path="/tenders" element={<TenderIntakePage />} />
         <Route path="/tenders/:tenderId" element={<TenderIntakePage />} />
         <Route path="/estimating" element={<EstimatingPage />} />
