@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
 import { EstimatingPage } from "./pages/EstimatingPage";
+import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
@@ -29,6 +30,7 @@ export function App() {
         "/quotes",
         "/drawing-intelligence",
         "/quantity-takeoff",
+        "/municipality-intelligence",
       ].includes(module.path),
   );
 
@@ -52,6 +54,7 @@ export function App() {
         <Route path="/quotes" element={<QuoteComparisonPage />} />
         <Route path="/drawing-intelligence" element={<DrawingIntelligencePage />} />
         <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />
+        <Route path="/municipality-intelligence" element={<MunicipalityIntelligencePage />} />
         {placeholderModules.map((module) => (
           <Route key={module.path} path={module.path} element={<PlaceholderPage module={module} />} />
         ))}
