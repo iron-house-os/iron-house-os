@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { estimatesApi, EstimateHandoffResponse } from "../api/estimates";
 import {
   DrawingSheetInput,
   QuantityItem,
@@ -16,8 +17,10 @@ type Props = {
 
 export function TakeoffEnginePanel({ projectName, projectId, manualItems }: Props) {
   const [result, setResult] = useState<TakeoffEngineResponse | null>(null);
+  const [handoff, setHandoff] = useState<EstimateHandoffResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isHandoffLoading, setIsHandoffLoading] = useState(false);
 
   async function runEngine() {
     const sheets: DrawingSheetInput[] = [
@@ -40,6 +43,7 @@ export function TakeoffEnginePanel({ projectName, projectId, manualItems }: Prop
 
     setIsLoading(true);
     setError(null);
+    setHandoff(null);
     try {
       setResult(
         await takeoffApi.runEngine({
@@ -58,18 +62,52 @@ export function TakeoffEnginePanel({ projectName, projectId, manualItems }: Prop
     }
   }
 
+  async function sendToEstimating() {
+    if (!result) return;
+    setIsHandoffLoading(true);
+    setError(null);
+    try {
+      setHandoff(
+        await estimatesApi.handoff({
+          project_name: projectName || "Iron House Estimate",
+          project_code: projectId,
+          items: result.estimating_handoff_items.map((item) => ({
+            code: item.code,
+            description: item.description,
+            category: item.category,
+            quantity: item.quantity,
+            unit: item.unit,
+            source: item.source,
+            confidence: item.confidence,
+            drawing_reference: item.drawing_reference,
+            notes: item.notes,
+          })),
+        }),
+      );
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to build estimating handoff");
+    } finally {
+      setIsHandoffLoading(false);
+    }
+  }
+
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-iron-950">Build 29 Takeoff Engine</h2>
+          <h2 className="text-base font-semibold text-iron-950">Build 29/30 Takeoff to Estimate</h2>
           <p className="mt-1 text-sm text-iron-500">
-            Runs drawing-sheet metadata and extraction rules through the new BOQ engine, then returns readiness, conflicts, assumptions, and estimating handoff items.
+            Runs takeoff, creates estimate-ready BOQ items, then converts those quantities into estimating line items.
           </p>
         </div>
-        <button type="button" onClick={runEngine} disabled={isLoading} className="rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white">
-          {isLoading ? "Running..." : "Run engine"}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={runEngine} disabled={isLoading} className="rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white">
+            {isLoading ? "Running..." : "Run engine"}
+          </button>
+          <button type="button" onClick={sendToEstimating} disabled={!result || isHandoffLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
+            {isHandoffLoading ? "Sending..." : "Send to estimating"}
+          </button>
+        </div>
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
@@ -96,6 +134,19 @@ export function TakeoffEnginePanel({ projectName, projectId, manualItems }: Prop
           <List title="Generated BOQ items" items={result.generated_items.map((item) => `${item.code}: ${item.description} - ${item.quantity} ${item.unit}`)} />
           <List title="Conflicts" items={result.conflicts} />
           <List title="Next actions" items={result.next_actions} />
+        </div>
+      ) : null}
+
+      {handoff ? (
+        <div className="mt-5 space-y-4 rounded-md border border-iron-100 p-4">
+          <div className="font-semibold text-iron-950">Estimate handoff created</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Metric label="Estimate lines" value={handoff.line_items.length} />
+            <Metric label="Warnings" value={handoff.warnings.length} />
+          </div>
+          <List title="Estimate line items" items={handoff.line_items.map((item) => `${item.code}: ${item.description} - ${item.quantity} ${item.unit} (${item.item_type})`)} />
+          <List title="Handoff warnings" items={handoff.warnings} />
+          <List title="Handoff assumptions" items={handoff.assumptions} />
         </div>
       ) : null}
     </div>
