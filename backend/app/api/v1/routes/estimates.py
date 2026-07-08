@@ -5,12 +5,14 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas.estimate import (
     EstimateCreate,
+    EstimateHandoffRequest,
+    EstimateHandoffResponse,
     EstimateLineItem,
     EstimateLineItemCost,
     EstimateSummary,
     RateLibrary,
 )
-from app.services import estimate_workbooks, estimates
+from app.services import estimate_handoff, estimate_workbooks, estimates
 
 router = APIRouter()
 
@@ -23,6 +25,11 @@ def get_rate_library() -> RateLibrary:
 @router.post("/line-item", response_model=EstimateLineItemCost)
 def calculate_line_item(payload: EstimateLineItem) -> EstimateLineItemCost:
     return estimates.calculate_line_item(payload)
+
+
+@router.post("/handoff", response_model=EstimateHandoffResponse)
+def build_handoff(payload: EstimateHandoffRequest) -> EstimateHandoffResponse:
+    return estimate_handoff.build_estimate_handoff(payload)
 
 
 @router.post("/summary", response_model=EstimateSummary)
