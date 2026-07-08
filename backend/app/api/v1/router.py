@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     municipality,
     projects,
     quotes,
+    rfq_automation,
     rfqs,
     suppliers,
     takeoff,
@@ -22,6 +23,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
 api_router.include_router(rfqs.router, prefix="/rfqs", tags=["rfqs"])
+api_router.include_router(rfq_automation.router, prefix="/rfq-automation", tags=["rfq-automation"])
 api_router.include_router(bids.router, prefix="/bids", tags=["bids"])
 api_router.include_router(estimates.router, prefix="/estimates", tags=["estimates"])
 api_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
