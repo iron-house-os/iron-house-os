@@ -5,7 +5,20 @@ from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
 
-ALLOWED_EXTENSIONS = {".pdf", ".dwg", ".dxf", ".xlsx", ".xls", ".docx", ".doc", ".zip", ".csv", ".png", ".jpg", ".jpeg"}
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".dwg",
+    ".dxf",
+    ".xlsx",
+    ".xls",
+    ".docx",
+    ".doc",
+    ".zip",
+    ".csv",
+    ".png",
+    ".jpg",
+    ".jpeg",
+}
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 STORAGE_ROOT = Path("/app/data/uploads")
 
@@ -41,9 +54,11 @@ async def store_upload(file: UploadFile, project_id: str | None = None) -> Store
         while chunk := await file.read(1024 * 1024):
             size += len(chunk)
             if size > MAX_UPLOAD_BYTES:
-                output.close()
                 target_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File exceeds upload limit")
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="File exceeds upload limit",
+                )
             digest.update(chunk)
             output.write(chunk)
 
@@ -63,7 +78,13 @@ def resolve_storage_path(storage_uri: str) -> Path:
     try:
         path.resolve().relative_to(STORAGE_ROOT.resolve())
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid storage path") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid storage path",
+        ) from exc
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Stored file not found",
+        )
     return path
