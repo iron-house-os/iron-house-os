@@ -14,12 +14,16 @@ class DocumentCategory(StrEnum):
     traffic_control = "traffic_control"
     environmental = "environmental"
     quote_request = "quote_request"
+    quote = "quote"
+    photo = "photo"
+    testing = "testing"
     other = "other"
 
 
 class DocumentStatus(StrEnum):
     registered = "registered"
     active = "active"
+    current = "current"
     superseded = "superseded"
     archived = "archived"
 
@@ -63,6 +67,48 @@ class DocumentUpdate(BaseModel):
 
 class DocumentUpdateStatus(BaseModel):
     status: DocumentStatus
+
+
+class DocumentUploadResponse(BaseModel):
+    document: "DocumentRead"
+    original_filename: str
+    safe_filename: str
+    extension: str
+    content_type: str | None
+    size_bytes: int
+    sha256_hash: str
+    duplicate_document_ids: list[UUID]
+
+
+class DocumentIntegrity(BaseModel):
+    document_id: UUID
+    storage_uri: str | None
+    file_exists: bool
+    sha256_hash: str | None
+    size_bytes: int | None
+    duplicate_document_ids: list[UUID]
+
+
+class RFQAttachmentManifestRequest(BaseModel):
+    document_ids: list[UUID] = Field(default_factory=list)
+
+
+class RFQAttachmentManifestItem(BaseModel):
+    document_id: UUID
+    title: str
+    category: DocumentCategory
+    status: DocumentStatus
+    storage_uri: str | None
+    filename: str | None
+    size_bytes: int | None
+    sha256_hash: str | None
+
+
+class RFQAttachmentManifest(BaseModel):
+    item_count: int
+    total_size_bytes: int
+    items: list[RFQAttachmentManifestItem]
+    warnings: list[str]
 
 
 class DocumentRead(BaseModel):
