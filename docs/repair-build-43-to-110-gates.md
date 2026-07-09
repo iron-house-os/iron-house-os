@@ -47,4 +47,25 @@ Green check evidence:
 - Backend checks passed: install, Ruff lint, pytest.
 - Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
 
-Next gate: Build 45 only.
+## Build 45 — Frontend Dockerfile
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `frontend/Dockerfile` exists.
+- Dockerfile uses Node 22 Alpine build stage.
+- Dockerfile installs dependencies with `npm ci` and runs `npm run build`.
+- Dockerfile serves `dist` with Nginx.
+- `frontend/nginx.conf` exists and supports SPA fallback plus `/health`.
+- Repository CI remains green after the Build 45 repair pass.
+
+Green check evidence:
+
+- `frontend/Dockerfile` inspected and present on the repair branch.
+- `frontend/nginx.conf` inspected and present on the repair branch.
+- CI run `29044799197` completed with conclusion `success` on commit `77ff18df02ff55f7b5176326cad35d009902afda`.
+- Backend checks passed: install, Ruff lint, pytest.
+- Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
+
+Next gate: Build 46 only.
