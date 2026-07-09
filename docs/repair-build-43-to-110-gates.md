@@ -104,4 +104,105 @@ Green check evidence:
 - Run `29050502542` completed with frontend checks successful: install, lint/type gate, smoke test gate, Vite build.
 - Run `29050502542` completed with backend checks successful: install, Ruff lint, pytest.
 
-Next gate: Build 48 only.
+## Build 48 — Deployment checklist
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `docs/deployment-checklist.md` exists.
+- Checklist covers required services, environment variables, pre-deploy checks, and first production target guardrails.
+- Repository CI remains green after the Build 48 repair pass.
+
+Green check evidence:
+
+- Build 48 commit inspected: `f86b8e58c2f6f11ad00e1083df02142a59e60c7b`.
+- `docs/deployment-checklist.md` content verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+## Build 49 — MVP test plan
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `docs/mvp-test-plan.md` exists.
+- Test plan covers smoke flow from project creation through readiness.
+- Test plan lists backend endpoints and acceptance criteria.
+- Repository CI remains green after the Build 49 repair pass.
+
+Green check evidence:
+
+- Build 49 commit inspected: `bf234d64ac3e65befdb401f34f2280950f505e87`.
+- `docs/mvp-test-plan.md` content verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+## Build 50 — Web app MVP bridge documentation
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `docs/build-36-to-50-web-app-mvp.md` exists.
+- Document registers Builds 36–50 and summarizes MVP bridge result.
+- Remaining-before-live-use risks are documented.
+- Repository CI remains green after the Build 50 repair pass.
+
+Green check evidence:
+
+- Build 50 commit inspected: `2ea00a6aea69cfa3327c6cbf883567008ee7fceb`.
+- `docs/build-36-to-50-web-app-mvp.md` content verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+## Build 51 — MVP workflow page
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `frontend/src/pages/MVPWorkflowPage.tsx` exists.
+- Page defines the internal MVP workflow from project setup to final bid package.
+- Page links workflow steps to the correct modules.
+- Repository CI remains green after the Build 51 repair pass.
+
+Green check evidence:
+
+- Build 51 commit inspected: `ec92fd11235b00c618cc3abea21c435d9442940b`.
+- `frontend/src/pages/MVPWorkflowPage.tsx` content verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+## Build 52 — MVP workflow route
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `frontend/src/App.tsx` imports `MVPWorkflowPage`.
+- `/mvp-workflow` is excluded from placeholder routing.
+- `/mvp-workflow` route renders the MVP workflow page.
+- Repository CI remains green after the Build 52 repair pass.
+
+Green check evidence:
+
+- Build 52 commit inspected: `02b685f616c5313c930ef77a3d8e6ef64b6a9b03`.
+- `frontend/src/App.tsx` route changes verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+## Build 53 — MVP workflow module card
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `frontend/src/modules.ts` includes the MVP Workflow module card.
+- Module card points to `/mvp-workflow`.
+- Module card uses `ClipboardList` and status `Build 51 active`.
+- Repository CI remains green after the Build 53 repair pass.
+
+Green check evidence:
+
+- Build 53 commit inspected: `82793672d8bf0881f1cd709adf7537fbf485a22b`.
+- `frontend/src/modules.ts` module card changes verified from commit diff.
+- CI run `29044918254` completed with conclusion `success` on the repair branch.
+
+Next gate: Build 54 only.
