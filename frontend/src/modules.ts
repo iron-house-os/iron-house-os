@@ -40,6 +40,13 @@ export const modules: AppModule[] = [
     status: "Build 51 active",
   },
   {
+    label: "Project Operations",
+    path: "/project-operations",
+    icon: FolderKanban,
+    description: "Load project readiness, saved takeoffs, and saved estimate workspaces by project ID.",
+    status: "Build 67 active",
+  },
+  {
     label: "Projects",
     path: "/projects",
     icon: FolderKanban,
@@ -79,7 +86,7 @@ export const modules: AppModule[] = [
     path: "/quantity-takeoff",
     icon: Ruler,
     description: "Manual register plus takeoff engine for BOQ rollups, readiness checks, conflicts, and estimating handoff.",
-    status: "Build 29 active",
+    status: "Build 62 active",
   },
   {
     label: "Municipality Intelligence",
