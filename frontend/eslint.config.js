@@ -11,7 +11,14 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
+        Blob: "readonly",
+        File: "readonly",
+        FormData: "readonly",
+        RequestInit: "readonly",
+        URLSearchParams: "readonly",
         document: "readonly",
+        fetch: "readonly",
+        import.meta: "readonly",
         window: "readonly",
       },
     },
@@ -21,6 +28,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      "no-undef": "off",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },
