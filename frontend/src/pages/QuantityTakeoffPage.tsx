@@ -12,6 +12,7 @@ import {
 } from "../api/takeoff";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
 import { TakeoffEnginePanel } from "../components/TakeoffEnginePanel";
+import { TakeoffSavePanel } from "../components/TakeoffSavePanel";
 import { readProjectContext } from "../utils/projectContext";
 
 const categories: QuantityCategory[] = ["pipe", "structures", "asphalt", "concrete", "earthworks", "landscape", "traffic", "misc"];
@@ -83,19 +84,22 @@ export function QuantityTakeoffPage() {
     setItems((current) => current.filter((_, currentIndex) => currentIndex !== index));
   }
 
+  const activeItems = items.filter((item) => item.description.trim());
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-semibold text-iron-950">Quantity Takeoff Engine</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Build 29 quantity register and takeoff engine for manual entries, generated BOQ items, readiness checks, conflicts, and estimating handoff.
+            Build 62 quantity register with project save support, generated BOQ items, readiness checks, conflicts, and estimating handoff.
           </p>
         </div>
       </div>
 
       <ProjectScopeNotice name={projectContext.projectName} />
-      <TakeoffEnginePanel projectName={projectName} projectId={projectContext.projectId} manualItems={items.filter((item) => item.description.trim())} />
+      <TakeoffEnginePanel projectName={projectName} projectId={projectContext.projectId} manualItems={activeItems} />
+      <TakeoffSavePanel projectId={projectContext.projectId} items={activeItems} quantityRegister={summary} />
 
       <form className="space-y-6" onSubmit={summarize}>
         <div className="rounded-md border border-iron-100 bg-white p-5">
