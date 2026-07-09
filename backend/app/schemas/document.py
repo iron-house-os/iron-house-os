@@ -69,8 +69,25 @@ class DocumentUpdateStatus(BaseModel):
     status: DocumentStatus
 
 
+class DocumentRead(BaseModel):
+    id: UUID
+    title: str
+    category: DocumentCategory
+    status: DocumentStatus
+    project_id: UUID | None
+    rfq_package_id: UUID | None
+    tender_id: UUID | None
+    supplier_id: UUID | None
+    storage_uri: str | None
+    description: str | None
+    drawing: DrawingMetadata | None
+    metadata: dict
+    created_at: datetime
+    updated_at: datetime
+
+
 class DocumentUploadResponse(BaseModel):
-    document: "DocumentRead"
+    document: DocumentRead
     original_filename: str
     safe_filename: str
     extension: str
@@ -109,23 +126,6 @@ class RFQAttachmentManifest(BaseModel):
     total_size_bytes: int
     items: list[RFQAttachmentManifestItem]
     warnings: list[str]
-
-
-class DocumentRead(BaseModel):
-    id: UUID
-    title: str
-    category: DocumentCategory
-    status: DocumentStatus
-    project_id: UUID | None
-    rfq_package_id: UUID | None
-    tender_id: UUID | None
-    supplier_id: UUID | None
-    storage_uri: str | None
-    description: str | None
-    drawing: DrawingMetadata | None
-    metadata: dict
-    created_at: datetime
-    updated_at: datetime
 
 
 class DocumentList(BaseModel):
