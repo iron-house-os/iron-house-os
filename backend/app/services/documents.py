@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.models.document import Document
 from app.schemas.document import (
+    DocumentCategory,
     DocumentCreate,
     DocumentIntegrity,
     DocumentList,
@@ -43,14 +44,18 @@ async def upload_document(
         "size_bytes": stored.size_bytes,
         "sha256_hash": stored.sha256_hash,
     }
+    drawing = None
+    if category == DocumentCategory.drawing.value:
+        drawing = DrawingMetadata(revision=revision, storage_uri=stored.storage_uri)
+
     payload = DocumentCreate(
         title=title or stored.original_filename,
-        category=category,
+        category=DocumentCategory(category),
         status=DocumentStatus.registered,
         project_id=project_id,
         storage_uri=stored.storage_uri,
         description=description,
-        drawing=DrawingMetadata(revision=revision, storage_uri=stored.storage_uri) if category == "drawing" else None,
+        drawing=drawing,
         metadata=metadata,
     )
     document = create_document(db, payload)
@@ -126,15 +131,20 @@ def document_integrity(db: Session, document_id: UUID) -> DocumentIntegrity:
                     digest.update(chunk)
             current_hash = digest.hexdigest()
             size_bytes = size
-        except Exception:  # noqa: BLE001
+        except AppError:
             file_exists = False
+    duplicate_ids = _duplicate_document_ids(
+        db,
+        metadata.get("sha256_hash"),
+        exclude_id=document.id,
+    )
     return DocumentIntegrity(
         document_id=document.id,
         storage_uri=document.storage_uri,
         file_exists=file_exists,
         sha256_hash=current_hash,
         size_bytes=size_bytes,
-        duplicate_document_ids=_duplicate_document_ids(db, metadata.get("sha256_hash"), exclude_id=document.id),
+        duplicate_document_ids=duplicate_ids,
     )
 
 
@@ -164,7 +174,12 @@ def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttac
                 sha256_hash=metadata.get("sha256_hash"),
             )
         )
-    return RFQAttachmentManifest(item_count=len(items), total_size_bytes=total_size, items=items, warnings=warnings)
+    return RFQAttachmentManifest(
+        item_count=len(items),
+        total_size_bytes=total_size,
+        items=items,
+        warnings=warnings,
+    )
 
 
 def update_document(db: Session, document_id: UUID, payload: DocumentUpdate) -> DocumentRead:
@@ -206,7 +221,11 @@ def _load_document(db: Session, document_id: UUID) -> Document:
     return document
 
 
-def _duplicate_document_ids(db: Session, sha256_hash: str | None, exclude_id: UUID | None = None) -> list[UUID]:
+def _duplicate_document_ids(
+    db: Session,
+    sha256_hash: str | None,
+    exclude_id: UUID | None = None,
+) -> list[UUID]:
     if not sha256_hash:
         return []
     rows = db.scalars(select(Document)).all()
