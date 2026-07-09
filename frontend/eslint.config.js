@@ -18,7 +18,6 @@ export default tseslint.config(
         URLSearchParams: "readonly",
         document: "readonly",
         fetch: "readonly",
-        import.meta: "readonly",
         window: "readonly",
       },
     },
