@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.document import (
     DocumentCategory,
+    DocumentCreate,
     DocumentIntegrity,
     DocumentList,
     DocumentRead,
@@ -26,7 +27,7 @@ OptionalUUIDQuery = Annotated[UUID | None, Query()]
 
 
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
-def create_document(payload: documents.DocumentCreate, db: DBSession) -> DocumentRead:
+def create_document(payload: DocumentCreate, db: DBSession) -> DocumentRead:
     return documents.create_document(db, payload)
 
 
