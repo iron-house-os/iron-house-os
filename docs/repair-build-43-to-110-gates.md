@@ -68,4 +68,23 @@ Green check evidence:
 - Backend checks passed: install, Ruff lint, pytest.
 - Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
 
-Next gate: Build 46 only.
+## Build 46 — Frontend Nginx config
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `frontend/nginx.conf` exists.
+- Nginx listens on port 80.
+- SPA fallback serves `index.html` for client-side routes.
+- `/health` endpoint returns `ok`.
+- Repository CI remains green after the Build 46 repair pass.
+
+Green check evidence:
+
+- `frontend/nginx.conf` inspected and present on the repair branch.
+- CI run `29044861743` completed with conclusion `success` on commit `474cb4a2e3b4c845418167124317aa1bebd9e8da`.
+- Backend checks passed: install, Ruff lint, pytest.
+- Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
+
+Next gate: Build 47 only.
