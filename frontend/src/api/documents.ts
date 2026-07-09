@@ -7,9 +7,12 @@ export type DocumentCategory =
   | "traffic_control"
   | "environmental"
   | "quote_request"
+  | "quote"
+  | "photo"
+  | "testing"
   | "other";
 
-export type DocumentStatus = "registered" | "active" | "superseded" | "archived";
+export type DocumentStatus = "registered" | "active" | "current" | "superseded" | "archived";
 
 export type DrawingMetadata = {
   sheet_number: string | null;
@@ -56,6 +59,44 @@ export type DocumentCreatePayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type DocumentUploadResponse = {
+  document: LibraryDocument;
+  original_filename: string;
+  safe_filename: string;
+  extension: string;
+  content_type: string | null;
+  size_bytes: number;
+  sha256_hash: string;
+  duplicate_document_ids: string[];
+};
+
+export type DocumentIntegrity = {
+  document_id: string;
+  storage_uri: string | null;
+  file_exists: boolean;
+  sha256_hash: string | null;
+  size_bytes: number | null;
+  duplicate_document_ids: string[];
+};
+
+export type RFQAttachmentManifestItem = {
+  document_id: string;
+  title: string;
+  category: DocumentCategory;
+  status: DocumentStatus;
+  storage_uri: string | null;
+  filename: string | null;
+  size_bytes: number | null;
+  sha256_hash: string | null;
+};
+
+export type RFQAttachmentManifest = {
+  item_count: number;
+  total_size_bytes: number;
+  items: RFQAttachmentManifestItem[];
+  warnings: string[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -74,6 +115,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
 export const documentCategories: DocumentCategory[] = [
   "drawing",
   "specification",
@@ -83,12 +133,16 @@ export const documentCategories: DocumentCategory[] = [
   "traffic_control",
   "environmental",
   "quote_request",
+  "quote",
+  "photo",
+  "testing",
   "other",
 ];
 
 export const documentStatuses: DocumentStatus[] = [
   "registered",
   "active",
+  "current",
   "superseded",
   "archived",
 ];
@@ -113,7 +167,24 @@ export const documentsApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  upload: (payload: { file: File; title?: string; category: DocumentCategory; project_id?: string; description?: string; revision?: string }) => {
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    if (payload.title) formData.append("title", payload.title);
+    formData.append("category", payload.category);
+    if (payload.project_id) formData.append("project_id", payload.project_id);
+    if (payload.description) formData.append("description", payload.description);
+    if (payload.revision) formData.append("revision", payload.revision);
+    return uploadRequest<DocumentUploadResponse>("/documents/upload", formData);
+  },
   detail: (id: string) => request<LibraryDocument>(`/documents/${id}`),
+  downloadUrl: (id: string) => `${API_BASE_URL}/documents/${id}/download`,
+  integrity: (id: string) => request<DocumentIntegrity>(`/documents/${id}/integrity`),
+  attachmentManifest: (documentIds: string[]) =>
+    request<RFQAttachmentManifest>("/documents/attachment-manifest", {
+      method: "POST",
+      body: JSON.stringify({ document_ids: documentIds }),
+    }),
   updateStatus: (id: string, status: DocumentStatus) =>
     request<LibraryDocument>(`/documents/${id}/status`, {
       method: "PATCH",
