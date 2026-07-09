@@ -87,4 +87,21 @@ Green check evidence:
 - Backend checks passed: install, Ruff lint, pytest.
 - Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
 
-Next gate: Build 47 only.
+## Build 47 — Compose health checks
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `docker-compose.yml` includes a backend healthcheck against `/readiness`.
+- Frontend depends on backend with `condition: service_healthy`.
+- PostgreSQL healthcheck remains in place.
+- Repository CI remains green after the Build 47 repair pass.
+
+Green check evidence:
+
+- `docker-compose.yml` inspected on the repair branch.
+- Run `29050502542` completed with frontend checks successful: install, lint/type gate, smoke test gate, Vite build.
+- Run `29050502542` completed with backend checks successful: install, Ruff lint, pytest.
+
+Next gate: Build 48 only.
