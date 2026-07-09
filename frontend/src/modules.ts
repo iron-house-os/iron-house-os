@@ -47,6 +47,13 @@ export const modules: AppModule[] = [
     status: "Build 67 active",
   },
   {
+    label: "Document Operations",
+    path: "/document-operations",
+    icon: BookOpen,
+    description: "Upload project files, browse stored documents, manage revisions, and build RFQ attachment manifests.",
+    status: "Build 109 active",
+  },
+  {
     label: "Projects",
     path: "/projects",
     icon: FolderKanban,
