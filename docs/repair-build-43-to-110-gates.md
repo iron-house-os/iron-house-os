@@ -28,4 +28,23 @@ Repairs applied:
 - Adjusted ESLint config to avoid unstable TypeScript/browser global blocking.
 - Adjusted backend Ruff configuration to keep E/F checks while excluding line-length noise.
 
-Next gate: Build 44 only.
+## Build 44 — Backend Dockerfile
+
+Gate status: ✅ green.
+
+Verification target:
+
+- `backend/Dockerfile` exists.
+- Dockerfile uses Python 3.12 slim image.
+- Dockerfile installs backend requirements.
+- Dockerfile copies backend app code and exposes port 8000.
+- Repository CI remains green after the Build 44 repair pass.
+
+Green check evidence:
+
+- `backend/Dockerfile` inspected and present on the repair branch.
+- CI run `29044741686` completed with conclusion `success` on commit `ff8e3c0eef17dff6932547f9085b24cfb90ffd4e`.
+- Backend checks passed: install, Ruff lint, pytest.
+- Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
+
+Next gate: Build 45 only.
