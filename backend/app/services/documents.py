@@ -1,5 +1,8 @@
+from hashlib import sha256
+from pathlib import Path
 from uuid import UUID
 
+from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,13 +10,60 @@ from app.core.errors import AppError
 from app.models.document import Document
 from app.schemas.document import (
     DocumentCreate,
+    DocumentIntegrity,
     DocumentList,
     DocumentRead,
     DocumentStatus,
     DocumentUpdate,
     DocumentUpdateStatus,
+    DocumentUploadResponse,
     DrawingMetadata,
+    RFQAttachmentManifest,
+    RFQAttachmentManifestItem,
 )
+from app.services.file_storage import resolve_storage_path, store_upload
+
+
+async def upload_document(
+    db: Session,
+    file: UploadFile,
+    title: str | None,
+    category: str,
+    project_id: UUID | None = None,
+    description: str | None = None,
+    revision: str | None = None,
+) -> DocumentUploadResponse:
+    stored = await store_upload(file, project_id=str(project_id) if project_id else None)
+    duplicates = _duplicate_document_ids(db, stored.sha256_hash)
+    metadata = {
+        "original_filename": stored.original_filename,
+        "safe_filename": stored.safe_filename,
+        "extension": stored.extension,
+        "content_type": stored.content_type,
+        "size_bytes": stored.size_bytes,
+        "sha256_hash": stored.sha256_hash,
+    }
+    payload = DocumentCreate(
+        title=title or stored.original_filename,
+        category=category,
+        status=DocumentStatus.registered,
+        project_id=project_id,
+        storage_uri=stored.storage_uri,
+        description=description,
+        drawing=DrawingMetadata(revision=revision, storage_uri=stored.storage_uri) if category == "drawing" else None,
+        metadata=metadata,
+    )
+    document = create_document(db, payload)
+    return DocumentUploadResponse(
+        document=document,
+        original_filename=stored.original_filename,
+        safe_filename=stored.safe_filename,
+        extension=stored.extension,
+        content_type=stored.content_type,
+        size_bytes=stored.size_bytes,
+        sha256_hash=stored.sha256_hash,
+        duplicate_document_ids=duplicates,
+    )
 
 
 def create_document(db: Session, payload: DocumentCreate) -> DocumentRead:
@@ -49,6 +99,72 @@ def list_documents(
 
 def get_document(db: Session, document_id: UUID) -> DocumentRead:
     return _to_schema(_load_document(db, document_id))
+
+
+def get_document_file_path(db: Session, document_id: UUID) -> Path:
+    document = _load_document(db, document_id)
+    if not document.storage_uri:
+        raise AppError("Document has no stored file", status_code=404)
+    return resolve_storage_path(document.storage_uri)
+
+
+def document_integrity(db: Session, document_id: UUID) -> DocumentIntegrity:
+    document = _load_document(db, document_id)
+    metadata = document.metadata_json or {}
+    file_exists = False
+    current_hash = None
+    size_bytes = None
+    if document.storage_uri:
+        try:
+            path = resolve_storage_path(document.storage_uri)
+            file_exists = True
+            digest = sha256()
+            size = 0
+            with path.open("rb") as source:
+                while chunk := source.read(1024 * 1024):
+                    size += len(chunk)
+                    digest.update(chunk)
+            current_hash = digest.hexdigest()
+            size_bytes = size
+        except Exception:  # noqa: BLE001
+            file_exists = False
+    return DocumentIntegrity(
+        document_id=document.id,
+        storage_uri=document.storage_uri,
+        file_exists=file_exists,
+        sha256_hash=current_hash,
+        size_bytes=size_bytes,
+        duplicate_document_ids=_duplicate_document_ids(db, metadata.get("sha256_hash"), exclude_id=document.id),
+    )
+
+
+def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttachmentManifest:
+    items: list[RFQAttachmentManifestItem] = []
+    warnings: list[str] = []
+    total_size = 0
+    for document_id in document_ids:
+        document = _load_document(db, document_id)
+        metadata = document.metadata_json or {}
+        size = metadata.get("size_bytes")
+        if isinstance(size, int):
+            total_size += size
+        if document.status in {"superseded", "archived"}:
+            warnings.append(f"{document.title} is {document.status}.")
+        if not document.storage_uri:
+            warnings.append(f"{document.title} has no stored file.")
+        items.append(
+            RFQAttachmentManifestItem(
+                document_id=document.id,
+                title=document.title,
+                category=document.category,
+                status=DocumentStatus(document.status),
+                storage_uri=document.storage_uri,
+                filename=metadata.get("original_filename"),
+                size_bytes=size if isinstance(size, int) else None,
+                sha256_hash=metadata.get("sha256_hash"),
+            )
+        )
+    return RFQAttachmentManifest(item_count=len(items), total_size_bytes=total_size, items=items, warnings=warnings)
 
 
 def update_document(db: Session, document_id: UUID, payload: DocumentUpdate) -> DocumentRead:
@@ -88,6 +204,20 @@ def _load_document(db: Session, document_id: UUID) -> Document:
     if document is None:
         raise AppError("Document not found", status_code=404)
     return document
+
+
+def _duplicate_document_ids(db: Session, sha256_hash: str | None, exclude_id: UUID | None = None) -> list[UUID]:
+    if not sha256_hash:
+        return []
+    rows = db.scalars(select(Document)).all()
+    duplicate_ids: list[UUID] = []
+    for row in rows:
+        if exclude_id and row.id == exclude_id:
+            continue
+        metadata = row.metadata_json or {}
+        if metadata.get("sha256_hash") == sha256_hash:
+            duplicate_ids.append(row.id)
+    return duplicate_ids
 
 
 def _document_values(payload: DocumentCreate) -> dict:
