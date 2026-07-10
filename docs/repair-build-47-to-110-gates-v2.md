@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–92: ✅ green.
+- Builds 47–93: ✅ green.
 
-## Build 93 — Estimator review policy
+## Build 94 — Supplier RFQ policy
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `b387ff98d98d71bae7bb9feb0bfe4c7f2d9beb37`.
-- `docs/build-93-estimator-review-policy.md` exists on the repair branch.
-- The policy requires estimator review of revisions, quantities, rates, quote scope, self-perform/subcontract splits, risk allowances, bonding, exclusions, and final price.
+- Original build commit verified: `7bcbc9921a009e2d18ab7006edb7ce6cbf039bf6`.
+- `docs/build-94-supplier-rfq-policy.md` exists on the repair branch.
+- The policy covers supplier category, recipient, attachments, due dates, scope clarity, redirect requests, do-not-send conditions, and RFQ/quote recordkeeping.
 
-Next action: require a green GitHub Actions run before advancing to Build 94.
+Next action: require a green GitHub Actions run before advancing to Build 95.
