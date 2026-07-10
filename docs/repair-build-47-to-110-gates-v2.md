@@ -6,14 +6,13 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–103: ✅ green.
+- Builds 47–104: ✅ green.
 
-## Build 104 — Document upload routes
+## Build 105 — Document upload frontend client
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original route commit verified: `d5169ada0b503ca8880339bedc2dcfe7daf540f9`.
-- Follow-up typing repair verified: `6b9347a8cab51355adf13a53215a92d37ae0c78d`.
-- `backend/app/api/v1/routes/documents.py` exposes upload, attachment manifest, download, and integrity routes while preserving typed document creation.
+- Original build commit verified: `a5d7ed2f0f8d5ce8d633e49ee32769d999879b1d`.
+- `frontend/src/api/documents.ts` supports upload form data, download URLs, integrity requests, RFQ attachment manifests, added categories, and current document status.
 
-Next action: require a green GitHub Actions run before advancing to Build 105.
+Next action: require a green GitHub Actions run before advancing to Build 106.
