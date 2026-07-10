@@ -6,21 +6,21 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–78: ✅ green.
-
-## Build 79 — Known limitations
-
-Gate status: ✅ green.
-
-- Original build commit verified: `f185b5dfb1b54b0be6ba894cd4ebd31ef6b4da77`.
-- GitHub Actions run `29111258874` completed successfully.
+- Builds 47–79: ✅ green.
 
 ## Build 80 — Readiness pack documentation
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `b9a7f1f7eb901caf9eea38f15e20732d01145639`.
-- `docs/build-71-to-80-readiness-pack.md` exists on the repair branch.
-- The document records Builds 71–80 and the transition into test-cycle, database, upload, authentication, and final handoff work.
+- GitHub Actions run `29111364812` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 81.
+## Build 81 — MVP risk register
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `23c20b4b4f9a3c8cd21dde797eb989e75003cbff`.
+- `docs/risk-register-mvp.md` exists on the repair branch.
+- The register covers quantity, rate, addendum, supplier quote, access, upload, and database-loss risks with mitigations.
+
+Next action: require a green GitHub Actions run before advancing to Build 82.
