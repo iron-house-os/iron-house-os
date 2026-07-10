@@ -66,7 +66,16 @@ Gate status: ✅ green.
 Green check evidence for Builds 54–60:
 
 - GitHub Actions run `29103011695` completed successfully.
+- GitHub Actions run `29103156739` completed successfully after the final audit-log update.
 - Backend checks passed: install, Ruff lint, pytest.
 - Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
 
-Next gate: Build 61 only.
+## Build 61 — Takeoff save panel
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `6576702aac13c14ee0911a39328a01cdcf7e6d6c`.
+- `frontend/src/components/TakeoffSavePanel.tsx` exists on the repair branch.
+- The panel requires an active project, saves current items and quantity register through `takeoffPersistenceApi`, reports errors, and confirms the saved takeoff ID.
+
+Next action: require a green GitHub Actions run before advancing to Build 62.
