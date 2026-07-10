@@ -6,17 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–108: ✅ green.
+- Builds 47–109: ✅ green.
 
-## Build 109 — Document operations page, route, and module card
+## Build 110 — Document file management block
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ implementation verified; pending final branch CI confirmation.
 
-- Original page commit verified: `b0880b35054ffd34835a89dc3de7fe25d053bce1`.
-- Original route commit verified: `83497d9eeeeedbe382869c283ff6f384371389f5`.
-- Original module-card commit verified: `6ecac0fef994e46c64a99cc43fc8b5d577f67dc2`.
-- `frontend/src/pages/DocumentOperationsPage.tsx` exists and combines upload, project browser, and RFQ manifest panels.
-- `/document-operations` is routed in `frontend/src/App.tsx`.
-- The Document Operations dashboard module card exists in `frontend/src/modules.ts`.
+- Original build commit verified: `e04a97ca94bee008b489b1bb4cf4264f7bb61e1f`.
+- `docs/build-101-to-110-document-management.md` exists on the repair branch.
+- The document records Builds 101–110, backend endpoints, the `/document-operations` route, current capabilities, and hosted-production limitations.
 
-Next action: require a green GitHub Actions run before advancing to Build 110.
+Next action: require a final green GitHub Actions run before closing the Build 110 repair gate.
