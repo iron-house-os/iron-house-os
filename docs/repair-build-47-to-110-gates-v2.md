@@ -136,10 +136,11 @@ Gate status: ✅ green.
 
 ## Build 68 — Backend smoke check script
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `1cc54dfcd64b9694c6d37532b2182f37cd87796e`.
 - `scripts/smoke_check.py` exists on the repair branch.
 - The script checks `/health`, `/readiness`, and `/api/v1/projects`, prints JSON summaries, and exits nonzero when checks fail.
+- GitHub Actions run `29106431583` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 69.
+Next gate: Build 69 only.
