@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,8 @@ from app.schemas.document import (
     RFQAttachmentManifestRequest,
 )
 from app.services import documents
+from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
+from app.services.signed_download import DEFAULT_TTL_SECONDS, create_download_token, verify_download_token
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -41,7 +43,7 @@ async def upload_document(
     description: str | None = Form(default=None),
     revision: str | None = Form(default=None),
 ) -> DocumentUploadResponse:
-    return await documents.upload_document(
+    response = await documents.upload_document(
         db,
         file=file,
         title=title,
@@ -50,6 +52,14 @@ async def upload_document(
         description=description,
         revision=revision,
     )
+    emit_document_audit_event(
+        DocumentAuditEvent(
+            action="upload",
+            document_id=response.document.id,
+            project_id=project_id,
+        )
+    )
+    return response
 
 
 @router.get("", response_model=DocumentList)
@@ -76,6 +86,31 @@ def attachment_manifest(payload: RFQAttachmentManifestRequest, db: DBSession) ->
     return documents.build_attachment_manifest(db, payload.document_ids)
 
 
+@router.get("/signed-download")
+def signed_download(token: str, db: DBSession) -> FileResponse:
+    try:
+        document_id = verify_download_token(token)
+    except ValueError as exc:
+        emit_document_audit_event(DocumentAuditEvent(action="signed_download", outcome="denied"))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    document = documents.get_document(db, document_id)
+    path = documents.get_document_file_path(db, document_id)
+    filename = document.metadata.get("original_filename") or document.title
+    emit_document_audit_event(DocumentAuditEvent(action="signed_download", document_id=document_id))
+    return FileResponse(path, filename=filename)
+
+
+@router.get("/{document_id}/download-token")
+def document_download_token(document_id: UUID, db: DBSession) -> dict[str, str | int]:
+    documents.get_document(db, document_id)
+    emit_document_audit_event(DocumentAuditEvent(action="download_token_issued", document_id=document_id))
+    return {
+        "token": create_download_token(document_id),
+        "expires_in": DEFAULT_TTL_SECONDS,
+    }
+
+
 @router.get("/{document_id}", response_model=DocumentRead)
 def read_document(document_id: UUID, db: DBSession) -> DocumentRead:
     return documents.get_document(db, document_id)
@@ -86,6 +121,7 @@ def download_document(document_id: UUID, db: DBSession) -> FileResponse:
     document = documents.get_document(db, document_id)
     path = documents.get_document_file_path(db, document_id)
     filename = document.metadata.get("original_filename") or document.title
+    emit_document_audit_event(DocumentAuditEvent(action="direct_download", document_id=document_id))
     return FileResponse(path, filename=filename)
 
 

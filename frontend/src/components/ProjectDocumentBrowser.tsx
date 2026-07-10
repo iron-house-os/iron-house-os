@@ -10,6 +10,7 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
   const [documents, setDocuments] = useState<DocumentList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   async function loadDocuments() {
     setIsLoading(true);
@@ -28,12 +29,25 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
     await loadDocuments();
   }
 
+  async function downloadDocument(document: LibraryDocument) {
+    setDownloadingId(document.id);
+    setError(null);
+    try {
+      const response = await documentsApi.requestDownloadToken(document.id);
+      window.location.assign(documentsApi.signedDownloadUrl(response.token));
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to download document");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-base font-semibold text-iron-950">Project Document Browser</h2>
-          <p className="mt-1 text-sm text-iron-500">Load uploaded documents, download stored files, and mark records current or superseded.</p>
+          <p className="mt-1 text-sm text-iron-500">Load uploaded documents, download stored files with short-lived links, and mark records current or superseded.</p>
         </div>
         <button type="button" onClick={loadDocuments} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
           {isLoading ? "Loading..." : "Load documents"}
@@ -54,7 +68,11 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
                   <td className="px-3 py-2 text-iron-700">{document.status}</td>
                   <td className="px-3 py-2 text-iron-700">{document.drawing?.revision ?? "-"}</td>
                   <td className="space-x-2 px-3 py-2 text-iron-700">
-                    {document.storage_uri ? <a className="font-semibold" href={documentsApi.downloadUrl(document.id)}>Download</a> : null}
+                    {document.storage_uri ? (
+                      <button type="button" className="font-semibold" disabled={downloadingId === document.id} onClick={() => void downloadDocument(document)}>
+                        {downloadingId === document.id ? "Preparing..." : "Download"}
+                      </button>
+                    ) : null}
                     <button type="button" className="font-semibold" onClick={() => void setStatus(document, "current")}>Current</button>
                     <button type="button" className="font-semibold" onClick={() => void setStatus(document, "superseded")}>Supersede</button>
                   </td>
