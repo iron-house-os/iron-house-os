@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from hashlib import sha256
+import os
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -21,7 +22,7 @@ ALLOWED_EXTENSIONS = {
     ".jpeg",
 }
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-STORAGE_ROOT = Path("/app/data/uploads")
+DEFAULT_STORAGE_ROOT = Path("/app/data/uploads")
 
 
 @dataclass(frozen=True)
@@ -36,12 +37,7 @@ class StoredFile:
 
 
 class FileStorageProvider(Protocol):
-    """Storage contract used by document services.
-
-    The local provider remains the default for development and internal testing.
-    Hosted deployments can implement this contract with private object storage
-    without changing the document-domain service layer.
-    """
+    """Storage contract used by document services."""
 
     async def store_upload(self, file: UploadFile, project_id: str | None = None) -> StoredFile: ...
 
@@ -49,7 +45,7 @@ class FileStorageProvider(Protocol):
 
 
 class LocalFileStorageProvider:
-    def __init__(self, root: Path = STORAGE_ROOT) -> None:
+    def __init__(self, root: Path = DEFAULT_STORAGE_ROOT) -> None:
         self.root = root
 
     async def store_upload(self, file: UploadFile, project_id: str | None = None) -> StoredFile:
@@ -107,7 +103,16 @@ class LocalFileStorageProvider:
         return path
 
 
-storage_provider: FileStorageProvider = LocalFileStorageProvider()
+def build_storage_provider() -> FileStorageProvider:
+    backend = os.getenv("IHOS_STORAGE_BACKEND", "local").strip().lower()
+    if backend != "local":
+        raise RuntimeError(f"Unsupported IHOS_STORAGE_BACKEND: {backend}")
+
+    root = Path(os.getenv("IHOS_STORAGE_ROOT", str(DEFAULT_STORAGE_ROOT)))
+    return LocalFileStorageProvider(root=root)
+
+
+storage_provider: FileStorageProvider = build_storage_provider()
 
 
 async def store_upload(file: UploadFile, project_id: str | None = None) -> StoredFile:
