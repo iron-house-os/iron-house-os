@@ -145,10 +145,19 @@ Gate status: ✅ green.
 
 ## Build 69 — UI operations documentation
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `dfe867ad83872bd6ba1cac3806cd1049ce2f76dd`.
 - `docs/build-61-to-70-ui-operations.md` exists on the repair branch.
 - The document summarizes Builds 61–69, the resulting project operations flow, and the remaining manual project-ID gap.
+- GitHub Actions run `29106838748` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 70.
+## Build 70 — Cutover note
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `25cda1c77d86d87322321199800a9176da383c49`.
+- `docs/build-70-cutover-note.md` exists on the repair branch.
+- The note defines local operator-testing cutover conditions and preserves mandatory estimator review.
+
+Next action: require a green GitHub Actions run before advancing to Build 71.
