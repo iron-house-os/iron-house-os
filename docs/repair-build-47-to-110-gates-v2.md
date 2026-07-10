@@ -51,10 +51,16 @@ Gate status: ✅ implementation verified; pending branch CI confirmation.
 
 ## Build 59 — MVP status record
 
-Gate status: pending file verification and branch CI confirmation.
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- `docs/mvp-status.md` records working backend/frontend paths, remaining MVP work, deferred items, and estimator-controlled first-live-use guidance.
+- Build commit verified: `79ac95a88bd50958e14c0e35ed2a2e838f761987`.
 
 ## Build 60 — Operating layer documentation
 
-Gate status: pending file verification and branch CI confirmation.
+Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-Next action: verify Builds 59 and 60, then require a green GitHub Actions run before advancing to Build 61.
+- `docs/build-51-to-60-operating-layer.md` registers Builds 51–60, summarizes the operating layer, and identifies Builds 61–65 as the next work.
+- Build commit verified: `679be0837ba29686cec32b3b46f94cd0056d23ff`.
+
+Next action: require a green GitHub Actions run for this branch before advancing to Build 61.
