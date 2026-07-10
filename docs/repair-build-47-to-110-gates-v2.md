@@ -91,10 +91,19 @@ Gate status: ✅ green.
 
 ## Build 63 — Saved takeoffs panel
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `90ccf404e674ae228db15d12bfcbf925b2a48294`.
 - `frontend/src/components/SavedTakeoffsPanel.tsx` exists on the repair branch.
 - The panel requires an active project, loads saved takeoffs through `takeoffPersistenceApi.listForProject`, displays loading and error states, and renders saved takeoff records or an empty state.
+- GitHub Actions run `29105013536` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 64.
+## Build 64 — Saved estimate workspaces panel
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `5bee536814856bb3ef35fa506cb556c069d42636`.
+- `frontend/src/components/SavedEstimateWorkspacesPanel.tsx` exists on the repair branch.
+- The panel requires an active project, loads saved estimate workspaces through `estimateWorkspaceApi.listForProject`, reports loading and error states, and renders saved workspaces or an empty state.
+
+Next action: require a green GitHub Actions run before advancing to Build 65.
