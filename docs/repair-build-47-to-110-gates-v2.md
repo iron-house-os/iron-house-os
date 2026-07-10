@@ -118,10 +118,19 @@ Gate status: ✅ green.
 
 ## Build 66 — Route project operations page
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `73e2b1c4aca1d598c4afde2d31729b600a928ef9`.
 - `frontend/src/App.tsx` imports `ProjectOperationsPage`.
 - `/project-operations` is excluded from placeholder routing and renders the project operations page.
+- GitHub Actions run `29105926742` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 67.
+## Build 67 — Project operations module card
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `9bad1eebc2ab58751ff92535f217d6057001581d`.
+- `frontend/src/modules.ts` includes the Project Operations module card at `/project-operations` using `FolderKanban`.
+- Quantity Takeoff status reflects Build 62.
+
+Next action: require a green GitHub Actions run before advancing to Build 68.
