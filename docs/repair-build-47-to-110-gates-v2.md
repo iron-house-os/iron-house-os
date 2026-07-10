@@ -127,10 +127,19 @@ Gate status: ✅ green.
 
 ## Build 67 — Project operations module card
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `9bad1eebc2ab58751ff92535f217d6057001581d`.
 - `frontend/src/modules.ts` includes the Project Operations module card at `/project-operations` using `FolderKanban`.
 - Quantity Takeoff status reflects Build 62.
+- GitHub Actions run `29106206710` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 68.
+## Build 68 — Backend smoke check script
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `1cc54dfcd64b9694c6d37532b2182f37cd87796e`.
+- `scripts/smoke_check.py` exists on the repair branch.
+- The script checks `/health`, `/readiness`, and `/api/v1/projects`, prints JSON summaries, and exits nonzero when checks fail.
+
+Next action: require a green GitHub Actions run before advancing to Build 69.
