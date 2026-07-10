@@ -6,21 +6,21 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–80: ✅ green.
-
-## Build 81 — MVP risk register
-
-Gate status: ✅ green.
-
-- Original build commit verified: `23c20b4b4f9a3c8cd21dde797eb989e75003cbff`.
-- GitHub Actions run `29111469096` completed successfully.
+- Builds 47–81: ✅ green.
 
 ## Build 82 — Database review plan
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `d5f66ecb146e7c33abb812fba882ac89c24638e0`.
-- `docs/database-review-plan.md` exists on the repair branch.
-- The plan covers project, document, drawing, takeoff, bid, RFQ, supplier, and quote tables plus key/index/timezone/migration checks.
+- GitHub Actions run `29111566029` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 83.
+## Build 83 — File upload plan
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `864931809440becf2c14dfb6a8ce40089e35e838`.
+- `docs/file-upload-plan.md` exists on the repair branch.
+- The plan covers upload, project linkage, categories, metadata, retrieval, RFQ selection, private storage, extension/size controls, and audit events.
+
+Next action: require a green GitHub Actions run before advancing to Build 84.
