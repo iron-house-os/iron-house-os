@@ -143,4 +143,12 @@ Gate status: ✅ green.
 - The script checks `/health`, `/readiness`, and `/api/v1/projects`, prints JSON summaries, and exits nonzero when checks fail.
 - GitHub Actions run `29106431583` completed successfully.
 
-Next gate: Build 69 only.
+## Build 69 — UI operations documentation
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `dfe867ad83872bd6ba1cac3806cd1049ce2f76dd`.
+- `docs/build-61-to-70-ui-operations.md` exists on the repair branch.
+- The document summarizes Builds 61–69, the resulting project operations flow, and the remaining manual project-ID gap.
+
+Next action: require a green GitHub Actions run before advancing to Build 70.
