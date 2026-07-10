@@ -6,13 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–102: ✅ green.
+- Builds 47–103: ✅ green.
 
-## Build 103 — Document upload integrity services
+## Build 104 — Document upload routes
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `55f4e31beac08a52dd7ef41b6c00da3a16fd1cf3`.
-- `backend/app/services/documents.py` integrates upload storage, duplicate detection, file-path resolution, hash/size integrity checks, and RFQ attachment manifest generation.
+- Original route commit verified: `d5169ada0b503ca8880339bedc2dcfe7daf540f9`.
+- Follow-up typing repair verified: `6b9347a8cab51355adf13a53215a92d37ae0c78d`.
+- `backend/app/api/v1/routes/documents.py` exposes upload, attachment manifest, download, and integrity routes while preserving typed document creation.
 
-Next action: require a green GitHub Actions run before advancing to Build 104.
+Next action: require a green GitHub Actions run before advancing to Build 105.
