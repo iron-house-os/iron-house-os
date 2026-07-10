@@ -112,10 +112,18 @@ Gate status: ✅ green.
 
 ## Build 71 — Bug report template
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `9b066bbede9be3cf2a13b6ff0791892b1948f419`.
 - `.github/ISSUE_TEMPLATE/bug_report.md` exists on the repair branch.
-- The template captures affected area, expected behavior, reproduction steps, logs, build/commit, and severity.
+- GitHub Actions run `29107324034` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 72.
+## Build 72 — MVP task template
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `e0a9465ad2017a6eb3ee33f3ba023cc9c2193e46`.
+- `.github/ISSUE_TEMPLATE/mvp_task.md` exists on the repair branch.
+- The template records build number, goal, implementation scope, acceptance criteria, and notes.
+
+Next action: require a green GitHub Actions run before advancing to Build 73.
