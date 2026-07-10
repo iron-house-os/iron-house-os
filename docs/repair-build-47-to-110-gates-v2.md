@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–95: ✅ green.
+- Builds 47–96: ✅ green.
 
-## Build 96 — First user training outline
+## Build 97 — MVP demo script
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `81f11cb2967d0d847450e081dbcbc1a9c4a26fa9`.
-- `docs/build-96-first-user-training.md` exists on the repair branch.
-- Training covers project setup, quantities, takeoff persistence, estimating, RFQ drafts, readiness, assumptions, exclusions, workbook export, and manual comparison.
+- Original build commit verified: `5dd2497a4bc37797a59dbcf515ebe7a8bdee726e`.
+- `docs/build-97-mvp-demo-script.md` exists on the repair branch.
+- The script demonstrates dashboard, project setup, sample takeoff, persistence, estimating handoff, project operations, readiness, and limitations.
 
-Next action: require a green GitHub Actions run before advancing to Build 97.
+Next action: require a green GitHub Actions run before advancing to Build 98.
