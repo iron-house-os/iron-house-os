@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–90: ✅ green.
+- Builds 47–91: ✅ green.
 
-## Build 91 — MVP working map
+## Build 92 — Next engineering priorities
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `95e8804f220f1c23ef076234fc2d71655102c878`.
-- `docs/build-91-mvp-working-map.md` exists on the repair branch.
-- The map separates connected workflow capabilities, scaffold-only modules, and incomplete production features.
+- Original build commit verified: `53a6c16aca8de3e722bbe4ac943f03aa0595844b`.
+- `docs/build-92-next-engineering-priorities.md` exists on the repair branch.
+- The document prioritizes project routing, file storage, migrations, permissions, audit logging, saved-work reload, browser tests, supplier quote import, and RFQ email drafts.
 
-Next action: require a green GitHub Actions run before advancing to Build 92.
+Next action: require a green GitHub Actions run before advancing to Build 93.
