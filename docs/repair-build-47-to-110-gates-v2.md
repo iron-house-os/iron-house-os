@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–97: ✅ green.
+- Builds 47–98: ✅ green.
 
-## Build 98 — MVP acceptance criteria
+## Build 99 — Next 100 builds roadmap
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `9eb9c473c068d08c573f262503c52471975318aa`.
-- `docs/build-98-acceptance-criteria.md` exists on the repair branch.
-- Acceptance requires project reopen, takeoff persistence, estimate handoff/workspace persistence, RFQ drafts, readiness accuracy, workbook export, and dry-run completion without manual database changes.
+- Original build commit verified: `bba0f400d5802b54f15d73b6728ff084989bd5b2`.
+- `docs/build-99-next-100-builds.md` exists on the repair branch.
+- The roadmap covers files/reload, auth/audit/migrations, RFQ/quote workflows, drawing intelligence, municipality automation, mobile field work, GPS/as-builts, cost tracking, and dashboards.
 
-Next action: require a green GitHub Actions run before advancing to Build 99.
+Next action: require a green GitHub Actions run before advancing to Build 100.
