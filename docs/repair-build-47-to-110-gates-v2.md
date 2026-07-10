@@ -20,47 +20,53 @@ CI evidence for restored gates: run `29044918254` completed successfully on the 
 
 ## Build 54 — System readiness service
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `backend/app/services/system_readiness.py` exists.
 - Reports status `ready`, service name, API prefix, and enabled MVP service checks.
 
 ## Build 55 — Shared readiness endpoint
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `backend/app/main.py` imports and calls `get_system_readiness()` for `GET /readiness`.
 
 ## Build 56 — System readiness tests
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `tests/backend/test_system_readiness.py` verifies readiness status and enabled takeoff, estimate, RFQ, and project-readiness checks.
 
 ## Build 57 — Operator runbook
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `docs/operator-runbook.md` documents startup, bid workflow, recovery, and first-live-use controls.
 
 ## Build 58 — First live bid checklist
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `docs/first-live-bid-checklist.md` covers project setup, takeoff, estimate, RFQs, and final review.
 
 ## Build 59 — MVP status record
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `docs/mvp-status.md` records working backend/frontend paths, remaining MVP work, deferred items, and estimator-controlled first-live-use guidance.
 - Build commit verified: `79ac95a88bd50958e14c0e35ed2a2e838f761987`.
 
 ## Build 60 — Operating layer documentation
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - `docs/build-51-to-60-operating-layer.md` registers Builds 51–60, summarizes the operating layer, and identifies Builds 61–65 as the next work.
 - Build commit verified: `679be0837ba29686cec32b3b46f94cd0056d23ff`.
 
-Next action: require a green GitHub Actions run for this branch before advancing to Build 61.
+Green check evidence for Builds 54–60:
+
+- GitHub Actions run `29103011695` completed successfully.
+- Backend checks passed: install, Ruff lint, pytest.
+- Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
+
+Next gate: Build 61 only.
