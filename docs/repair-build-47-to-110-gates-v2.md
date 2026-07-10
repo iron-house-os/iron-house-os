@@ -72,10 +72,22 @@ Green check evidence for Builds 54–60:
 
 ## Build 61 — Takeoff save panel
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `6576702aac13c14ee0911a39328a01cdcf7e6d6c`.
 - `frontend/src/components/TakeoffSavePanel.tsx` exists on the repair branch.
 - The panel requires an active project, saves current items and quantity register through `takeoffPersistenceApi`, reports errors, and confirms the saved takeoff ID.
+- GitHub Actions run `29104528761` completed successfully.
+- Backend checks passed: install, Ruff lint, pytest.
+- Frontend checks passed: install, lint/type gate, smoke test gate, Vite build.
 
-Next action: require a green GitHub Actions run before advancing to Build 62.
+## Build 62 — Wire takeoff save panel
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `50cea6072eb5b4665c3ad13d712b2d1aa79c9dcc`.
+- `frontend/src/pages/QuantityTakeoffPage.tsx` imports and renders `TakeoffSavePanel`.
+- Active quantity items are calculated once and passed to both the takeoff engine and save panel.
+- The current quantity summary is passed as the quantity register for persistence.
+
+Next action: require a green GitHub Actions run before advancing to Build 63.
