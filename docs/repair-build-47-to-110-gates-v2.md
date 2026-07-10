@@ -6,13 +6,13 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–101: ✅ green.
+- Builds 47–102: ✅ green.
 
-## Build 102 — Document upload schemas
+## Build 103 — Document upload integrity services
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `dbcaef22d35cf543be325c1060725b5ce3ce5062`.
-- `backend/app/schemas/document.py` includes upload response, integrity, duplicate, RFQ attachment manifest, added document categories, and current status schemas.
+- Original build commit verified: `55f4e31beac08a52dd7ef41b6c00da3a16fd1cf3`.
+- `backend/app/services/documents.py` integrates upload storage, duplicate detection, file-path resolution, hash/size integrity checks, and RFQ attachment manifest generation.
 
-Next action: require a green GitHub Actions run before advancing to Build 103.
+Next action: require a green GitHub Actions run before advancing to Build 104.
