@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -19,7 +19,11 @@ from app.schemas.document import (
     RFQAttachmentManifestRequest,
 )
 from app.services import documents
-from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
+from app.services.document_audit import (
+    DocumentAuditEvent,
+    emit_document_audit_event,
+    list_recent_document_audit_events,
+)
 from app.services.request_context import get_request_audit_context
 from app.services.signed_download import DEFAULT_TTL_SECONDS, create_download_token, verify_download_token
 
@@ -87,6 +91,12 @@ def list_documents(
     )
 
 
+@router.get("/audit-events")
+def document_audit_events(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+    items = list_recent_document_audit_events(limit)
+    return {"items": items, "total": len(items)}
+
+
 @router.post("/attachment-manifest", response_model=RFQAttachmentManifest)
 def attachment_manifest(payload: RFQAttachmentManifestRequest, db: DBSession) -> RFQAttachmentManifest:
     return documents.build_attachment_manifest(db, payload.document_ids)
@@ -138,10 +148,7 @@ def document_download_token(document_id: UUID, request: Request, db: DBSession) 
             metadata={"expires_in": DEFAULT_TTL_SECONDS},
         )
     )
-    return {
-        "token": create_download_token(document_id),
-        "expires_in": DEFAULT_TTL_SECONDS,
-    }
+    return {"token": create_download_token(document_id), "expires_in": DEFAULT_TTL_SECONDS}
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
@@ -174,11 +181,7 @@ def document_integrity(document_id: UUID, db: DBSession) -> DocumentIntegrity:
 
 
 @router.patch("/{document_id}", response_model=DocumentRead)
-def update_document(
-    document_id: UUID,
-    payload: DocumentUpdate,
-    db: DBSession,
-) -> DocumentRead:
+def update_document(document_id: UUID, payload: DocumentUpdate, db: DBSession) -> DocumentRead:
     return documents.update_document(db, document_id, payload)
 
 
