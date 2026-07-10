@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–88: ✅ green.
+- Builds 47–89: ✅ green.
 
-## Build 89 — Browser test plan
+## Build 90 — Live bid dry run plan
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `b3a811c9381f23ce69b532c26b8dd863e86ea192`.
-- `docs/build-89-browser-test-plan.md` exists on the repair branch.
-- The plan covers dashboard, MVP workflow, project creation, takeoff, persistence, project operations, readiness, and RFQ draft generation.
+- Original build commit verified: `e0d00f05f89031db241e2dc93e8d3f452267f0ad`.
+- `docs/build-90-live-bid-dry-run.md` exists on the repair branch.
+- The plan covers project creation, tender document registration, takeoff, estimate handoff, pricing, persistence, RFQs, readiness, workbook export, and manual estimator comparison.
 
-Next action: require a green GitHub Actions run before advancing to Build 90.
+Next action: require a green GitHub Actions run before advancing to Build 91.
