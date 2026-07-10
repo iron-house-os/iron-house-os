@@ -1,3 +1,4 @@
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 import json
@@ -6,6 +7,8 @@ from typing import Any
 from uuid import UUID
 
 logger = logging.getLogger("ihos.document_audit")
+MAX_RECENT_EVENTS = 200
+_recent_events: deque[dict[str, Any]] = deque(maxlen=MAX_RECENT_EVENTS)
 
 
 @dataclass(frozen=True)
@@ -36,4 +39,14 @@ def emit_document_audit_event(event: DocumentAuditEvent) -> None:
         for key, value in asdict(event).items()
         if value not in (None, {}, [])
     }
+    _recent_events.appendleft(payload)
     logger.info("document_audit %s", json.dumps(payload, sort_keys=True))
+
+
+def list_recent_document_audit_events(limit: int = 50) -> list[dict[str, Any]]:
+    bounded_limit = max(1, min(limit, MAX_RECENT_EVENTS))
+    return list(_recent_events)[:bounded_limit]
+
+
+def clear_recent_document_audit_events() -> None:
+    _recent_events.clear()
