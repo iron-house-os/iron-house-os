@@ -100,10 +100,19 @@ Gate status: ✅ green.
 
 ## Build 64 — Saved estimate workspaces panel
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `5bee536814856bb3ef35fa506cb556c069d42636`.
 - `frontend/src/components/SavedEstimateWorkspacesPanel.tsx` exists on the repair branch.
 - The panel requires an active project, loads saved estimate workspaces through `estimateWorkspaceApi.listForProject`, reports loading and error states, and renders saved workspaces or an empty state.
+- GitHub Actions run `29105273661` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 65.
+## Build 65 — Project operations page
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `326cd02c6e25960e70af722dc29df70d0164099e`.
+- `frontend/src/pages/ProjectOperationsPage.tsx` exists on the repair branch.
+- The page accepts a project ID and combines project readiness, saved takeoffs, and saved estimate workspaces in one operating view.
+
+Next action: require a green GitHub Actions run before advancing to Build 66.
