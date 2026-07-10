@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–89: ✅ green.
+- Builds 47–90: ✅ green.
 
-## Build 90 — Live bid dry run plan
+## Build 91 — MVP working map
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `e0d00f05f89031db241e2dc93e8d3f452267f0ad`.
-- `docs/build-90-live-bid-dry-run.md` exists on the repair branch.
-- The plan covers project creation, tender document registration, takeoff, estimate handoff, pricing, persistence, RFQs, readiness, workbook export, and manual estimator comparison.
+- Original build commit verified: `95e8804f220f1c23ef076234fc2d71655102c878`.
+- `docs/build-91-mvp-working-map.md` exists on the repair branch.
+- The map separates connected workflow capabilities, scaffold-only modules, and incomplete production features.
 
-Next action: require a green GitHub Actions run before advancing to Build 91.
+Next action: require a green GitHub Actions run before advancing to Build 92.
