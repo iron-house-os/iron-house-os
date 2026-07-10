@@ -26,17 +26,21 @@ Gate status: ✅ green. CI: `29110818380`.
 
 ## Build 76 — Local launch guide
 
-Gate status: ✅ green.
-
-- Original build commit verified: `f33fd033a17f3ef9be2cead2b222c43e41c573ef`.
-- GitHub Actions run `29110918118` completed successfully.
+Gate status: ✅ green. CI: `29110918118`.
 
 ## Build 77 — Production readiness gates
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `d86ebb847aa16e5fdaa2252e50c77225447cb18f`.
-- `docs/production-readiness-gates.md` exists on the repair branch.
-- The document defines local, private-hosted, company-wide, and supplier-facing readiness gates.
+- GitHub Actions run `29111030582` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 78.
+## Build 78 — QA matrix
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `5c3066f6dd414893a43ee71d1515fd57e20ad66d`.
+- `docs/qa-matrix.md` exists on the repair branch.
+- The matrix covers system, projects, documents, takeoff, estimating, RFQ, readiness, and export checks.
+
+Next action: require a green GitHub Actions run before advancing to Build 79.
