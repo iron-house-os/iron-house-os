@@ -1,6 +1,8 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 import json
 import logging
+from typing import Any
 from uuid import UUID
 
 logger = logging.getLogger("ihos.document_audit")
@@ -12,12 +14,26 @@ class DocumentAuditEvent:
     document_id: UUID | None = None
     project_id: UUID | None = None
     outcome: str = "success"
+    actor: str | None = None
+    request_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+def _serialize(value: Any) -> Any:
+    if isinstance(value, (UUID, datetime)):
+        return value.isoformat() if isinstance(value, datetime) else str(value)
+    if isinstance(value, dict):
+        return {str(key): _serialize(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize(item) for item in value]
+    return value
 
 
 def emit_document_audit_event(event: DocumentAuditEvent) -> None:
     payload = {
-        key: str(value) if isinstance(value, UUID) else value
+        key: _serialize(value)
         for key, value in asdict(event).items()
-        if value is not None
+        if value not in (None, {}, [])
     }
     logger.info("document_audit %s", json.dumps(payload, sort_keys=True))
