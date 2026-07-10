@@ -109,10 +109,19 @@ Gate status: ✅ green.
 
 ## Build 65 — Project operations page
 
-Gate status: ✅ implementation verified; pending branch CI confirmation.
+Gate status: ✅ green.
 
 - Original build commit verified: `326cd02c6e25960e70af722dc29df70d0164099e`.
 - `frontend/src/pages/ProjectOperationsPage.tsx` exists on the repair branch.
 - The page accepts a project ID and combines project readiness, saved takeoffs, and saved estimate workspaces in one operating view.
+- GitHub Actions run `29105643021` completed successfully.
 
-Next action: require a green GitHub Actions run before advancing to Build 66.
+## Build 66 — Route project operations page
+
+Gate status: ✅ implementation verified; pending branch CI confirmation.
+
+- Original build commit verified: `73e2b1c4aca1d598c4afde2d31729b600a928ef9`.
+- `frontend/src/App.tsx` imports `ProjectOperationsPage`.
+- `/project-operations` is excluded from placeholder routing and renders the project operations page.
+
+Next action: require a green GitHub Actions run before advancing to Build 67.
