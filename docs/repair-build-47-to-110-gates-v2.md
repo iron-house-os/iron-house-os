@@ -6,14 +6,14 @@ Rule: do not advance from one build to the next until the current build has a gr
 
 ## Verified ranges
 
-- Builds 47–96: ✅ green.
+- Builds 47–97: ✅ green.
 
-## Build 97 — MVP demo script
+## Build 98 — MVP acceptance criteria
 
 Gate status: ✅ implementation verified; pending branch CI confirmation.
 
-- Original build commit verified: `5dd2497a4bc37797a59dbcf515ebe7a8bdee726e`.
-- `docs/build-97-mvp-demo-script.md` exists on the repair branch.
-- The script demonstrates dashboard, project setup, sample takeoff, persistence, estimating handoff, project operations, readiness, and limitations.
+- Original build commit verified: `9eb9c473c068d08c573f262503c52471975318aa`.
+- `docs/build-98-acceptance-criteria.md` exists on the repair branch.
+- Acceptance requires project reopen, takeoff persistence, estimate handoff/workspace persistence, RFQ drafts, readiness accuracy, workbook export, and dry-run completion without manual database changes.
 
-Next action: require a green GitHub Actions run before advancing to Build 98.
+Next action: require a green GitHub Actions run before advancing to Build 99.
