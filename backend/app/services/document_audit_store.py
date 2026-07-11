@@ -1,5 +1,7 @@
 from collections import deque
 from collections.abc import Iterable
+import json
+from pathlib import Path
 from typing import Any, Protocol
 
 
@@ -33,3 +35,35 @@ class InMemoryDocumentAuditStore:
 
     def clear(self) -> None:
         self._events.clear()
+
+
+class JsonlDocumentAuditStore:
+    """Durable append-only JSON Lines store for single-node deployments."""
+
+    def __init__(self, path: str | Path, max_read_events: int = 10_000) -> None:
+        if max_read_events < 1:
+            raise ValueError("max_read_events must be at least 1")
+        self.path = Path(path)
+        self.max_read_events = max_read_events
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def append(self, event: dict[str, Any]) -> None:
+        with self.path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, sort_keys=True, separators=(",", ":")))
+            stream.write("\n")
+
+    def recent(self, limit: int) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        bounded_limit = max(1, min(limit, self.max_read_events))
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        events: list[dict[str, Any]] = []
+        for line in reversed(lines[-self.max_read_events :]):
+            if line.strip():
+                events.append(json.loads(line))
+            if len(events) >= bounded_limit:
+                break
+        return events
+
+    def clear(self) -> None:
+        self.path.write_text("", encoding="utf-8")
