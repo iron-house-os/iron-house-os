@@ -43,9 +43,25 @@ def emit_document_audit_event(event: DocumentAuditEvent) -> None:
     logger.info("document_audit %s", json.dumps(payload, sort_keys=True))
 
 
-def list_recent_document_audit_events(limit: int = 50) -> list[dict[str, Any]]:
+def list_recent_document_audit_events(
+    limit: int = 50,
+    *,
+    action: str | None = None,
+    outcome: str | None = None,
+    actor: str | None = None,
+    project_id: UUID | str | None = None,
+) -> list[dict[str, Any]]:
     bounded_limit = max(1, min(limit, MAX_RECENT_EVENTS))
-    return list(_recent_events)[:bounded_limit]
+    expected_project_id = str(project_id) if project_id is not None else None
+    filtered = (
+        event
+        for event in _recent_events
+        if (action is None or event.get("action") == action)
+        and (outcome is None or event.get("outcome", "success") == outcome)
+        and (actor is None or event.get("actor") == actor)
+        and (expected_project_id is None or event.get("project_id") == expected_project_id)
+    )
+    return list(filtered)[:bounded_limit]
 
 
 def clear_recent_document_audit_events() -> None:
