@@ -26,11 +26,18 @@ from app.services.document_audit import (
     list_recent_document_audit_events,
     summarize_document_audit_events,
 )
+from app.services.document_audit_access import DocumentAuditPermission
+from app.services.document_audit_auth import (
+    DocumentAuditPrincipal,
+    authorize_document_audit,
+    get_document_audit_principal,
+)
 from app.services.request_context import get_request_audit_context
 from app.services.signed_download import DEFAULT_TTL_SECONDS, create_download_token, verify_download_token
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
+AuditPrincipal = Annotated[DocumentAuditPrincipal, Depends(get_document_audit_principal)]
 OptionalQuery = Annotated[str | None, Query()]
 OptionalUUIDQuery = Annotated[UUID | None, Query()]
 
@@ -95,12 +102,14 @@ def list_documents(
 
 @router.get("/audit-events")
 def document_audit_events(
+    principal: AuditPrincipal,
     limit: int = Query(default=50, ge=1, le=200),
     action: str | None = Query(default=None),
     outcome: str | None = Query(default=None),
     actor: str | None = Query(default=None),
     project_id: UUID | None = Query(default=None),
 ) -> dict[str, Any]:
+    authorize_document_audit(principal, DocumentAuditPermission.READ)
     items = list_recent_document_audit_events(
         limit,
         action=action,
@@ -112,18 +121,21 @@ def document_audit_events(
 
 
 @router.get("/audit-events/summary")
-def document_audit_summary() -> dict[str, Any]:
+def document_audit_summary(principal: AuditPrincipal) -> dict[str, Any]:
+    authorize_document_audit(principal, DocumentAuditPermission.READ)
     return summarize_document_audit_events()
 
 
 @router.get("/audit-events/export.csv")
 def document_audit_export(
+    principal: AuditPrincipal,
     limit: int = Query(default=200, ge=1, le=200),
     action: str | None = Query(default=None),
     outcome: str | None = Query(default=None),
     actor: str | None = Query(default=None),
     project_id: UUID | None = Query(default=None),
 ) -> Response:
+    authorize_document_audit(principal, DocumentAuditPermission.EXPORT)
     events = list_recent_document_audit_events(
         limit,
         action=action,
