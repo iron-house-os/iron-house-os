@@ -1,6 +1,7 @@
 from collections import deque
 from collections.abc import Iterable
 import json
+import os
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -67,3 +68,15 @@ class JsonlDocumentAuditStore:
 
     def clear(self) -> None:
         self.path.write_text("", encoding="utf-8")
+
+
+def create_document_audit_store_from_environment() -> DocumentAuditStore:
+    provider = os.getenv("DOCUMENT_AUDIT_STORE", "memory").strip().lower()
+    if provider == "memory":
+        max_events = int(os.getenv("DOCUMENT_AUDIT_MAX_EVENTS", "200"))
+        return InMemoryDocumentAuditStore(max_events=max_events)
+    if provider == "jsonl":
+        path = os.getenv("DOCUMENT_AUDIT_JSONL_PATH", "data/audit/document-events.jsonl")
+        max_read_events = int(os.getenv("DOCUMENT_AUDIT_MAX_READ_EVENTS", "10000"))
+        return JsonlDocumentAuditStore(path=path, max_read_events=max_read_events)
+    raise ValueError(f"Unsupported document audit store: {provider}")
