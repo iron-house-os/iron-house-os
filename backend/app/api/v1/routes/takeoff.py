@@ -5,10 +5,17 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.takeoff import QuantityRegisterRequest, QuantityRegisterResponse, TakeoffEngineRequest, TakeoffEngineResponse
+from app.schemas.takeoff import (
+    QuantityRegisterRequest,
+    QuantityRegisterResponse,
+    TakeoffEngineRequest,
+    TakeoffEngineResponse,
+)
+from app.schemas.takeoff_normalization import TakeoffNormalizeRequest, TakeoffNormalizeResponse
 from app.schemas.takeoff_persistence import TakeoffList, TakeoffRead, TakeoffSaveRequest
 from app.services import takeoff_persistence
 from app.services.takeoff import run_takeoff_engine, summarize_quantity_register
+from app.services.takeoff_normalization import normalize_takeoff
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -22,6 +29,11 @@ def summarize(payload: QuantityRegisterRequest) -> QuantityRegisterResponse:
 @router.post("/engine", response_model=TakeoffEngineResponse)
 def engine(payload: TakeoffEngineRequest) -> TakeoffEngineResponse:
     return run_takeoff_engine(payload)
+
+
+@router.post("/normalize", response_model=TakeoffNormalizeResponse)
+def normalize(payload: TakeoffNormalizeRequest) -> TakeoffNormalizeResponse:
+    return normalize_takeoff(payload)
 
 
 @router.post("/save", response_model=TakeoffRead, status_code=status.HTTP_201_CREATED)
