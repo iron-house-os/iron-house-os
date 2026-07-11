@@ -1,3 +1,5 @@
+import csv
+from io import StringIO
 import json
 import logging
 from uuid import uuid4
@@ -6,6 +8,7 @@ from app.services.document_audit import (
     DocumentAuditEvent,
     clear_recent_document_audit_events,
     emit_document_audit_event,
+    export_document_audit_events_csv,
     list_recent_document_audit_events,
     summarize_document_audit_events,
 )
@@ -67,3 +70,14 @@ def test_document_audit_summary_counts_actions_and_outcomes() -> None:
     assert summary["total"] == 3
     assert summary["by_action"] == {"upload": 2, "signed_download": 1}
     assert summary["by_outcome"] == {"success": 2, "denied": 1}
+
+
+def test_document_audit_csv_export_serializes_metadata() -> None:
+    csv_text = export_document_audit_events_csv(
+        [{"occurred_at": "2026-07-10T00:00:00+00:00", "action": "upload", "outcome": "success", "metadata": {"filename": "plan.pdf"}}]
+    )
+    rows = list(csv.DictReader(StringIO(csv_text)))
+
+    assert len(rows) == 1
+    assert rows[0]["action"] == "upload"
+    assert json.loads(rows[0]["metadata"]) == {"filename": "plan.pdf"}
