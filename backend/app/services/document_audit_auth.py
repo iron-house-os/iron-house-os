@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from fastapi import Header, HTTPException, status
 
+from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
 from app.services.document_audit_access import (
     DocumentAuditPermission,
     normalize_role,
@@ -27,6 +28,14 @@ def authorize_document_audit(
     try:
         require_document_audit_permission(principal.role, permission)
     except PermissionError as exc:
+        emit_document_audit_event(
+            DocumentAuditEvent(
+                action="audit_access",
+                outcome="denied",
+                actor=principal.role,
+                metadata={"permission": permission.value},
+            )
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
