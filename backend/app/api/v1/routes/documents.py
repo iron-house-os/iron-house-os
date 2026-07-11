@@ -92,8 +92,20 @@ def list_documents(
 
 
 @router.get("/audit-events")
-def document_audit_events(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
-    items = list_recent_document_audit_events(limit)
+def document_audit_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    action: str | None = Query(default=None),
+    outcome: str | None = Query(default=None),
+    actor: str | None = Query(default=None),
+    project_id: UUID | None = Query(default=None),
+) -> dict[str, Any]:
+    items = list_recent_document_audit_events(
+        limit,
+        action=action,
+        outcome=outcome,
+        actor=actor,
+        project_id=project_id,
+    )
     return {"items": items, "total": len(items)}
 
 
