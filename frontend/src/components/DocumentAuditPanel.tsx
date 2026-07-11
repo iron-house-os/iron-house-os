@@ -4,12 +4,13 @@ import {
   documentAuditApi,
   DocumentAuditEventList,
   DocumentAuditFilters,
-  DocumentAuditSummary,
+  DocumentAuditSummary as Summary,
 } from "../api/documentAudit";
+import { DocumentAuditSummary } from "./DocumentAuditSummary";
 
 export function DocumentAuditPanel() {
   const [events, setEvents] = useState<DocumentAuditEventList | null>(null);
-  const [summary, setSummary] = useState<DocumentAuditSummary | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState("");
   const [actor, setActor] = useState("");
@@ -79,14 +80,7 @@ export function DocumentAuditPanel() {
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
-
-      {summary ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Matching events</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.total}</div></div>
-          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Successful</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.by_outcome.success ?? 0}</div></div>
-          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Denied</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.by_outcome.denied ?? 0}</div></div>
-        </div>
-      ) : null}
+      {summary ? <DocumentAuditSummary summary={summary} /> : null}
 
       {events ? (
         <div className="mt-4 overflow-hidden rounded-md border border-iron-100">
