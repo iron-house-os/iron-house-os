@@ -1,4 +1,4 @@
-from collections import Counter, deque
+from collections import Counter
 import csv
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -8,9 +8,11 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from app.services.document_audit_store import DocumentAuditStore, InMemoryDocumentAuditStore
+
 logger = logging.getLogger("ihos.document_audit")
 MAX_RECENT_EVENTS = 200
-_recent_events: deque[dict[str, Any]] = deque(maxlen=MAX_RECENT_EVENTS)
+_audit_store: DocumentAuditStore = InMemoryDocumentAuditStore(MAX_RECENT_EVENTS)
 
 
 @dataclass(frozen=True)
@@ -35,13 +37,18 @@ def _serialize(value: Any) -> Any:
     return value
 
 
+def configure_document_audit_store(store: DocumentAuditStore) -> None:
+    global _audit_store
+    _audit_store = store
+
+
 def emit_document_audit_event(event: DocumentAuditEvent) -> None:
     payload = {
         key: _serialize(value)
         for key, value in asdict(event).items()
         if value not in (None, {}, [])
     }
-    _recent_events.appendleft(payload)
+    _audit_store.append(payload)
     logger.info("document_audit %s", json.dumps(payload, sort_keys=True))
 
 
@@ -53,21 +60,21 @@ def list_recent_document_audit_events(
     actor: str | None = None,
     project_id: UUID | str | None = None,
 ) -> list[dict[str, Any]]:
-    bounded_limit = max(1, min(limit, MAX_RECENT_EVENTS))
     expected_project_id = str(project_id) if project_id is not None else None
     filtered = (
         event
-        for event in _recent_events
+        for event in _audit_store.recent(MAX_RECENT_EVENTS)
         if (action is None or event.get("action") == action)
         and (outcome is None or event.get("outcome", "success") == outcome)
         and (actor is None or event.get("actor") == actor)
         and (expected_project_id is None or event.get("project_id") == expected_project_id)
     )
+    bounded_limit = max(1, min(limit, MAX_RECENT_EVENTS))
     return list(filtered)[:bounded_limit]
 
 
 def summarize_document_audit_events() -> dict[str, Any]:
-    events = list(_recent_events)
+    events = _audit_store.recent(MAX_RECENT_EVENTS)
     return {
         "total": len(events),
         "by_action": dict(Counter(event.get("action", "unknown") for event in events)),
@@ -97,4 +104,4 @@ def export_document_audit_events_csv(events: list[dict[str, Any]]) -> str:
 
 
 def clear_recent_document_audit_events() -> None:
-    _recent_events.clear()
+    _audit_store.clear()
