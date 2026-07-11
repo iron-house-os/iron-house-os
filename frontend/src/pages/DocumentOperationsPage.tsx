@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { DocumentAuditPanel } from "../components/DocumentAuditPanel";
 import { DocumentUploadPanel } from "../components/DocumentUploadPanel";
 import { ProjectDocumentBrowser } from "../components/ProjectDocumentBrowser";
 import { RFQAttachmentManifestPanel } from "../components/RFQAttachmentManifestPanel";
@@ -12,7 +13,7 @@ export function DocumentOperationsPage() {
       <div className="border-b border-iron-100 pb-6">
         <h1 className="text-3xl font-semibold text-iron-950">Document Operations</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-          Build 109 document operations page for upload, project browsing, drawing revisions, downloads, and RFQ attachment manifests.
+          Upload, browse, secure, audit, and package project documents for estimating and RFQ workflows.
         </p>
       </div>
 
@@ -26,6 +27,7 @@ export function DocumentOperationsPage() {
       <DocumentUploadPanel projectId={projectId || null} />
       <ProjectDocumentBrowser projectId={projectId || null} />
       <RFQAttachmentManifestPanel />
+      <DocumentAuditPanel />
     </section>
   );
 }

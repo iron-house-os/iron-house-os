@@ -102,6 +102,22 @@ export type SignedDownloadTokenResponse = {
   expires_in: number;
 };
 
+export type DocumentAuditEvent = {
+  action: string;
+  document_id?: string;
+  project_id?: string;
+  outcome: string;
+  actor?: string;
+  request_id?: string;
+  metadata?: Record<string, unknown>;
+  occurred_at: string;
+};
+
+export type DocumentAuditEventList = {
+  items: DocumentAuditEvent[];
+  total: number;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -188,6 +204,8 @@ export const documentsApi = {
     request<SignedDownloadTokenResponse>(`/documents/${id}/download-token`),
   signedDownloadUrl: (token: string) =>
     `${API_BASE_URL}/documents/signed-download?token=${encodeURIComponent(token)}`,
+  recentAuditEvents: (limit = 50) =>
+    request<DocumentAuditEventList>(`/documents/audit-events?limit=${limit}`),
   integrity: (id: string) => request<DocumentIntegrity>(`/documents/${id}/integrity`),
   attachmentManifest: (documentIds: string[]) =>
     request<RFQAttachmentManifest>("/documents/attachment-manifest", {
