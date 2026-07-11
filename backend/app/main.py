@@ -5,12 +5,15 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.services.document_audit import configure_document_audit_store
+from app.services.document_audit_store import create_document_audit_store_from_environment
 from app.services.system_readiness import get_system_readiness
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    configure_document_audit_store(create_document_audit_store_from_environment())
 
     app = FastAPI(
         title=settings.app_name,
