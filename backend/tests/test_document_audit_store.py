@@ -1,6 +1,9 @@
+import pytest
+
 from app.services.document_audit_store import (
     InMemoryDocumentAuditStore,
     JsonlDocumentAuditStore,
+    create_document_audit_store_from_environment,
 )
 
 
@@ -50,3 +53,31 @@ def test_jsonl_audit_store_respects_limit_and_clear(tmp_path) -> None:
     assert store.recent(1) == [{"action": "second"}]
     store.clear()
     assert store.recent(10) == []
+
+
+def test_environment_factory_defaults_to_memory(monkeypatch) -> None:
+    monkeypatch.delenv("DOCUMENT_AUDIT_STORE", raising=False)
+    monkeypatch.setenv("DOCUMENT_AUDIT_MAX_EVENTS", "7")
+
+    store = create_document_audit_store_from_environment()
+
+    assert isinstance(store, InMemoryDocumentAuditStore)
+    assert store.max_events == 7
+
+
+def test_environment_factory_selects_jsonl(monkeypatch, tmp_path) -> None:
+    path = tmp_path / "events.jsonl"
+    monkeypatch.setenv("DOCUMENT_AUDIT_STORE", "jsonl")
+    monkeypatch.setenv("DOCUMENT_AUDIT_JSONL_PATH", str(path))
+
+    store = create_document_audit_store_from_environment()
+
+    assert isinstance(store, JsonlDocumentAuditStore)
+    assert store.path == path
+
+
+def test_environment_factory_rejects_unknown_provider(monkeypatch) -> None:
+    monkeypatch.setenv("DOCUMENT_AUDIT_STORE", "unknown")
+
+    with pytest.raises(ValueError, match="Unsupported document audit store"):
+        create_document_audit_store_from_environment()
