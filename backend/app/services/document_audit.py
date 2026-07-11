@@ -1,6 +1,8 @@
 from collections import Counter, deque
+import csv
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from io import StringIO
 import json
 import logging
 from typing import Any
@@ -71,6 +73,27 @@ def summarize_document_audit_events() -> dict[str, Any]:
         "by_action": dict(Counter(event.get("action", "unknown") for event in events)),
         "by_outcome": dict(Counter(event.get("outcome", "success") for event in events)),
     }
+
+
+def export_document_audit_events_csv(events: list[dict[str, Any]]) -> str:
+    output = StringIO()
+    fieldnames = [
+        "occurred_at",
+        "action",
+        "outcome",
+        "actor",
+        "request_id",
+        "project_id",
+        "document_id",
+        "metadata",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for event in events:
+        row = dict(event)
+        row["metadata"] = json.dumps(row.get("metadata", {}), sort_keys=True)
+        writer.writerow(row)
+    return output.getvalue()
 
 
 def clear_recent_document_audit_events() -> None:
