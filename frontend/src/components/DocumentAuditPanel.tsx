@@ -14,6 +14,7 @@ export function DocumentAuditPanel() {
   const [outcome, setOutcome] = useState("");
   const [actor, setActor] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,6 +33,7 @@ export function DocumentAuditPanel() {
       ]);
       setEvents(nextEvents);
       setSummary(nextSummary);
+      setLastUpdated(new Date());
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load audit events");
     } finally {
@@ -45,6 +47,7 @@ export function DocumentAuditPanel() {
         <div>
           <h2 className="text-base font-semibold text-iron-950">Recent Document Activity</h2>
           <p className="mt-1 text-sm text-iron-500">Filter uploads and downloads by action, outcome, actor, or project.</p>
+          {lastUpdated ? <p className="mt-1 text-xs text-iron-400">Last refreshed {lastUpdated.toLocaleString()}</p> : null}
         </div>
         <div className="flex gap-2">
           <a href={documentAuditApi.csvUrl(filters())} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">Export CSV</a>
