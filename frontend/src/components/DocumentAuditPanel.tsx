@@ -1,21 +1,51 @@
 import { useState } from "react";
 
-import { documentAuditApi, DocumentAuditEventList } from "../api/documentAudit";
+import {
+  documentAuditApi,
+  DocumentAuditEventList,
+  DocumentAuditFilters,
+  DocumentAuditSummary as Summary,
+} from "../api/documentAudit";
+import { DocumentAuditSummary } from "./DocumentAuditSummary";
 
 export function DocumentAuditPanel() {
   const [events, setEvents] = useState<DocumentAuditEventList | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState("");
   const [actor, setActor] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  function filters(): DocumentAuditFilters {
+    return { limit: 50, action, outcome, actor, project_id: projectId };
+  }
+
+  function resetFilters() {
+    setAction("");
+    setOutcome("");
+    setActor("");
+    setProjectId("");
+    setEvents(null);
+    setSummary(null);
+    setLastUpdated(null);
+    setError(null);
+  }
 
   async function loadEvents() {
     setIsLoading(true);
     setError(null);
     try {
-      setEvents(await documentAuditApi.list({ limit: 50, action, outcome, actor, project_id: projectId }));
+      const currentFilters = filters();
+      const [nextEvents, nextSummary] = await Promise.all([
+        documentAuditApi.list(currentFilters),
+        documentAuditApi.summary(currentFilters),
+      ]);
+      setEvents(nextEvents);
+      setSummary(nextSummary);
+      setLastUpdated(new Date());
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load audit events");
     } finally {
@@ -29,10 +59,15 @@ export function DocumentAuditPanel() {
         <div>
           <h2 className="text-base font-semibold text-iron-950">Recent Document Activity</h2>
           <p className="mt-1 text-sm text-iron-500">Filter uploads and downloads by action, outcome, actor, or project.</p>
+          {lastUpdated ? <p className="mt-1 text-xs text-iron-400">Last refreshed {lastUpdated.toLocaleString()}</p> : null}
         </div>
-        <button type="button" onClick={loadEvents} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
-          {isLoading ? "Loading..." : "Load activity"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={resetFilters} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-600">Reset</button>
+          <a href={documentAuditApi.csvUrl(filters())} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">Export CSV</a>
+          <button type="button" onClick={loadEvents} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
+            {isLoading ? "Loading..." : "Load activity"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -45,6 +80,7 @@ export function DocumentAuditPanel() {
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {summary ? <DocumentAuditSummary summary={summary} /> : null}
 
       {events ? (
         <div className="mt-4 overflow-hidden rounded-md border border-iron-100">

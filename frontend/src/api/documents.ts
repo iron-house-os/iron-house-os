@@ -118,6 +118,20 @@ export type DocumentAuditEventList = {
   total: number;
 };
 
+export type DocumentAuditFilters = {
+  limit?: number;
+  action?: string;
+  outcome?: string;
+  actor?: string;
+  project_id?: string;
+};
+
+export type DocumentAuditSummary = {
+  total: number;
+  by_action: Record<string, number>;
+  by_outcome: Record<string, number>;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -143,6 +157,14 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   });
   if (!response.ok) throw new Error(`Request failed with ${response.status}`);
   return response.json() as Promise<T>;
+}
+
+function auditQuery(filters: DocumentAuditFilters = {}): string {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+  return query.toString();
 }
 
 export const documentCategories: DocumentCategory[] = [
@@ -204,8 +226,18 @@ export const documentsApi = {
     request<SignedDownloadTokenResponse>(`/documents/${id}/download-token`),
   signedDownloadUrl: (token: string) =>
     `${API_BASE_URL}/documents/signed-download?token=${encodeURIComponent(token)}`,
-  recentAuditEvents: (limit = 50) =>
-    request<DocumentAuditEventList>(`/documents/audit-events?limit=${limit}`),
+  recentAuditEvents: (filters: DocumentAuditFilters = {}) => {
+    const query = auditQuery({ limit: 50, ...filters });
+    return request<DocumentAuditEventList>(`/documents/audit-events?${query}`);
+  },
+  auditSummary: (filters: DocumentAuditFilters = {}) => {
+    const query = auditQuery(filters);
+    return request<DocumentAuditSummary>(`/documents/audit-events/summary${query ? `?${query}` : ""}`);
+  },
+  auditCsvUrl: (filters: DocumentAuditFilters = {}) => {
+    const query = auditQuery(filters);
+    return `${API_BASE_URL}/documents/audit-events/export.csv${query ? `?${query}` : ""}`;
+  },
   integrity: (id: string) => request<DocumentIntegrity>(`/documents/${id}/integrity`),
   attachmentManifest: (documentIds: string[]) =>
     request<RFQAttachmentManifest>("/documents/attachment-manifest", {
