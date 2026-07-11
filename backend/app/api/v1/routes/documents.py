@@ -1,7 +1,7 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,9 @@ from app.services import documents
 from app.services.document_audit import (
     DocumentAuditEvent,
     emit_document_audit_event,
+    export_document_audit_events_csv,
     list_recent_document_audit_events,
+    summarize_document_audit_events,
 )
 from app.services.request_context import get_request_audit_context
 from app.services.signed_download import DEFAULT_TTL_SECONDS, create_download_token, verify_download_token
@@ -107,6 +109,34 @@ def document_audit_events(
         project_id=project_id,
     )
     return {"items": items, "total": len(items)}
+
+
+@router.get("/audit-events/summary")
+def document_audit_summary() -> dict[str, Any]:
+    return summarize_document_audit_events()
+
+
+@router.get("/audit-events/export.csv")
+def document_audit_export(
+    limit: int = Query(default=200, ge=1, le=200),
+    action: str | None = Query(default=None),
+    outcome: str | None = Query(default=None),
+    actor: str | None = Query(default=None),
+    project_id: UUID | None = Query(default=None),
+) -> Response:
+    events = list_recent_document_audit_events(
+        limit,
+        action=action,
+        outcome=outcome,
+        actor=actor,
+        project_id=project_id,
+    )
+    csv_text = export_document_audit_events_csv(events)
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=document-audit-events.csv"},
+    )
 
 
 @router.post("/attachment-manifest", response_model=RFQAttachmentManifest)
