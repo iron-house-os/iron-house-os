@@ -22,6 +22,17 @@ export function DocumentAuditPanel() {
     return { limit: 50, action, outcome, actor, project_id: projectId };
   }
 
+  function resetFilters() {
+    setAction("");
+    setOutcome("");
+    setActor("");
+    setProjectId("");
+    setEvents(null);
+    setSummary(null);
+    setLastUpdated(null);
+    setError(null);
+  }
+
   async function loadEvents() {
     setIsLoading(true);
     setError(null);
@@ -49,7 +60,8 @@ export function DocumentAuditPanel() {
           <p className="mt-1 text-sm text-iron-500">Filter uploads and downloads by action, outcome, actor, or project.</p>
           {lastUpdated ? <p className="mt-1 text-xs text-iron-400">Last refreshed {lastUpdated.toLocaleString()}</p> : null}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={resetFilters} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-600">Reset</button>
           <a href={documentAuditApi.csvUrl(filters())} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">Export CSV</a>
           <button type="button" onClick={loadEvents} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
             {isLoading ? "Loading..." : "Load activity"}
