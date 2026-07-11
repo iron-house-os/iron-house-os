@@ -1,9 +1,15 @@
 import { useState } from "react";
 
-import { documentAuditApi, DocumentAuditEventList } from "../api/documentAudit";
+import {
+  documentAuditApi,
+  DocumentAuditEventList,
+  DocumentAuditFilters,
+  DocumentAuditSummary,
+} from "../api/documentAudit";
 
 export function DocumentAuditPanel() {
   const [events, setEvents] = useState<DocumentAuditEventList | null>(null);
+  const [summary, setSummary] = useState<DocumentAuditSummary | null>(null);
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState("");
   const [actor, setActor] = useState("");
@@ -11,11 +17,21 @@ export function DocumentAuditPanel() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  function filters(): DocumentAuditFilters {
+    return { limit: 50, action, outcome, actor, project_id: projectId };
+  }
+
   async function loadEvents() {
     setIsLoading(true);
     setError(null);
     try {
-      setEvents(await documentAuditApi.list({ limit: 50, action, outcome, actor, project_id: projectId }));
+      const currentFilters = filters();
+      const [nextEvents, nextSummary] = await Promise.all([
+        documentAuditApi.list(currentFilters),
+        documentAuditApi.summary(currentFilters),
+      ]);
+      setEvents(nextEvents);
+      setSummary(nextSummary);
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load audit events");
     } finally {
@@ -45,6 +61,14 @@ export function DocumentAuditPanel() {
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+
+      {summary ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Matching events</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.total}</div></div>
+          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Successful</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.by_outcome.success ?? 0}</div></div>
+          <div className="rounded-md border border-iron-100 p-3"><div className="text-xs uppercase text-iron-500">Denied</div><div className="mt-1 text-2xl font-semibold text-iron-950">{summary.by_outcome.denied ?? 0}</div></div>
+        </div>
+      ) : null}
 
       {events ? (
         <div className="mt-4 overflow-hidden rounded-md border border-iron-100">
