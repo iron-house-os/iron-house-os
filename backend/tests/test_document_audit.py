@@ -7,6 +7,7 @@ from app.services.document_audit import (
     clear_recent_document_audit_events,
     emit_document_audit_event,
     list_recent_document_audit_events,
+    summarize_document_audit_events,
 )
 
 
@@ -53,3 +54,16 @@ def test_recent_document_audit_events_support_filters() -> None:
     assert len(list_recent_document_audit_events(actor="jeremie")) == 1
     assert len(list_recent_document_audit_events(project_id=project_id)) == 1
     assert list_recent_document_audit_events(action="missing") == []
+
+
+def test_document_audit_summary_counts_actions_and_outcomes() -> None:
+    clear_recent_document_audit_events()
+    emit_document_audit_event(DocumentAuditEvent(action="upload"))
+    emit_document_audit_event(DocumentAuditEvent(action="upload"))
+    emit_document_audit_event(DocumentAuditEvent(action="signed_download", outcome="denied"))
+
+    summary = summarize_document_audit_events()
+
+    assert summary["total"] == 3
+    assert summary["by_action"] == {"upload": 2, "signed_download": 1}
+    assert summary["by_outcome"] == {"success": 2, "denied": 1}
