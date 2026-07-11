@@ -9,6 +9,7 @@ from app.services.document_audit_access import DocumentAuditPermission
 from app.services.document_audit_auth import (
     DocumentAuditPrincipal,
     authorize_document_audit,
+    describe_document_audit_access,
     get_document_audit_principal,
 )
 
@@ -20,6 +21,25 @@ def setup_function() -> None:
 def test_principal_normalizes_header_role() -> None:
     principal = get_document_audit_principal(" Operations Manager ")
     assert principal == DocumentAuditPrincipal(role="operations_manager")
+
+
+def test_permission_snapshots_are_normalized_and_sorted() -> None:
+    assert describe_document_audit_access(DocumentAuditPrincipal(role="Admin")) == {
+        "role": "admin",
+        "permissions": ["administer", "export", "read"],
+    }
+    assert describe_document_audit_access(DocumentAuditPrincipal(role="operations manager")) == {
+        "role": "operations_manager",
+        "permissions": ["export", "read"],
+    }
+    assert describe_document_audit_access(DocumentAuditPrincipal(role="estimator")) == {
+        "role": "estimator",
+        "permissions": ["read"],
+    }
+    assert describe_document_audit_access(DocumentAuditPrincipal(role="viewer")) == {
+        "role": "viewer",
+        "permissions": [],
+    }
 
 
 def test_authorize_allows_role_permission_without_denial_event() -> None:
