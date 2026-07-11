@@ -27,6 +27,8 @@ class SupplierQuoteCreate(BaseModel):
     rfq_package_id: UUID | None = None
     supplier_id: UUID | None = None
     supplier_name: str = Field(min_length=1)
+    quote_reference: str | None = None
+    revision: int = Field(default=1, ge=1)
     line_item_code: str | None = None
     line_item_description: str | None = None
     scope: str = Field(min_length=1)
@@ -65,3 +67,40 @@ class QuoteComparisonResponse(BaseModel):
     total_lowest: float
     total_selected: float
     delta_from_lowest: float
+
+
+class QuoteEstimateImportRequest(BaseModel):
+    quotes: list[SupplierQuoteCreate] = Field(default_factory=list)
+    include_superseded_revisions: bool = False
+    minimum_mapping_confidence: float = Field(default=0.5, ge=0, le=1)
+
+
+class QuoteEstimateLine(BaseModel):
+    supplier_name: str
+    quote_reference: str | None = None
+    revision: int
+    scope: str
+    scope_type: QuoteScopeType
+    amount: float
+    cost_code: str | None = None
+    cost_code_name: str | None = None
+    mapping_confidence: float = Field(ge=0, le=1)
+    needs_review: bool
+    exclusions: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class QuoteRevisionSummary(BaseModel):
+    supplier_name: str
+    quote_reference: str | None = None
+    current_revision: int
+    superseded_revisions: list[int] = Field(default_factory=list)
+
+
+class QuoteEstimateImportResponse(BaseModel):
+    lines: list[QuoteEstimateLine]
+    revisions: list[QuoteRevisionSummary]
+    mapped_count: int
+    review_count: int
+    total_amount: float
+    warnings: list[str] = Field(default_factory=list)
