@@ -1,4 +1,4 @@
-from collections import deque
+from collections import Counter, deque
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 import json
@@ -62,6 +62,15 @@ def list_recent_document_audit_events(
         and (expected_project_id is None or event.get("project_id") == expected_project_id)
     )
     return list(filtered)[:bounded_limit]
+
+
+def summarize_document_audit_events() -> dict[str, Any]:
+    events = list(_recent_events)
+    return {
+        "total": len(events),
+        "by_action": dict(Counter(event.get("action", "unknown") for event in events)),
+        "by_outcome": dict(Counter(event.get("outcome", "success") for event in events)),
+    }
 
 
 def clear_recent_document_audit_events() -> None:
