@@ -2,7 +2,12 @@ import json
 import logging
 from uuid import uuid4
 
-from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
+from app.services.document_audit import (
+    DocumentAuditEvent,
+    clear_recent_document_audit_events,
+    emit_document_audit_event,
+    list_recent_document_audit_events,
+)
 
 
 def test_document_audit_event_serializes_context(caplog) -> None:
@@ -31,3 +36,20 @@ def test_document_audit_event_serializes_context(caplog) -> None:
     assert payload["request_id"] == "req-123"
     assert payload["metadata"] == {"size_bytes": 42, "tags": ["rfq", "current"]}
     assert payload["occurred_at"].endswith("+00:00")
+
+
+def test_recent_document_audit_events_support_filters() -> None:
+    clear_recent_document_audit_events()
+    project_id = uuid4()
+    emit_document_audit_event(
+        DocumentAuditEvent(action="upload", project_id=project_id, actor="jeremie", outcome="success")
+    )
+    emit_document_audit_event(
+        DocumentAuditEvent(action="signed_download", actor="supplier", outcome="denied")
+    )
+
+    assert len(list_recent_document_audit_events(action="upload")) == 1
+    assert len(list_recent_document_audit_events(outcome="denied")) == 1
+    assert len(list_recent_document_audit_events(actor="jeremie")) == 1
+    assert len(list_recent_document_audit_events(project_id=project_id)) == 1
+    assert list_recent_document_audit_events(action="missing") == []
