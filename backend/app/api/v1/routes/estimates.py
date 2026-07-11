@@ -16,8 +16,9 @@ from app.schemas.estimate import (
     EstimateSummary,
     RateLibrary,
 )
+from app.schemas.estimate_validation import EstimateValidationRequest, EstimateValidationResult
 from app.schemas.estimate_workspace import EstimateWorkspaceList, EstimateWorkspaceRead, EstimateWorkspaceSaveRequest
-from app.services import estimate_handoff, estimate_workspace, estimate_workbooks, estimates
+from app.services import estimate_handoff, estimate_validation, estimate_workspace, estimate_workbooks, estimates
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -31,6 +32,11 @@ def get_rate_library() -> RateLibrary:
 @router.post("/line-item", response_model=EstimateLineItemCost)
 def calculate_line_item(payload: EstimateLineItem) -> EstimateLineItemCost:
     return estimates.calculate_line_item(payload)
+
+
+@router.post("/validate", response_model=EstimateValidationResult)
+def validate_estimate(payload: EstimateValidationRequest) -> EstimateValidationResult:
+    return estimate_validation.validate_estimate(payload)
 
 
 @router.post("/handoff", response_model=EstimateHandoffResponse)
