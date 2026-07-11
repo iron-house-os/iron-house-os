@@ -1,6 +1,8 @@
-from collections import deque
+from collections import Counter, deque
+import csv
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from io import StringIO
 import json
 import logging
 from typing import Any
@@ -43,9 +45,55 @@ def emit_document_audit_event(event: DocumentAuditEvent) -> None:
     logger.info("document_audit %s", json.dumps(payload, sort_keys=True))
 
 
-def list_recent_document_audit_events(limit: int = 50) -> list[dict[str, Any]]:
+def list_recent_document_audit_events(
+    limit: int = 50,
+    *,
+    action: str | None = None,
+    outcome: str | None = None,
+    actor: str | None = None,
+    project_id: UUID | str | None = None,
+) -> list[dict[str, Any]]:
     bounded_limit = max(1, min(limit, MAX_RECENT_EVENTS))
-    return list(_recent_events)[:bounded_limit]
+    expected_project_id = str(project_id) if project_id is not None else None
+    filtered = (
+        event
+        for event in _recent_events
+        if (action is None or event.get("action") == action)
+        and (outcome is None or event.get("outcome", "success") == outcome)
+        and (actor is None or event.get("actor") == actor)
+        and (expected_project_id is None or event.get("project_id") == expected_project_id)
+    )
+    return list(filtered)[:bounded_limit]
+
+
+def summarize_document_audit_events() -> dict[str, Any]:
+    events = list(_recent_events)
+    return {
+        "total": len(events),
+        "by_action": dict(Counter(event.get("action", "unknown") for event in events)),
+        "by_outcome": dict(Counter(event.get("outcome", "success") for event in events)),
+    }
+
+
+def export_document_audit_events_csv(events: list[dict[str, Any]]) -> str:
+    output = StringIO()
+    fieldnames = [
+        "occurred_at",
+        "action",
+        "outcome",
+        "actor",
+        "request_id",
+        "project_id",
+        "document_id",
+        "metadata",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for event in events:
+        row = dict(event)
+        row["metadata"] = json.dumps(row.get("metadata", {}), sort_keys=True)
+        writer.writerow(row)
+    return output.getvalue()
 
 
 def clear_recent_document_audit_events() -> None:

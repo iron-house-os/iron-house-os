@@ -1,9 +1,13 @@
 import { useState } from "react";
 
-import { DocumentAuditEventList, documentsApi } from "../api/documents";
+import { documentAuditApi, DocumentAuditEventList } from "../api/documentAudit";
 
 export function DocumentAuditPanel() {
   const [events, setEvents] = useState<DocumentAuditEventList | null>(null);
+  const [action, setAction] = useState("");
+  const [outcome, setOutcome] = useState("");
+  const [actor, setActor] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -11,7 +15,7 @@ export function DocumentAuditPanel() {
     setIsLoading(true);
     setError(null);
     try {
-      setEvents(await documentsApi.recentAuditEvents(50));
+      setEvents(await documentAuditApi.list({ limit: 50, action, outcome, actor, project_id: projectId }));
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load audit events");
     } finally {
@@ -24,11 +28,20 @@ export function DocumentAuditPanel() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-base font-semibold text-iron-950">Recent Document Activity</h2>
-          <p className="mt-1 text-sm text-iron-500">Review recent uploads, download-token issuance, downloads, actors, and correlation IDs.</p>
+          <p className="mt-1 text-sm text-iron-500">Filter uploads and downloads by action, outcome, actor, or project.</p>
         </div>
         <button type="button" onClick={loadEvents} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
           {isLoading ? "Loading..." : "Load activity"}
         </button>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <input value={action} onChange={(event) => setAction(event.target.value)} placeholder="Action" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
+        <select value={outcome} onChange={(event) => setOutcome(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
+          <option value="">All outcomes</option><option value="success">Success</option><option value="denied">Denied</option>
+        </select>
+        <input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Actor" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
+        <input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Project UUID" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
@@ -49,7 +62,7 @@ export function DocumentAuditPanel() {
                   <td className="px-3 py-2 font-mono text-xs text-iron-600">{event.request_id ?? "-"}</td>
                 </tr>
               ))}
-              {events.items.length === 0 ? <tr><td className="px-3 py-3 text-iron-500" colSpan={5}>No recent document activity.</td></tr> : null}
+              {events.items.length === 0 ? <tr><td className="px-3 py-3 text-iron-500" colSpan={5}>No matching document activity.</td></tr> : null}
             </tbody>
           </table>
         </div>
