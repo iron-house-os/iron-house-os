@@ -32,6 +32,7 @@ def build_estimate_workbook(payload: EstimateCreate) -> bytes:
     _build_markups_sheet(workbook, payload, summary)
     _build_risks_sheet(workbook, payload)
     _build_assumptions_sheet(workbook, summary)
+    _build_exclusions_sheet(workbook, summary)
     _build_quote_comparison_sheet(workbook, payload)
 
     stream = BytesIO()
@@ -126,7 +127,8 @@ def _build_line_items_sheet(workbook: Workbook, summary: EstimateSummary) -> Non
 
     total_row = len(summary.line_items) + 5
     sheet.cell(row=total_row, column=11, value="Total Direct Cost")
-    sheet.cell(row=total_row, column=12, value=f"=SUM(L4:L{total_row - 2})")
+    total_formula = f"=SUM(L4:L{total_row - 2})" if summary.line_items else "=0"
+    sheet.cell(row=total_row, column=12, value=total_formula)
     sheet.cell(row=total_row, column=12).number_format = MONEY_FORMAT
     _fill_row(sheet, total_row, 11, 12, SUBTOTAL_FILL)
     sheet.cell(row=total_row, column=11).font = Font(bold=True)
@@ -239,18 +241,28 @@ def _build_risks_sheet(workbook: Workbook, payload: EstimateCreate) -> None:
 
 def _build_assumptions_sheet(workbook: Workbook, summary: EstimateSummary) -> None:
     sheet = workbook.create_sheet("Assumptions")
-    _title(sheet, "Assumptions and Exclusions")
-    sheet.cell(row=3, column=1, value="Assumptions")
-    sheet.cell(row=3, column=2, value="Exclusions")
-    _header_row(sheet, 3, 1, 2)
-    max_rows = max(len(summary.assumptions), len(summary.exclusions), 1)
-    for offset in range(max_rows):
-        row_index = offset + 4
-        sheet.cell(row=row_index, column=1, value=_safe_list_value(summary.assumptions, offset))
-        sheet.cell(row=row_index, column=2, value=_safe_list_value(summary.exclusions, offset))
-    _apply_borders(sheet, 3, 1, max_rows + 3, 2)
-    _set_widths(sheet, {"A": 60, "B": 60})
+    _title(sheet, "Estimate Assumptions")
+    sheet.cell(row=3, column=1, value="Assumption")
+    _header_row(sheet, 3, 1, 1)
+    if not summary.assumptions:
+        sheet.cell(row=4, column=1, value="No assumptions entered.")
+    for row_index, assumption in enumerate(summary.assumptions, start=4):
+        sheet.cell(row=row_index, column=1, value=assumption)
+    _apply_borders(sheet, 3, 1, max(4, len(summary.assumptions) + 3), 1)
+    _set_widths(sheet, {"A": 100})
 
+
+def _build_exclusions_sheet(workbook: Workbook, summary: EstimateSummary) -> None:
+    sheet = workbook.create_sheet("Exclusions")
+    _title(sheet, "Estimate Exclusions")
+    sheet.cell(row=3, column=1, value="Exclusion")
+    _header_row(sheet, 3, 1, 1)
+    if not summary.exclusions:
+        sheet.cell(row=4, column=1, value="No exclusions entered.")
+    for row_index, exclusion in enumerate(summary.exclusions, start=4):
+        sheet.cell(row=row_index, column=1, value=exclusion)
+    _apply_borders(sheet, 3, 1, max(4, len(summary.exclusions) + 3), 1)
+    _set_widths(sheet, {"A": 100})
 
 def _build_quote_comparison_sheet(workbook: Workbook, payload: EstimateCreate) -> None:
     sheet = workbook.create_sheet("Quote Comparison")
@@ -330,12 +342,6 @@ def _set_widths(sheet: Worksheet, widths: dict[str, int]) -> None:
     for row in range(1, sheet.max_row + 1):
         sheet.row_dimensions[row].height = 20
     sheet.freeze_panes = "A4"
-
-
-def _safe_list_value(values: list[str], index: int) -> str:
-    if index < len(values):
-        return values[index]
-    return ""
 
 
 def workbook_filename(project_name: str, project_code: str | None = None) -> str:
