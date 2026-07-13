@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RFQPackageStatus(StrEnum):
@@ -30,6 +30,7 @@ class SupplierRecipientCreate(BaseModel):
     supplier_id: str = Field(min_length=1)
     supplier_name: str = Field(min_length=1)
     category: str | None = None
+    recipient_email: EmailStr | None = None
     scope_items: list[str] = Field(default_factory=list)
 
 
@@ -122,6 +123,7 @@ class SupplierRFQPackageDraft(BaseModel):
     supplier_id: str
     supplier_name: str
     category: str | None = None
+    recipient_email: EmailStr | None = None
     status: RFQRecipientStatus
     subject: str
     body: str
