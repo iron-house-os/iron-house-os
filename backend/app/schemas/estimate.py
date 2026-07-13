@@ -96,7 +96,10 @@ class VendorQuoteInput(BaseModel):
     supplier: str = Field(min_length=1)
     scope: str = Field(min_length=1)
     amount: float = Field(default=0, ge=0)
+    is_qualified: bool = True
+    qualification_notes: list[str] = Field(default_factory=list)
     is_selected: bool = False
+    selection_reason: str | None = None
     notes: str | None = None
 
 
