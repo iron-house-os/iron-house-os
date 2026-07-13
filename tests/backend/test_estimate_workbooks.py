@@ -41,6 +41,8 @@ def test_workbook_contains_complete_estimator_sheet_contract() -> None:
                         scope="PVC pipe supply",
                         amount=4200,
                         is_selected=True,
+                        selection_reason="Complete scope and confirmed delivery",
+                        qualification_notes=["Scope reviewed"],
                         notes="Qualified selected quote",
                     )
                 ],
@@ -70,6 +72,9 @@ def test_workbook_contains_complete_estimator_sheet_contract() -> None:
     assert workbook["Line Items"]["L6"].value == "=SUM(L4:L4)"
     assert workbook["Quote Comparison"]["B4"].value == "EMCO"
     assert workbook["Quote Comparison"]["E4"].value == "Yes"
+    assert workbook["Quote Comparison"]["F4"].value == "Yes"
+    assert workbook["Quote Comparison"]["G4"].value == "Complete scope and confirmed delivery"
+    assert workbook["Quote Comparison"]["H4"].value == "Scope reviewed"
 
 
 def test_workbook_records_empty_assumptions_exclusions_and_line_items() -> None:
