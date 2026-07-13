@@ -106,6 +106,13 @@ def select_rfq_package_suppliers(
     payload: list[SupplierRecipientCreate],
 ) -> RFQPackageRead:
     rfq_package = _load_package(db, rfq_package_id)
+    existing_statuses = {
+        recipient.supplier_id: _recipient_status(recipient.status).value
+        for recipient in rfq_package.recipients
+    }
+    existing_notes = dict(
+        _metadata(rfq_package).get("supplier_status_notes") or {}
+    )
     db.execute(
         delete(RFQPackageSupplierRecipient).where(
             RFQPackageSupplierRecipient.rfq_package_id == rfq_package_id
@@ -128,13 +135,20 @@ def select_rfq_package_suppliers(
                 supplier_id=item.supplier_id,
                 supplier_name=item.supplier_name,
                 category=item.category,
-                status=RFQRecipientStatus.pending.value,
+                status=existing_statuses.get(
+                    item.supplier_id,
+                    RFQRecipientStatus.pending.value,
+                ),
             )
         )
 
     metadata = _metadata(rfq_package)
     metadata["supplier_scopes"] = scopes
-    metadata["supplier_status_notes"] = {}
+    metadata["supplier_status_notes"] = {
+        item.supplier_id: existing_notes[item.supplier_id]
+        for item in payload
+        if item.supplier_id in existing_notes
+    }
     rfq_package.metadata_json = metadata
     db.commit()
     return _to_schema(_load_package(db, rfq_package_id))
@@ -470,7 +484,10 @@ def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
                 scope_summary=_scope_for(rfq_package, recipient.supplier_id)[1],
                 status_note=_status_note_for(rfq_package, recipient.supplier_id),
             )
-            for recipient in rfq_package.recipients
+            for recipient in sorted(
+                rfq_package.recipients,
+                key=lambda item: (item.supplier_id.casefold(), item.supplier_name.casefold()),
+            )
         ],
         documents=[
             RFQPackageDocumentRead(
@@ -482,7 +499,10 @@ def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
                 storage_uri=document.storage_uri,
                 metadata=document.metadata_json or {},
             )
-            for document in rfq_package.documents
+            for document in sorted(
+                rfq_package.documents,
+                key=lambda item: (item.title.casefold(), item.document_type.casefold()),
+            )
         ],
         created_at=rfq_package.created_at,
         updated_at=rfq_package.updated_at,
