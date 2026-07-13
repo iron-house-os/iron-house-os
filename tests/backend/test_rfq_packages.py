@@ -206,11 +206,21 @@ def test_track_supplier_sent_replied_and_bounced_statuses() -> None:
         f"/api/v1/rfqs/{rfq_package['id']}/suppliers/{second['id']}/status",
         json={"status": "bounced", "note": "Mailbox rejected the address."},
     )
+    resaved = add_suppliers(rfq_package["id"])
+    recipients_by_supplier = {
+        recipient["supplier_id"]: recipient for recipient in resaved["recipients"]
+    }
 
     assert sent.status_code == 200
     assert replied.json()["recipients"][0]["status"] == "replied"
     assert replied.json()["recipients"][0]["status_note"] == "Quote received."
     assert bounced.json()["recipients"][1]["status"] == "bounced"
+    assert recipients_by_supplier["supplier-001"]["status"] == "replied"
+    assert recipients_by_supplier["supplier-001"]["status_note"] == "Quote received."
+    assert recipients_by_supplier["supplier-002"]["status"] == "bounced"
+    assert recipients_by_supplier["supplier-002"]["status_note"] == (
+        "Mailbox rejected the address."
+    )
 
 
 def test_build_supplier_specific_rfq_drafts_without_sending() -> None:
