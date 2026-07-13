@@ -31,11 +31,13 @@ def add_suppliers(rfq_package_id: str) -> dict:
                 "supplier_id": "supplier-001",
                 "supplier_name": "Pacific Pipe Supply",
                 "category": "pipe",
+                "recipient_email": "estimating@pacific-pipe.example",
             },
             {
                 "supplier_id": "supplier-002",
                 "supplier_name": "Coastal Traffic Control",
                 "category": "traffic control",
+                "recipient_email": "quotes@coastal-traffic.example",
             },
         ],
     )
@@ -105,6 +107,7 @@ def test_supplier_selection_generates_category_specific_scopes() -> None:
     pipe_recipient, traffic_recipient = payload["recipients"]
     assert pipe_recipient["status"] == "pending"
     assert traffic_recipient["status"] == "pending"
+    assert pipe_recipient["recipient_email"] == "estimating@pacific-pipe.example"
     assert any("pipe" in item.lower() for item in pipe_recipient["scope_items"])
     assert any("traffic control" in item.lower() for item in traffic_recipient["scope_items"])
     assert pipe_recipient["scope_items"] != traffic_recipient["scope_items"]
@@ -254,3 +257,95 @@ def test_rfq_package_children_and_metadata_persist_across_requests() -> None:
     assert second_response.status_code == 200
     assert second_response.json()["recipients"][0]["scope_items"]
     assert second_response.json()["documents"][0]["storage_uri"].startswith("drive://")
+
+
+def test_prepare_gmail_drive_workflow_is_preview_only_and_persistent() -> None:
+    rfq_package = create_package()
+    add_suppliers(rfq_package["id"])
+    add_ready_documents(rfq_package["id"])
+
+    response = client.post(
+        f"/api/v1/rfqs/{rfq_package['id']}/communication-workflow/prepare",
+        json={
+            "drive_folder_uri": "drive://projects/kg/rfq/stormwater",
+            "drive_manifest_uri": "drive://projects/kg/rfq/stormwater/manifest.json",
+            "sender_name": "Jeremie",
+            "sender_email": "estimating@ironhouse.example",
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["status"] == "preview_only"
+    assert payload["external_actions_performed"] is False
+    assert payload["send_requires_approval"] is True
+    assert payload["stale"] is False
+    assert payload["drive_package"]["reusable"] is True
+    assert payload["drive_package"]["folder_uri"].startswith("drive://")
+    assert len(payload["gmail_drafts"]) == 2
+    assert payload["gmail_drafts"][0]["status"] == "preview_only"
+    assert payload["gmail_drafts"][0]["send_approved"] is False
+    assert payload["gmail_drafts"][0]["ready_for_draft_creation"] is True
+    assert payload["gmail_drafts"][0]["to"] == "estimating@pacific-pipe.example"
+    assert "estimating@ironhouse.example" in payload["gmail_drafts"][0]["body"]
+
+    persisted = client.get(
+        f"/api/v1/rfqs/{rfq_package['id']}/communication-workflow"
+    )
+    assert persisted.status_code == 200
+    assert persisted.json()["drive_package"] == payload["drive_package"]
+    assert persisted.json()["gmail_drafts"] == payload["gmail_drafts"]
+
+    changed_documents = client.put(
+        f"/api/v1/rfqs/{rfq_package['id']}/documents",
+        json=[
+            {
+                "document_type": "drawing",
+                "title": "C-102 Revised Utility Plan",
+                "required": True,
+                "status": "attached",
+                "storage_uri": "drive://projects/kg/C-102.pdf",
+            }
+        ],
+    )
+    stale = client.get(
+        f"/api/v1/rfqs/{rfq_package['id']}/communication-workflow"
+    )
+    assert changed_documents.status_code == 200
+    assert stale.json()["stale"] is True
+
+
+def test_record_supplier_response_updates_tracking_without_external_action() -> None:
+    rfq_package = create_package()
+    add_suppliers(rfq_package["id"])
+
+    invalid = client.post(
+        f"/api/v1/rfqs/{rfq_package['id']}/supplier-responses",
+        json={"supplier_id": "supplier-001", "notes": "Missing references."},
+    )
+    response = client.post(
+        f"/api/v1/rfqs/{rfq_package['id']}/supplier-responses",
+        json={
+            "supplier_id": "supplier-001",
+            "gmail_thread_uri": "gmail://threads/thread-123",
+            "drive_file_uri": "drive://projects/kg/responses/pacific-pipe.pdf",
+            "notes": "Quote received and saved for comparison.",
+        },
+    )
+
+    assert invalid.status_code == 422
+    assert response.status_code == 201
+    assert response.json()["external_actions_performed"] is False
+    assert response.json()["supplier_responses"][0]["supplier_name"] == (
+        "Pacific Pipe Supply"
+    )
+    assert response.json()["supplier_responses"][0]["drive_file_uri"].startswith(
+        "drive://"
+    )
+
+    detail = client.get(f"/api/v1/rfqs/{rfq_package['id']}").json()
+    recipient = next(
+        item for item in detail["recipients"] if item["supplier_id"] == "supplier-001"
+    )
+    assert recipient["status"] == "replied"
+    assert recipient["status_note"] == "Quote received and saved for comparison."

@@ -6,6 +6,7 @@ export type SupplierRecipientCreate = {
   supplier_id: string;
   supplier_name: string;
   category?: string | null;
+  recipient_email?: string | null;
   scope_items: string[];
 };
 
@@ -79,6 +80,7 @@ export type SupplierRFQPackageDraft = {
   supplier_id: string;
   supplier_name: string;
   category?: string | null;
+  recipient_email?: string | null;
   status: RFQRecipientStatus;
   subject: string;
   body: string;
@@ -91,6 +93,68 @@ export type RFQPackageBuildResponse = {
   ready: boolean;
   blockers: string[];
   packages: SupplierRFQPackageDraft[];
+};
+
+export type GmailDraftPlan = {
+  recipient_id: string;
+  supplier_id: string;
+  supplier_name: string;
+  to?: string | null;
+  subject: string;
+  body: string;
+  attachment_references: string[];
+  status: "preview_only";
+  ready_for_draft_creation: boolean;
+  send_approved: false;
+};
+
+export type DrivePackageRecord = {
+  folder_uri: string;
+  manifest_uri?: string | null;
+  reusable: boolean;
+  document_references: string[];
+  saved_at: string;
+  source_fingerprint: string;
+};
+
+export type SupplierResponse = {
+  id: string;
+  supplier_id: string;
+  supplier_name: string;
+  received_at: string;
+  recorded_at: string;
+  gmail_thread_uri?: string | null;
+  drive_file_uri?: string | null;
+  notes?: string | null;
+};
+
+export type SupplierResponseCreatePayload = {
+  supplier_id: string;
+  received_at?: string;
+  gmail_thread_uri?: string;
+  drive_file_uri?: string;
+  notes?: string;
+};
+
+export type RFQCommunicationWorkflow = {
+  rfq_package_id: string;
+  status: "preview_only";
+  prepared_at?: string | null;
+  stale: boolean;
+  drive_package?: DrivePackageRecord | null;
+  gmail_drafts: GmailDraftPlan[];
+  supplier_responses: SupplierResponse[];
+  blockers: string[];
+  external_actions_performed: false;
+  send_requires_approval: true;
+};
+
+export type RFQWorkflowPreparePayload = {
+  drive_folder_uri: string;
+  drive_manifest_uri?: string;
+  sender_name: string;
+  sender_email?: string;
+  sender_phone?: string;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -164,5 +228,17 @@ export const rfqPackagesApi = {
   build: (id: string) =>
     request<RFQPackageBuildResponse>(`/rfqs/${id}/build`, {
       method: "POST",
+    }),
+  communicationWorkflow: (id: string) =>
+    request<RFQCommunicationWorkflow>(`/rfqs/${id}/communication-workflow`),
+  prepareCommunicationWorkflow: (id: string, payload: RFQWorkflowPreparePayload) =>
+    request<RFQCommunicationWorkflow>(`/rfqs/${id}/communication-workflow/prepare`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  recordSupplierResponse: (id: string, payload: SupplierResponseCreatePayload) =>
+    request<RFQCommunicationWorkflow>(`/rfqs/${id}/supplier-responses`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
