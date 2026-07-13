@@ -194,6 +194,7 @@ export function RFQBuilderPage() {
 
         {selectedPackage ? (
           <RFQPackageDetail
+            key={selectedPackage.id}
             rfqPackage={selectedPackage}
             readiness={readiness}
             buildResult={buildResult}
@@ -506,17 +507,16 @@ function SupplierScopeEditor({
   );
 
   useEffect(() => {
+    if (!rfqPackage.recipients.length) return;
     setSuppliers(
-      rfqPackage.recipients.length
-        ? rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
-            supplier_id,
-            supplier_name,
-            category,
-            scope_items,
-          }))
-        : [blankSupplier()],
+      rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
+        supplier_id,
+        supplier_name,
+        category,
+        scope_items,
+      })),
     );
-  }, [rfqPackage.id, rfqPackage.recipients]);
+  }, [rfqPackage.recipients]);
 
   function update(index: number, patch: Partial<SupplierRecipientCreate>) {
     setSuppliers((current) =>
@@ -626,19 +626,18 @@ function DocumentChecklistEditor({
   );
 
   useEffect(() => {
+    if (!rfqPackage.documents.length) return;
     setDocuments(
-      rfqPackage.documents.length
-        ? rfqPackage.documents.map(({ document_type, title, required, storage_uri, status, metadata }) => ({
-            document_type,
-            title,
-            required,
-            storage_uri,
-            status,
-            metadata,
-          }))
-        : defaultDocuments(),
+      rfqPackage.documents.map(({ document_type, title, required, storage_uri, status, metadata }) => ({
+        document_type,
+        title,
+        required,
+        storage_uri,
+        status,
+        metadata,
+      })),
     );
-  }, [rfqPackage.id, rfqPackage.documents]);
+  }, [rfqPackage.documents]);
 
   function update(index: number, patch: Partial<RFQPackageDocumentCreate>) {
     setDocuments((current) =>
