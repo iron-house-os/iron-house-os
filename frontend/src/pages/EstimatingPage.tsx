@@ -53,12 +53,20 @@ const moneyFormatter = new Intl.NumberFormat("en-CA", {
   maximumFractionDigits: 0,
 });
 
+type EstimatingLocationState = {
+  quoteLineItems?: EstimateLineItem[];
+};
+
 export function EstimatingPage() {
   const location = useLocation();
   const projectContext = readProjectContext(location.search);
+  const locationState = location.state as EstimatingLocationState | null;
+  const importedQuoteLineItems = locationState?.quoteLineItems ?? [];
   const [projectName, setProjectName] = useState(projectContext.projectName ?? "Marine Drive Parking Lot");
   const [projectCode, setProjectCode] = useState(projectContext.projectId ?? "WR26-012");
-  const [lineItems, setLineItems] = useState<EstimateLineItem[]>([defaultLineItem]);
+  const [lineItems, setLineItems] = useState<EstimateLineItem[]>(
+    () => importedQuoteLineItems.length ? importedQuoteLineItems : [defaultLineItem],
+  );
   const [contingency, setContingency] = useState(10);
   const [overhead, setOverhead] = useState(5);
   const [profit, setProfit] = useState(10);
@@ -144,7 +152,12 @@ export function EstimatingPage() {
   }
 
   function updateQuote(index: number, quote: VendorQuoteInput) {
-    updateLineItem(index, { vendor_quotes: quote.supplier || quote.scope || quote.amount ? [quote] : [] });
+    setLineItems((items) => items.map((item, currentIndex) => {
+      if (currentIndex !== index) return item;
+      const alternatives = item.vendor_quotes.slice(1);
+      const hasValue = Boolean(quote.supplier || quote.scope || quote.amount);
+      return { ...item, vendor_quotes: hasValue ? [quote, ...alternatives] : alternatives };
+    }));
   }
 
   function addLineItem() {
@@ -207,6 +220,11 @@ export function EstimatingPage() {
       </div>
 
       <ProjectScopeNotice name={projectContext.projectName} />
+      {importedQuoteLineItems.length ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          Loaded {importedQuoteLineItems.length} estimate line item{importedQuoteLineItems.length === 1 ? "" : "s"} from qualified supplier selections.
+        </div>
+      ) : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
       <form onSubmit={(event) => void calculateEstimate(event)} className="grid gap-6 xl:grid-cols-[1fr_380px]">
@@ -285,7 +303,16 @@ function LineItemCard({
   onQuoteUpdate: (index: number, quote: VendorQuoteInput) => void;
   onRemove: (index: number) => void;
 }) {
-  const quote = item.vendor_quotes[0] ?? { supplier: "", scope: item.description, amount: 0, is_selected: true, notes: "" };
+  const quote = item.vendor_quotes[0] ?? {
+    supplier: "",
+    scope: item.description,
+    amount: 0,
+    is_qualified: true,
+    qualification_notes: [],
+    is_selected: true,
+    selection_reason: "",
+    notes: "",
+  };
   const disposal: DisposalInput = item.disposal[0] ?? {
     material: "",
     quantity: 0,
@@ -324,20 +351,35 @@ function LineItemCard({
           <Trash2 className="h-4 w-4" /> Remove
         </button>
       </div>
-      <div className="mt-3 grid gap-3 rounded-md bg-iron-50 p-3 md:grid-cols-[1fr_1fr_140px_120px]">
+      <div className="mt-3 grid gap-3 rounded-md bg-iron-50 p-3 md:grid-cols-[1fr_1fr_140px_120px_120px]">
         <input aria-label={`Line item ${index + 1} quote supplier`} value={quote.supplier} onChange={(event) => onQuoteUpdate(index, { ...quote, supplier: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Vendor quote supplier" />
         <input aria-label={`Line item ${index + 1} quoted scope`} value={quote.scope} onChange={(event) => onQuoteUpdate(index, { ...quote, scope: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quoted scope" />
         <input aria-label={`Line item ${index + 1} quote amount`} type="number" value={quote.amount} onChange={(event) => onQuoteUpdate(index, { ...quote, amount: Number(event.target.value), is_selected: true })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quote total" />
         <label className="flex items-center gap-2 text-sm text-iron-700">
           <input type="checkbox" checked={quote.is_selected} onChange={(event) => onQuoteUpdate(index, { ...quote, is_selected: event.target.checked })} /> Selected
         </label>
+        <label className="flex items-center gap-2 text-sm text-iron-700">
+          <input type="checkbox" checked={quote.is_qualified !== false} onChange={(event) => onQuoteUpdate(index, { ...quote, is_qualified: event.target.checked })} /> Qualified
+        </label>
         <input
           aria-label={`Line item ${index + 1} quote notes`}
           value={quote.notes ?? ""}
           onChange={(event) => onQuoteUpdate(index, { ...quote, notes: event.target.value })}
-          className="rounded-md border border-iron-100 px-3 py-2 text-sm md:col-span-4"
-          placeholder="Quote notes or selection reason"
+          className="rounded-md border border-iron-100 px-3 py-2 text-sm md:col-span-5"
+          placeholder="Quote notes"
         />
+        <input
+          aria-label={`Line item ${index + 1} selection reason`}
+          value={quote.selection_reason ?? ""}
+          onChange={(event) => onQuoteUpdate(index, { ...quote, selection_reason: event.target.value })}
+          className="rounded-md border border-iron-100 px-3 py-2 text-sm md:col-span-5"
+          placeholder="Reason when selecting a non-low quote"
+        />
+        {item.vendor_quotes.length > 1 ? (
+          <p className="text-xs text-iron-500 md:col-span-5">
+            {item.vendor_quotes.length - 1} qualified alternative quote{item.vendor_quotes.length === 2 ? "" : "s"} retained for workbook comparison.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 rounded-md border border-iron-100 bg-white p-3 md:grid-cols-6">

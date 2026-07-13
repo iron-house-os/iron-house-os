@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.estimate import EstimateLineItem
+
 
 class QuoteStatus(StrEnum):
     requested = "requested"
@@ -35,6 +37,8 @@ class SupplierQuoteCreate(BaseModel):
     scope_type: QuoteScopeType = QuoteScopeType.material
     status: QuoteStatus = QuoteStatus.received
     amount: float = Field(default=0, ge=0)
+    is_qualified: bool = True
+    qualification_notes: list[str] = Field(default_factory=list)
     is_selected: bool = False
     selection_reason: str | None = None
     exclusions: list[str] = Field(default_factory=list)
@@ -49,6 +53,7 @@ class QuoteComparisonLine(BaseModel):
     line_item_code: str | None = None
     line_item_description: str
     scope: str
+    scope_type: QuoteScopeType
     lowest_supplier: str | None = None
     lowest_amount: float | None = None
     selected_supplier: str | None = None
@@ -56,6 +61,9 @@ class QuoteComparisonLine(BaseModel):
     selected_is_lowest: bool = True
     selection_reason: str | None = None
     quote_count: int
+    qualified_quote_count: int
+    ready_for_estimate: bool
+    blockers: list[str] = Field(default_factory=list)
 
 
 class QuoteComparisonRequest(BaseModel):
@@ -67,6 +75,36 @@ class QuoteComparisonResponse(BaseModel):
     total_lowest: float
     total_selected: float
     delta_from_lowest: float
+    ready_for_estimate: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
+class QuoteSelectionDecision(BaseModel):
+    line_item_code: str | None = None
+    line_item_description: str
+    scope: str
+    scope_type: QuoteScopeType
+    lowest_qualified_supplier: str | None = None
+    lowest_qualified_amount: float | None = None
+    selected_supplier: str | None = None
+    selected_amount: float | None = None
+    selected_is_lowest: bool = True
+    selection_reason: str | None = None
+    quote_count: int
+    qualified_quote_count: int
+    ready_for_estimate: bool
+    blockers: list[str] = Field(default_factory=list)
+
+
+class QuoteEstimateSelectionRequest(BaseModel):
+    quotes: list[SupplierQuoteCreate] = Field(default_factory=list)
+
+
+class QuoteEstimateSelectionResponse(BaseModel):
+    decisions: list[QuoteSelectionDecision]
+    line_items: list[EstimateLineItem]
+    ready_for_estimate: bool
+    blockers: list[str] = Field(default_factory=list)
 
 
 class QuoteEstimateImportRequest(BaseModel):

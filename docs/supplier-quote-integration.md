@@ -1,76 +1,34 @@
-# Supplier Quote Integration
+# Supplier Quote Integration (Build 203)
 
-## Purpose
+Build 203 connects supplier quote comparison to estimate line items and workbook export.
 
-Supplier quote integration connects RFQ responses to estimate line items so Iron House can compare pricing, select qualified suppliers, and preserve the reasoning when the lowest quote is not selected.
+## Selection policy
 
-## Backend Additions
+A quote is eligible to price an estimate only when it:
 
-New schemas:
+- is marked qualified;
+- has status `received` or `selected`; and
+- has an amount greater than zero.
 
-- `SupplierQuoteCreate`
-- `SupplierQuoteRead`
-- `QuoteComparisonRequest`
-- `QuoteComparisonResponse`
-- `QuoteComparisonLine`
+For each estimate line item, Iron House OS:
 
-New service:
+1. ignores superseded revisions of the same supplier quote line;
+2. automatically selects the lowest qualified quote when no supplier is manually selected;
+3. accepts exactly one manually selected qualified quote;
+4. requires a selection reason when the manual choice is above the lowest qualified amount; and
+5. blocks estimate handoff when the selection is ambiguous or incomplete.
 
-- `backend/app/services/quote_comparison.py`
+Unqualified, bounced, declined, rejected, requested, and zero-value quotes remain visible as source records but cannot set estimate pricing.
 
-New endpoint:
+## API and UI flow
 
-- `POST /api/v1/quotes/compare`
+- `POST /api/v1/quotes/compare` applies the shared policy and returns qualified counts, blockers, and readiness.
+- `POST /api/v1/quotes/estimate-selection` returns selection decisions plus ready-to-use `EstimateLineItem` records.
+- Quote Comparison exposes status, qualification, notes, manual selection, and selection reason.
+- **Use selected quotes in estimate** sends ready line items to the Estimating page and retains qualified alternatives.
+- Estimate calculation ignores unqualified quotes and falls back to the lowest qualified quote if a non-low choice has no reason.
+- The workbook Quote Comparison sheet records qualification, selection, selection reason, qualification notes, and quote notes.
 
-## Selection Rule
+## Queue boundary
 
-The comparison service groups quotes by line item and scope.
-
-Default behavior:
-
-1. Select the lowest quote if no quote is manually marked selected.
-2. Respect the manually selected quote when `is_selected` is true.
-3. Preserve `selection_reason` when the selected quote is not the lowest.
-4. Report the delta between lowest-total and selected-total.
-
-## Quote Fields
-
-Each quote can track:
-
-- RFQ ID
-- RFQ package ID
-- Supplier ID
-- Supplier name
-- Estimate line item code
-- Estimate line item description
-- Scope
-- Scope type
-- Status
-- Amount
-- Selected flag
-- Selection reason
-- Exclusions
-- Notes
-
-## Next Database Migration
-
-The existing `quotes` table is basic. A future Alembic migration should add:
-
-- `rfq_package_id UUID REFERENCES rfq_packages(id)`
-- `line_item_code VARCHAR(80)`
-- `line_item_description VARCHAR(255)`
-- `scope VARCHAR(255)`
-- `scope_type VARCHAR(80)`
-- `is_selected BOOLEAN NOT NULL DEFAULT FALSE`
-- `selection_reason TEXT`
-- `exclusions_json JSONB NOT NULL DEFAULT '[]'`
-- `metadata_json JSONB NOT NULL DEFAULT '{}'`
-
-## Estimating Integration
-
-Estimate line items already support `vendor_quotes` as input. The estimate engine uses:
-
-- manually selected quote when present
-- otherwise lowest quote
-
-This allows supplier responses to update estimate pricing without rewriting the estimate structure.
+This build consumes manually entered supplier quote records. Automated RFQ package creation, quote collection, and mailbox/Drive ingestion remain separate follow-on work.

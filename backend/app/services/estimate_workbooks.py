@@ -267,7 +267,17 @@ def _build_exclusions_sheet(workbook: Workbook, summary: EstimateSummary) -> Non
 def _build_quote_comparison_sheet(workbook: Workbook, payload: EstimateCreate) -> None:
     sheet = workbook.create_sheet("Quote Comparison")
     _title(sheet, "Supplier and Subcontractor Quote Comparison")
-    headers = ["Line Item", "Supplier", "Scope", "Amount", "Selected", "Notes"]
+    headers = [
+        "Line Item",
+        "Supplier",
+        "Scope",
+        "Amount",
+        "Qualified",
+        "Selected",
+        "Selection Reason",
+        "Qualification Notes",
+        "Notes",
+    ]
     _write_headers(sheet, headers, row=3)
     row_index = 4
     for item in payload.line_items:
@@ -280,18 +290,36 @@ def _build_quote_comparison_sheet(workbook: Workbook, payload: EstimateCreate) -
                     quote.supplier,
                     quote.scope,
                     quote.amount,
+                    "Yes" if quote.is_qualified else "No",
                     "Yes" if quote.is_selected else "No",
+                    quote.selection_reason or "",
+                    "; ".join(quote.qualification_notes),
                     quote.notes or "",
                 ],
             )
             sheet.cell(row=row_index, column=4).number_format = MONEY_FORMAT
             if quote.is_selected:
                 _fill_row(sheet, row_index, 1, len(headers), SUBTOTAL_FILL)
+            elif not quote.is_qualified:
+                _fill_row(sheet, row_index, 1, len(headers), WARNING_FILL)
             row_index += 1
     if row_index == 4:
         sheet.cell(row=4, column=1, value="No vendor quotes entered.")
     _apply_borders(sheet, 3, 1, max(4, row_index - 1), len(headers))
-    _set_widths(sheet, {"A": 34, "B": 26, "C": 34, "D": 16, "E": 12, "F": 42})
+    _set_widths(
+        sheet,
+        {
+            "A": 34,
+            "B": 26,
+            "C": 34,
+            "D": 16,
+            "E": 12,
+            "F": 12,
+            "G": 42,
+            "H": 42,
+            "I": 42,
+        },
+    )
 
 
 def _title(sheet: Worksheet, title: str) -> None:
