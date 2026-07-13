@@ -40,6 +40,15 @@ export type MaterialInput = {
   waste_percent: number;
 };
 
+export type DisposalInput = {
+  material: string;
+  quantity: number;
+  unit: EstimateUnit;
+  unit_cost: number;
+  haul_cost: number;
+  facility?: string | null;
+};
+
 export type VendorQuoteInput = {
   supplier: string;
   scope: string;
@@ -59,6 +68,7 @@ export type EstimateLineItem = {
   labour: LabourCrewMember[];
   equipment: EquipmentResource[];
   materials: MaterialInput[];
+  disposal: DisposalInput[];
   vendor_quotes: VendorQuoteInput[];
   direct_unit_cost?: number | null;
   notes?: string | null;

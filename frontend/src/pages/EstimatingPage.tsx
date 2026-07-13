@@ -4,8 +4,10 @@ import { useLocation } from "react-router-dom";
 
 import {
   DefaultProductionActivity,
+  DisposalInput,
   EstimateCreate,
   EstimateLineItem,
+  EstimateLineItemCost,
   EstimateSummary,
   EstimateUnit,
   ProductionRate,
@@ -25,6 +27,7 @@ const defaultLineItem: EstimateLineItem = {
   labour: [],
   equipment: [],
   materials: [],
+  disposal: [],
   vendor_quotes: [],
   direct_unit_cost: null,
 };
@@ -116,12 +119,19 @@ export function EstimatingPage() {
     void loadRates();
   }, []);
 
+  function hasValidProjectName() {
+    if (projectName.trim()) return true;
+    setError("Project name is required before calculating or exporting an estimate.");
+    return false;
+  }
+
   async function calculateEstimate(event?: FormEvent) {
     event?.preventDefault();
+    if (!hasValidProjectName()) return;
     setIsCalculating(true);
     setError(null);
     try {
-      setSummary(await estimatesApi.summary(payload));
+      setSummary(await estimatesApi.summary({ ...payload, project_name: projectName.trim() }));
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to calculate estimate");
     } finally {
@@ -157,6 +167,7 @@ export function EstimatingPage() {
 
   async function downloadWorkbook() {
     setError(null);
+    if (!hasValidProjectName()) return;
     try {
       const response = await fetch(estimatesApi.workbookUrl(), {
         method: "POST",
@@ -203,7 +214,7 @@ export function EstimatingPage() {
           <div className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-iron-950">Project</h2>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <Input label="Project name" value={projectName} onChange={setProjectName} />
+              <Input label="Project name" value={projectName} onChange={setProjectName} required />
               <Input label="Project code" value={projectCode} onChange={setProjectCode} />
             </div>
           </div>
@@ -224,6 +235,7 @@ export function EstimatingPage() {
                   key={`${item.code}-${index}`}
                   item={item}
                   index={index}
+                  result={summary?.line_items[index]}
                   rates={rateLibrary}
                   onUpdate={updateLineItem}
                   onQuoteUpdate={updateQuote}
@@ -259,6 +271,7 @@ export function EstimatingPage() {
 function LineItemCard({
   item,
   index,
+  result,
   rates,
   onUpdate,
   onQuoteUpdate,
@@ -266,44 +279,84 @@ function LineItemCard({
 }: {
   item: EstimateLineItem;
   index: number;
+  result?: EstimateLineItemCost;
   rates: ProductionRate[];
   onUpdate: (index: number, patch: Partial<EstimateLineItem>) => void;
   onQuoteUpdate: (index: number, quote: VendorQuoteInput) => void;
   onRemove: (index: number) => void;
 }) {
   const quote = item.vendor_quotes[0] ?? { supplier: "", scope: item.description, amount: 0, is_selected: true, notes: "" };
+  const disposal: DisposalInput = item.disposal[0] ?? {
+    material: "",
+    quantity: 0,
+    unit: "t",
+    unit_cost: 0,
+    haul_cost: 0,
+    facility: "",
+  };
+
+  function updateDisposal(next: DisposalInput) {
+    const hasValue = Boolean(next.material || next.facility || next.quantity || next.unit_cost || next.haul_cost);
+    onUpdate(index, { disposal: hasValue ? [next] : [] });
+  }
+
   return (
     <div className="rounded-lg border border-iron-100 p-4">
       <div className="grid gap-3 md:grid-cols-[120px_1fr_120px_120px]">
-        <input value={item.code ?? ""} onChange={(event) => onUpdate(index, { code: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Code" />
-        <input value={item.description} onChange={(event) => onUpdate(index, { description: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Description" />
-        <input type="number" value={item.quantity} onChange={(event) => onUpdate(index, { quantity: Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Qty" />
-        <select value={item.unit} onChange={(event) => onUpdate(index, { unit: event.target.value as EstimateUnit })} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
+        <input aria-label={`Line item ${index + 1} code`} value={item.code ?? ""} onChange={(event) => onUpdate(index, { code: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Code" />
+        <input aria-label={`Line item ${index + 1} description`} value={item.description} onChange={(event) => onUpdate(index, { description: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Description" />
+        <input aria-label={`Line item ${index + 1} quantity`} type="number" value={item.quantity} onChange={(event) => onUpdate(index, { quantity: Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Qty" />
+        <select aria-label={`Line item ${index + 1} unit`} value={item.unit} onChange={(event) => onUpdate(index, { unit: event.target.value as EstimateUnit })} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
           {(["LS", "EA", "m", "m2", "m3", "t", "hr", "day"] as EstimateUnit[]).map((unit) => (
             <option key={unit} value={unit}>{unit}</option>
           ))}
         </select>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-[1fr_160px_120px]">
-        <select value={item.default_activity ?? ""} onChange={(event) => onUpdate(index, { default_activity: event.target.value ? (event.target.value as DefaultProductionActivity) : null })} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
+        <select aria-label={`Line item ${index + 1} production activity`} value={item.default_activity ?? ""} onChange={(event) => onUpdate(index, { default_activity: event.target.value ? (event.target.value as DefaultProductionActivity) : null })} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
           <option value="">No activity default</option>
           {rates.map((rate) => (
             <option key={rate.activity} value={rate.activity}>{activityLabels[rate.activity]} — {rate.production_rate_per_hour}/hr</option>
           ))}
         </select>
-        <input type="number" value={item.direct_unit_cost ?? ""} onChange={(event) => onUpdate(index, { direct_unit_cost: event.target.value === "" ? null : Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Direct $/unit" />
+        <input aria-label={`Line item ${index + 1} direct unit cost`} type="number" value={item.direct_unit_cost ?? ""} onChange={(event) => onUpdate(index, { direct_unit_cost: event.target.value === "" ? null : Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Direct $/unit" />
         <button type="button" onClick={() => onRemove(index)} className="inline-flex items-center justify-center gap-2 rounded-md border border-iron-100 px-3 py-2 text-sm text-red-700">
           <Trash2 className="h-4 w-4" /> Remove
         </button>
       </div>
       <div className="mt-3 grid gap-3 rounded-md bg-iron-50 p-3 md:grid-cols-[1fr_1fr_140px_120px]">
-        <input value={quote.supplier} onChange={(event) => onQuoteUpdate(index, { ...quote, supplier: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Vendor quote supplier" />
-        <input value={quote.scope} onChange={(event) => onQuoteUpdate(index, { ...quote, scope: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quoted scope" />
-        <input type="number" value={quote.amount} onChange={(event) => onQuoteUpdate(index, { ...quote, amount: Number(event.target.value), is_selected: true })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quote total" />
+        <input aria-label={`Line item ${index + 1} quote supplier`} value={quote.supplier} onChange={(event) => onQuoteUpdate(index, { ...quote, supplier: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Vendor quote supplier" />
+        <input aria-label={`Line item ${index + 1} quoted scope`} value={quote.scope} onChange={(event) => onQuoteUpdate(index, { ...quote, scope: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quoted scope" />
+        <input aria-label={`Line item ${index + 1} quote amount`} type="number" value={quote.amount} onChange={(event) => onQuoteUpdate(index, { ...quote, amount: Number(event.target.value), is_selected: true })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quote total" />
         <label className="flex items-center gap-2 text-sm text-iron-700">
           <input type="checkbox" checked={quote.is_selected} onChange={(event) => onQuoteUpdate(index, { ...quote, is_selected: event.target.checked })} /> Selected
         </label>
+        <input
+          aria-label={`Line item ${index + 1} quote notes`}
+          value={quote.notes ?? ""}
+          onChange={(event) => onQuoteUpdate(index, { ...quote, notes: event.target.value })}
+          className="rounded-md border border-iron-100 px-3 py-2 text-sm md:col-span-4"
+          placeholder="Quote notes or selection reason"
+        />
       </div>
+
+      <div className="mt-3 grid gap-3 rounded-md border border-iron-100 bg-white p-3 md:grid-cols-6">
+        <input aria-label={`Line item ${index + 1} disposal material`} value={disposal.material} onChange={(event) => updateDisposal({ ...disposal, material: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Disposal material" />
+        <input aria-label={`Line item ${index + 1} disposal quantity`} type="number" value={disposal.quantity} onChange={(event) => updateDisposal({ ...disposal, quantity: Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Qty" />
+        <select aria-label={`Line item ${index + 1} disposal unit`} value={disposal.unit} onChange={(event) => updateDisposal({ ...disposal, unit: event.target.value as EstimateUnit })} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
+          {(["t", "m3", "EA", "LS"] as EstimateUnit[]).map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+        </select>
+        <input aria-label={`Line item ${index + 1} disposal unit cost`} type="number" value={disposal.unit_cost} onChange={(event) => updateDisposal({ ...disposal, unit_cost: Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Disposal $/unit" />
+        <input aria-label={`Line item ${index + 1} disposal haul cost`} type="number" value={disposal.haul_cost} onChange={(event) => updateDisposal({ ...disposal, haul_cost: Number(event.target.value) })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Haul $/unit" />
+        <input aria-label={`Line item ${index + 1} disposal facility`} value={disposal.facility ?? ""} onChange={(event) => updateDisposal({ ...disposal, facility: event.target.value })} className="rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Facility" />
+      </div>
+
+      {result ? (
+        <div data-testid={`line-item-result-${index}`} className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm text-white">
+          <span>Calculated: {moneyFormatter.format(result.direct_cost)} · {moneyFormatter.format(result.unit_cost)}/{result.unit}</span>
+          <span>{result.selected_quote_supplier ? `Selected supplier: ${result.selected_quote_supplier}` : "No supplier quote selected"}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -347,11 +400,21 @@ function SummaryPanel({ summary, isBusy }: { summary: EstimateSummary | null; is
   );
 }
 
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function Input({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
   return (
     <label className="space-y-1 text-sm font-medium text-iron-700">
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+      <input required={required} value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
     </label>
   );
 }

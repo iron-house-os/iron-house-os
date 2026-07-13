@@ -50,8 +50,8 @@ describe("ProjectWorkspacePage", () => {
     renderWorkspace("/projects");
 
     expect(await screen.findByText(project.name)).toBeInTheDocument();
-    expect(screen.getByText("RFQ Progress")).toBeInTheDocument();
-    expect(screen.getByText("Document Count")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Ready" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Docs" })).toBeInTheDocument();
     expect(await screen.findByText("80%")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
   });

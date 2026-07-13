@@ -1,58 +1,38 @@
 # Estimate UI Integration
 
-## Current State
+## Status
 
-The frontend already has an Estimating page wired into the app route at `/estimating`.
+The Estimating page at `/estimating` is connected to the backend estimate engine and workbook export.
 
-Existing capabilities:
+Completed capabilities:
 
-- Loads production rate library from `GET /api/v1/estimates/rate-library`
-- Builds an estimate payload
-- Calculates estimate summary through `POST /api/v1/estimates/summary`
-- Downloads estimate workbook through `POST /api/v1/estimates/workbook`
-- Supports project name and code
-- Supports line item quantity, unit, direct unit cost, and default production activity
-- Supports mobilization, risk allowance, contingency, overhead, profit, bonding, and insurance
-- Displays final bid summary and gross margin
+- Loads production activity defaults from `GET /api/v1/estimates/rate-library`
+- Calculates estimates through `POST /api/v1/estimates/summary`
+- Downloads formatted workbooks through `POST /api/v1/estimates/workbook`
+- Supports project name and code with required-name validation
+- Supports line item quantity, unit, direct unit cost, and production activity defaults
+- Supports line-item disposal material, quantity, unit, disposal cost, haul cost, and facility
+- Supports a selected vendor quote with supplier, scope, amount, selected flag, and notes
+- Supports mobilization, disposal allowance, risk amount, risk probability, contingency, overhead, profit, bonding, and insurance
+- Displays bid totals, gross margin, category breakdown, per-line calculated cost, unit cost, and selected supplier
+- Blocks calculation and workbook export when the project name is empty
 
-## Next UI Improvements
+## Validation
 
-Add the remaining estimate engine fields to the Estimating page:
+The frontend test command runs the real Vitest suite:
 
-1. Disposal inputs
-   - Material
-   - Quantity
-   - Unit
-   - Disposal unit cost
-   - Haul cost
-   - Facility
+```bash
+cd frontend
+npm test
+```
 
-2. Vendor quote inputs
-   - Supplier
-   - Scope
-   - Amount
-   - Selected quote flag
-   - Notes
+`EstimatingPage.test.tsx` verifies:
 
-3. Risk probability
-   - Allow risk amount and probability to calculate expected risk value
+- production defaults load from the API
+- line item, disposal, quote, risk, and markup data reach the summary endpoint
+- the returned bid summary and selected supplier render
+- missing project names block summary and workbook requests
 
-4. Category breakdown display
-   - Labour
-   - Equipment
-   - Material
-   - Disposal
-   - Subcontract
-   - Indirect
-   - Risk
+## Next Queue Boundary
 
-5. Validation and UX
-   - Prevent workbook download when project name is empty
-   - Show selected quote supplier beside line item result
-   - Add clear note when the lowest quote is not selected
-
-## Implementation Notes
-
-Frontend estimate API types should include `DisposalInput` and `EstimateLineItem.disposal` so the UI matches the backend schema.
-
-Backend workbook export is already available at `/api/v1/estimates/workbook`.
+Multiple supplier quotes, qualified-low selection, and non-low selection reasons remain part of the separate supplier quote integration task in issue #1.
