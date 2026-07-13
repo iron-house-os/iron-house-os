@@ -4,6 +4,7 @@ from app.schemas.estimate import (
     DefaultProductionActivity,
     EquipmentResource,
     EstimateCategoryBreakdown,
+    EstimateItemType,
     EstimateCreate,
     EstimateLineItem,
     EstimateLineItemCost,
@@ -287,8 +288,13 @@ def calculate_line_item(item: EstimateLineItem) -> EstimateLineItemCost:
         for disposal in item.disposal
     )
     selected_quote = _selected_vendor_quote(item)
-    subcontract_cost = selected_quote.amount if selected_quote else 0
-    if not selected_quote and item.subcontract:
+    subcontract_cost = 0
+    if selected_quote:
+        if item.item_type == EstimateItemType.material:
+            material_cost += selected_quote.amount
+        else:
+            subcontract_cost = selected_quote.amount
+    elif item.subcontract:
         subcontract_cost = item.subcontract.quoted_amount
     explicit_direct_cost = (
         item.direct_unit_cost * item.quantity if item.direct_unit_cost is not None else 0
