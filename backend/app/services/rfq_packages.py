@@ -144,6 +144,11 @@ def select_rfq_package_suppliers(
 
     metadata = _metadata(rfq_package)
     metadata["supplier_scopes"] = scopes
+    metadata["supplier_contacts"] = {
+        item.supplier_id: {"recipient_email": str(item.recipient_email)}
+        for item in payload
+        if item.recipient_email
+    }
     metadata["supplier_status_notes"] = {
         item.supplier_id: existing_notes[item.supplier_id]
         for item in payload
@@ -351,6 +356,7 @@ def build_rfq_supplier_packages(
                 quote_return_deadline=rfq_package.due_at,
                 category=recipient.category or "Supplier pricing",
                 supplier_name=recipient.supplier_name,
+                recipient_email=recipient.recipient_email,
                 scope_items=recipient.scope_items,
                 attachment_names=attachment_names,
             )
@@ -361,6 +367,7 @@ def build_rfq_supplier_packages(
                 supplier_id=recipient.supplier_id,
                 supplier_name=recipient.supplier_name,
                 category=recipient.category,
+                recipient_email=recipient.recipient_email,
                 status=recipient.status,
                 subject=draft.subject,
                 body=draft.body,
@@ -412,6 +419,17 @@ def _status_note_for(rfq_package: RFQPackage, supplier_id: str) -> str | None:
         return None
     note = notes.get(supplier_id)
     return str(note) if note else None
+
+
+def _recipient_email_for(rfq_package: RFQPackage, supplier_id: str) -> str | None:
+    contacts = _metadata(rfq_package).get("supplier_contacts") or {}
+    if not isinstance(contacts, dict):
+        return None
+    contact = contacts.get(supplier_id)
+    if not isinstance(contact, dict):
+        return None
+    recipient_email = contact.get("recipient_email")
+    return str(recipient_email) if recipient_email else None
 
 
 def _clean_scope_items(items: object) -> list[str]:
@@ -479,6 +497,7 @@ def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
                 supplier_id=recipient.supplier_id,
                 supplier_name=recipient.supplier_name,
                 category=recipient.category,
+                recipient_email=_recipient_email_for(rfq_package, recipient.supplier_id),
                 status=_recipient_status(recipient.status),
                 scope_items=_scope_for(rfq_package, recipient.supplier_id)[0],
                 scope_summary=_scope_for(rfq_package, recipient.supplier_id)[1],
