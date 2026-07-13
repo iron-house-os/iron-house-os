@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -57,3 +59,70 @@ class DrawingSetAnalysisResponse(BaseModel):
     municipality_hints: list[str]
     warnings: list[str]
     sheets: list[DrawingSheetAnalysis]
+
+
+DrawingExtractionStatus = Literal["completed", "partial", "ocr_required", "failed"]
+DrawingIssueSeverity = Literal["info", "warning", "critical"]
+DrawingIssueType = Literal["constructability", "municipal_standard"]
+QuantityConfidence = Literal["low", "medium", "high"]
+
+
+class DrawingPageExtraction(BaseModel):
+    page_number: int
+    character_count: int
+    text_preview: str | None = None
+    extraction_warning: str | None = None
+
+
+class DrawingQuantityCandidate(BaseModel):
+    description: str
+    quantity: float
+    unit: str
+    page_number: int
+    source_text: str
+    confidence: QuantityConfidence
+    requires_verification: Literal[True] = True
+
+
+class DrawingIssue(BaseModel):
+    issue_type: DrawingIssueType
+    severity: DrawingIssueSeverity
+    title: str
+    detail: str
+    page_number: int | None = None
+    evidence: str | None = None
+    requires_review: Literal[True] = True
+
+
+class DrawingAnalysisSource(BaseModel):
+    document_id: UUID
+    project_id: UUID
+    storage_uri: str
+    original_filename: str
+    sha256_hash: str
+    size_bytes: int
+    page_count: int
+
+
+class CivilDrawingAnalysis(BaseModel):
+    analysis_version: Literal["build-206-v1"] = "build-206-v1"
+    source: DrawingAnalysisSource
+    title: str
+    municipality: str | None = None
+    extraction_status: DrawingExtractionStatus
+    analyzed_at: datetime
+    text_character_count: int
+    pages: list[DrawingPageExtraction] = Field(default_factory=list)
+    quantity_candidates: list[DrawingQuantityCandidate] = Field(default_factory=list)
+    constructability_issues: list[DrawingIssue] = Field(default_factory=list)
+    municipal_standard_issues: list[DrawingIssue] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class CivilDrawingAnalysisList(BaseModel):
+    items: list[CivilDrawingAnalysis] = Field(default_factory=list)
+    total: int
+
+
+class CivilDrawingReanalyzeRequest(BaseModel):
+    municipality: str | None = None
