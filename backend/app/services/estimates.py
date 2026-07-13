@@ -345,12 +345,29 @@ def _calculate_hours(item: EstimateLineItem) -> float:
 
 
 def _selected_vendor_quote(item: EstimateLineItem):
-    selected_quotes = [quote for quote in item.vendor_quotes if quote.is_selected]
-    if selected_quotes:
-        return min(selected_quotes, key=lambda quote: quote.amount)
-    if item.vendor_quotes:
-        return min(item.vendor_quotes, key=lambda quote: quote.amount)
-    return None
+    qualified_quotes = [
+        quote
+        for quote in item.vendor_quotes
+        if quote.is_qualified and quote.amount > 0
+    ]
+    if not qualified_quotes:
+        return None
+
+    lowest_quote = min(
+        qualified_quotes,
+        key=lambda quote: (quote.amount, quote.supplier.casefold()),
+    )
+    selected_quotes = [quote for quote in qualified_quotes if quote.is_selected]
+    if len(selected_quotes) != 1:
+        return lowest_quote
+
+    selected_quote = selected_quotes[0]
+    has_selection_reason = bool(
+        selected_quote.selection_reason and selected_quote.selection_reason.strip()
+    )
+    if selected_quote.amount > lowest_quote.amount and not has_selection_reason:
+        return lowest_quote
+    return selected_quote
 
 
 def _expected_risk_amount(amount: float, probability: float | None) -> float:
