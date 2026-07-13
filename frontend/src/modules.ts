@@ -85,8 +85,8 @@ export const modules: AppModule[] = [
     label: "Drawing Intelligence",
     path: "/drawing-intelligence",
     icon: FileSearch,
-    description: "Classify drawing sheets, detect revisions, scales, disciplines, municipalities, and drawing-set warnings.",
-    status: "Build 24 active",
+    description: "Ingest civil PDFs, surface traceable quantity candidates, and flag constructability or municipal review items.",
+    status: "Build 206 active",
   },
   {
     label: "Quantity Takeoff Engine",
