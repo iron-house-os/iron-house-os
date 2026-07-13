@@ -14,12 +14,15 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   RFQPackage,
   RFQPackageBuildResponse,
+  RFQCommunicationWorkflow,
   RFQPackageCreatePayload,
   RFQPackageDocumentCreate,
   RFQPackageDocumentStatus,
   RFQPackageStatus,
   RFQReadiness,
   RFQRecipientStatus,
+  RFQWorkflowPreparePayload,
+  SupplierResponseCreatePayload,
   SupplierRecipientCreate,
   rfqPackagesApi,
 } from "../api/rfqPackages";
@@ -34,6 +37,7 @@ function blankSupplier(): SupplierRecipientCreate {
     supplier_id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     supplier_name: "",
     category: "",
+    recipient_email: "",
     scope_items: [],
   };
 }
@@ -76,6 +80,7 @@ export function RFQBuilderPage() {
   const [selectedPackage, setSelectedPackage] = useState<RFQPackage | null>(null);
   const [readiness, setReadiness] = useState<RFQReadiness | null>(null);
   const [buildResult, setBuildResult] = useState<RFQPackageBuildResponse | null>(null);
+  const [workflow, setWorkflow] = useState<RFQCommunicationWorkflow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,15 +92,18 @@ export function RFQBuilderPage() {
       const list = await rfqPackagesApi.list();
       setPackages(list.items);
       if (rfqPackageId) {
-        const [detail, readinessPayload] = await Promise.all([
+        const [detail, readinessPayload, workflowPayload] = await Promise.all([
           rfqPackagesApi.detail(rfqPackageId),
           rfqPackagesApi.readiness(rfqPackageId),
+          rfqPackagesApi.communicationWorkflow(rfqPackageId),
         ]);
         setSelectedPackage(detail);
         setReadiness(readinessPayload);
+        setWorkflow(workflowPayload);
       } else {
         setSelectedPackage(null);
         setReadiness(null);
+        setWorkflow(null);
       }
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load RFQs");
@@ -152,6 +160,22 @@ export function RFQBuilderPage() {
     }
   }
 
+  async function mutateWorkflow(
+    action: () => Promise<RFQCommunicationWorkflow>,
+    refreshPackage = false,
+  ) {
+    setIsMutating(true);
+    setError(null);
+    try {
+      setWorkflow(await action());
+      if (refreshPackage) await refresh();
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update communication workflow");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -198,6 +222,7 @@ export function RFQBuilderPage() {
             rfqPackage={selectedPackage}
             readiness={readiness}
             buildResult={buildResult}
+            workflow={workflow}
             isBusy={isMutating}
             onStatusChange={(status) =>
               void mutate(() => rfqPackagesApi.updateStatus(selectedPackage.id, status))
@@ -222,6 +247,17 @@ export function RFQBuilderPage() {
               )
             }
             onBuild={() => void buildPackages()}
+            onPrepareWorkflow={(payload) =>
+              void mutateWorkflow(() =>
+                rfqPackagesApi.prepareCommunicationWorkflow(selectedPackage.id, payload),
+              )
+            }
+            onRecordResponse={(payload) =>
+              void mutateWorkflow(
+                () => rfqPackagesApi.recordSupplierResponse(selectedPackage.id, payload),
+                true,
+              )
+            }
           />
         ) : (
           <div className="rounded-md border border-iron-100 bg-white p-6">
@@ -369,6 +405,7 @@ function RFQPackageDetail({
   rfqPackage,
   readiness,
   buildResult,
+  workflow,
   isBusy,
   onStatusChange,
   onSaveSuppliers,
@@ -376,10 +413,13 @@ function RFQPackageDetail({
   onSaveDocuments,
   onRecipientStatus,
   onBuild,
+  onPrepareWorkflow,
+  onRecordResponse,
 }: {
   rfqPackage: RFQPackage;
   readiness: RFQReadiness | null;
   buildResult: RFQPackageBuildResponse | null;
+  workflow: RFQCommunicationWorkflow | null;
   isBusy: boolean;
   onStatusChange: (status: RFQPackageStatus) => void;
   onSaveSuppliers: (suppliers: SupplierRecipientCreate[]) => void;
@@ -387,6 +427,8 @@ function RFQPackageDetail({
   onSaveDocuments: (documents: RFQPackageDocumentCreate[]) => void;
   onRecipientStatus: (recipientId: string, status: RFQRecipientStatus, note: string) => void;
   onBuild: () => void;
+  onPrepareWorkflow: (payload: RFQWorkflowPreparePayload) => void;
+  onRecordResponse: (payload: SupplierResponseCreatePayload) => void;
 }) {
   const statusOptions: RFQPackageStatus[] = ["draft", "assembling", "ready", "issued", "closed"];
 
@@ -447,6 +489,13 @@ function RFQPackageDetail({
         isBusy={isBusy}
         onBuild={onBuild}
       />
+      <CommunicationWorkflowPanel
+        rfqPackage={rfqPackage}
+        workflow={workflow}
+        isBusy={isBusy}
+        onPrepare={onPrepareWorkflow}
+        onRecordResponse={onRecordResponse}
+      />
     </div>
   );
 }
@@ -497,10 +546,11 @@ function SupplierScopeEditor({
 }) {
   const [suppliers, setSuppliers] = useState<SupplierRecipientCreate[]>(() =>
     rfqPackage.recipients.length
-      ? rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
+      ? rfqPackage.recipients.map(({ supplier_id, supplier_name, category, recipient_email, scope_items }) => ({
           supplier_id,
           supplier_name,
           category,
+          recipient_email,
           scope_items,
         }))
       : [blankSupplier()],
@@ -509,10 +559,11 @@ function SupplierScopeEditor({
   useEffect(() => {
     if (!rfqPackage.recipients.length) return;
     setSuppliers(
-      rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
+      rfqPackage.recipients.map(({ supplier_id, supplier_name, category, recipient_email, scope_items }) => ({
         supplier_id,
         supplier_name,
         category,
+        recipient_email,
         scope_items,
       })),
     );
@@ -534,6 +585,7 @@ function SupplierScopeEditor({
           ...supplier,
           supplier_name: supplier.supplier_name.trim(),
           category: supplier.category?.trim() || null,
+          recipient_email: supplier.recipient_email?.trim() || null,
           scope_items: supplier.scope_items.map((item) => item.trim()).filter(Boolean),
         })),
     );
@@ -562,7 +614,7 @@ function SupplierScopeEditor({
       <div className="mt-4 space-y-4">
         {suppliers.map((supplier, index) => (
           <div key={supplier.supplier_id} className="rounded-md border border-iron-100 p-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px_100px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_220px_260px_100px]">
               <input
                 aria-label={`Supplier ${index + 1} name`}
                 value={supplier.supplier_name}
@@ -576,6 +628,14 @@ function SupplierScopeEditor({
                 onChange={(event) => update(index, { category: event.target.value })}
                 className="rounded-md border border-iron-100 px-3 py-2 text-sm"
                 placeholder="pipe, aggregates, traffic..."
+              />
+              <input
+                aria-label={`Supplier ${index + 1} email`}
+                type="email"
+                value={supplier.recipient_email ?? ""}
+                onChange={(event) => update(index, { recipient_email: event.target.value })}
+                className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+                placeholder="estimating@supplier.example"
               />
               <button
                 type="button"
@@ -867,6 +927,194 @@ function RFQDraftPackages({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function CommunicationWorkflowPanel({
+  rfqPackage,
+  workflow,
+  isBusy,
+  onPrepare,
+  onRecordResponse,
+}: {
+  rfqPackage: RFQPackage;
+  workflow: RFQCommunicationWorkflow | null;
+  isBusy: boolean;
+  onPrepare: (payload: RFQWorkflowPreparePayload) => void;
+  onRecordResponse: (payload: SupplierResponseCreatePayload) => void;
+}) {
+  const [driveFolderUri, setDriveFolderUri] = useState(
+    workflow?.drive_package?.folder_uri ?? "",
+  );
+  const [driveManifestUri, setDriveManifestUri] = useState(
+    workflow?.drive_package?.manifest_uri ?? "",
+  );
+  const [senderName, setSenderName] = useState("Iron House");
+  const [senderEmail, setSenderEmail] = useState("");
+  const [senderPhone, setSenderPhone] = useState("");
+  const [supplierId, setSupplierId] = useState(
+    rfqPackage.recipients[0]?.supplier_id ?? "",
+  );
+  const [gmailThreadUri, setGmailThreadUri] = useState("");
+  const [driveFileUri, setDriveFileUri] = useState("");
+  const [responseNotes, setResponseNotes] = useState("");
+
+  useEffect(() => {
+    if (workflow?.drive_package) {
+      setDriveFolderUri(workflow.drive_package.folder_uri);
+      setDriveManifestUri(workflow.drive_package.manifest_uri ?? "");
+    }
+  }, [workflow?.drive_package]);
+
+  useEffect(() => {
+    if (!rfqPackage.recipients.some((recipient) => recipient.supplier_id === supplierId)) {
+      setSupplierId(rfqPackage.recipients[0]?.supplier_id ?? "");
+    }
+  }, [rfqPackage.recipients, supplierId]);
+
+  function prepare(event: FormEvent) {
+    event.preventDefault();
+    onPrepare({
+      drive_folder_uri: driveFolderUri.trim(),
+      drive_manifest_uri: driveManifestUri.trim() || undefined,
+      sender_name: senderName.trim() || "Iron House",
+      sender_email: senderEmail.trim() || undefined,
+      sender_phone: senderPhone.trim() || undefined,
+    });
+  }
+
+  function recordResponse(event: FormEvent) {
+    event.preventDefault();
+    if (!supplierId) return;
+    onRecordResponse({
+      supplier_id: supplierId,
+      gmail_thread_uri: gmailThreadUri.trim() || undefined,
+      drive_file_uri: driveFileUri.trim() || undefined,
+      notes: responseNotes.trim() || undefined,
+    });
+    setGmailThreadUri("");
+    setDriveFileUri("");
+    setResponseNotes("");
+  }
+
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <div>
+        <h2 className="text-base font-semibold text-iron-950">Gmail + Drive workflow plan</h2>
+        <p className="mt-1 text-sm leading-6 text-iron-500">
+          Save a reusable Drive manifest and review Gmail-ready drafts. This screen records references only and performs no Google action.
+        </p>
+      </div>
+
+      <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        Preview-only: no Gmail draft, email send, Drive folder, or Drive file is created here. Sending always requires separate approval.
+      </div>
+
+      <form onSubmit={prepare} className="mt-4 space-y-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Drive package folder reference">
+            <input
+              aria-label="Drive package folder reference"
+              required
+              value={driveFolderUri}
+              onChange={(event) => setDriveFolderUri(event.target.value)}
+              className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="drive://projects/project-id/rfqs/package-id"
+            />
+          </Field>
+          <Field label="Drive manifest reference">
+            <input
+              aria-label="Drive manifest reference"
+              value={driveManifestUri}
+              onChange={(event) => setDriveManifestUri(event.target.value)}
+              className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="Optional manifest URL or document ID"
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Field label="Sender name">
+            <input aria-label="Workflow sender name" value={senderName} onChange={(event) => setSenderName(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+          </Field>
+          <Field label="Sender email">
+            <input aria-label="Workflow sender email" type="email" value={senderEmail} onChange={(event) => setSenderEmail(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+          </Field>
+          <Field label="Sender phone">
+            <input aria-label="Workflow sender phone" value={senderPhone} onChange={(event) => setSenderPhone(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+          </Field>
+        </div>
+        <button type="submit" disabled={isBusy} className="rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-iron-300">
+          Save reusable draft workflow
+        </button>
+      </form>
+
+      {workflow?.prepared_at ? (
+        <div className="mt-5 space-y-3">
+          <div className={`rounded-md border p-3 text-sm ${workflow.stale ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+            {workflow.stale
+              ? "Saved workflow is stale because RFQ recipients, scopes, or attachments changed. Rebuild it before creating drafts."
+              : "Preview-only workflow saved. No Gmail or Drive action was performed."}
+          </div>
+          {workflow.blockers.length ? (
+            <ul className="list-disc space-y-1 pl-5 text-sm text-amber-900">
+              {workflow.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+            </ul>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            {workflow.gmail_drafts.map((draft) => (
+              <div key={draft.recipient_id} className="rounded-md border border-iron-100 p-3">
+                <div className="text-sm font-semibold text-iron-950">{draft.supplier_name}</div>
+                <div className="mt-1 text-xs text-iron-500">To: {draft.to ?? "Recipient email missing"}</div>
+                <div className="mt-2 text-xs font-medium text-iron-800">{draft.subject}</div>
+                <div className="mt-2 text-xs text-iron-500">
+                  {draft.ready_for_draft_creation ? "Ready for separately approved draft creation" : "Blocked"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-6 border-t border-iron-100 pt-5">
+        <h3 className="text-sm font-semibold text-iron-950">Record supplier response</h3>
+        <p className="mt-1 text-xs leading-5 text-iron-500">
+          Register an existing Gmail thread or Drive file and mark the supplier replied. This does not read or move either item.
+        </p>
+        <form onSubmit={recordResponse} className="mt-3 grid gap-3 md:grid-cols-2">
+          <Field label="Supplier">
+            <select aria-label="Response supplier" required value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm">
+              <option value="">Select supplier</option>
+              {rfqPackage.recipients.map((recipient) => (
+                <option key={recipient.supplier_id} value={recipient.supplier_id}>{recipient.supplier_name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Gmail thread reference">
+            <input aria-label="Gmail thread reference" value={gmailThreadUri} onChange={(event) => setGmailThreadUri(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="gmail://threads/..." />
+          </Field>
+          <Field label="Drive response file reference">
+            <input aria-label="Drive response file reference" value={driveFileUri} onChange={(event) => setDriveFileUri(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="drive://projects/.../response.pdf" />
+          </Field>
+          <Field label="Response notes">
+            <input aria-label="Response notes" value={responseNotes} onChange={(event) => setResponseNotes(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Quote received and saved" />
+          </Field>
+          <button type="submit" disabled={isBusy || !supplierId || (!gmailThreadUri.trim() && !driveFileUri.trim())} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold disabled:text-iron-300 md:col-span-2 md:justify-self-start">
+            Record response reference
+          </button>
+        </form>
+
+        {workflow?.supplier_responses.length ? (
+          <div className="mt-4 space-y-2">
+            {workflow.supplier_responses.map((response) => (
+              <div key={response.id} className="rounded-md border border-iron-100 p-3 text-sm">
+                <span className="font-semibold text-iron-950">{response.supplier_name}</span>
+                <span className="ml-2 text-iron-500">{response.notes ?? "Response recorded"}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
