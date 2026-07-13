@@ -53,7 +53,10 @@ export type VendorQuoteInput = {
   supplier: string;
   scope: string;
   amount: number;
+  is_qualified?: boolean;
+  qualification_notes?: string[];
   is_selected: boolean;
+  selection_reason?: string | null;
   notes?: string | null;
 };
 
