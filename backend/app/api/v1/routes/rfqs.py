@@ -19,7 +19,12 @@ from app.schemas.rfq_package import (
     SupplierRecipientCreate,
     SupplierRecipientStatusUpdate,
 )
-from app.services import rfq_drafts, rfq_packages
+from app.schemas.rfq_workflow import (
+    RFQCommunicationWorkflow,
+    RFQWorkflowPrepareRequest,
+    SupplierResponseCreate,
+)
+from app.services import rfq_drafts, rfq_packages, rfq_workflows
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -138,3 +143,43 @@ def build_rfq_supplier_packages(
     db: DBSession,
 ) -> RFQPackageBuildResponse:
     return rfq_packages.build_rfq_supplier_packages(db, rfq_package_id)
+
+
+@router.get(
+    "/{rfq_package_id}/communication-workflow",
+    response_model=RFQCommunicationWorkflow,
+)
+def read_rfq_communication_workflow(
+    rfq_package_id: UUID,
+    db: DBSession,
+) -> RFQCommunicationWorkflow:
+    return rfq_workflows.get_rfq_communication_workflow(db, rfq_package_id)
+
+
+@router.post(
+    "/{rfq_package_id}/communication-workflow/prepare",
+    response_model=RFQCommunicationWorkflow,
+)
+def prepare_rfq_communication_workflow(
+    rfq_package_id: UUID,
+    payload: RFQWorkflowPrepareRequest,
+    db: DBSession,
+) -> RFQCommunicationWorkflow:
+    return rfq_workflows.prepare_rfq_communication_workflow(
+        db,
+        rfq_package_id,
+        payload,
+    )
+
+
+@router.post(
+    "/{rfq_package_id}/supplier-responses",
+    response_model=RFQCommunicationWorkflow,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_supplier_response(
+    rfq_package_id: UUID,
+    payload: SupplierResponseCreate,
+    db: DBSession,
+) -> RFQCommunicationWorkflow:
+    return rfq_workflows.record_supplier_response(db, rfq_package_id, payload)
