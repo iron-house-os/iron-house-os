@@ -13,15 +13,36 @@ class RFQPackageStatus(StrEnum):
     closed = "closed"
 
 
+class RFQRecipientStatus(StrEnum):
+    pending = "pending"
+    sent = "sent"
+    replied = "replied"
+    bounced = "bounced"
+
+
+class RFQPackageDocumentStatus(StrEnum):
+    pending = "pending"
+    attached = "attached"
+    not_applicable = "not_applicable"
+
+
 class SupplierRecipientCreate(BaseModel):
     supplier_id: str = Field(min_length=1)
     supplier_name: str = Field(min_length=1)
     category: str | None = None
+    scope_items: list[str] = Field(default_factory=list)
 
 
 class SupplierRecipientRead(SupplierRecipientCreate):
     id: UUID
-    status: str
+    status: RFQRecipientStatus
+    scope_summary: str | None = None
+    status_note: str | None = None
+
+
+class SupplierRecipientStatusUpdate(BaseModel):
+    status: RFQRecipientStatus
+    note: str | None = None
 
 
 class RFQPackageDocumentCreate(BaseModel):
@@ -29,12 +50,17 @@ class RFQPackageDocumentCreate(BaseModel):
     title: str = Field(min_length=1)
     required: bool = True
     storage_uri: str | None = None
+    status: RFQPackageDocumentStatus = RFQPackageDocumentStatus.pending
     metadata: dict = Field(default_factory=dict)
 
 
 class RFQPackageDocumentRead(RFQPackageDocumentCreate):
     id: UUID
-    status: str
+
+
+class RFQPackageDocumentStatusUpdate(BaseModel):
+    status: RFQPackageDocumentStatus
+    storage_uri: str | None = None
 
 
 class RFQPackageCreate(BaseModel):
@@ -85,3 +111,26 @@ class RFQPackageReadiness(BaseModel):
     ready: bool
     score: int
     items: list[RFQReadinessItem]
+
+
+class RFQScopeGenerationRequest(BaseModel):
+    force: bool = False
+
+
+class SupplierRFQPackageDraft(BaseModel):
+    recipient_id: UUID
+    supplier_id: str
+    supplier_name: str
+    category: str | None = None
+    status: RFQRecipientStatus
+    subject: str
+    body: str
+    scope_items: list[str]
+    attachment_names: list[str]
+
+
+class RFQPackageBuildResponse(BaseModel):
+    rfq_package_id: UUID
+    ready: bool
+    blockers: list[str] = Field(default_factory=list)
+    packages: list[SupplierRFQPackageDraft] = Field(default_factory=list)

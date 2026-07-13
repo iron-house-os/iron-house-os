@@ -1,52 +1,83 @@
-import { CheckCircle2, Circle, FilePlus2, Plus, RefreshCw, Send, Users } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  CheckCircle2,
+  Circle,
+  FilePlus2,
+  PackageCheck,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users,
+} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import {
   RFQPackage,
+  RFQPackageBuildResponse,
   RFQPackageCreatePayload,
+  RFQPackageDocumentCreate,
+  RFQPackageDocumentStatus,
   RFQPackageStatus,
   RFQReadiness,
+  RFQRecipientStatus,
+  SupplierRecipientCreate,
   rfqPackagesApi,
 } from "../api/rfqPackages";
+import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
+import { readProjectContext } from "../utils/projectContext";
 
-const sampleSuppliers = [
-  { supplier_id: "supplier-001", supplier_name: "Pacific Pipe Supply", category: "pipe" },
-  { supplier_id: "supplier-002", supplier_name: "Fraser Valley Aggregates", category: "aggregates" },
-  { supplier_id: "supplier-003", supplier_name: "Coastal Traffic Control", category: "traffic" },
-];
+const recipientStatuses: RFQRecipientStatus[] = ["pending", "sent", "replied", "bounced"];
+const documentStatuses: RFQPackageDocumentStatus[] = ["pending", "attached", "not_applicable"];
 
-const sampleDocuments = [
-  {
-    document_type: "drawing",
-    title: "Civil drawings",
-    required: true,
-    storage_uri: null,
-    metadata: { source: "manual registration" },
-  },
-  {
-    document_type: "specification",
-    title: "Project specifications",
-    required: true,
-    storage_uri: null,
-    metadata: { source: "manual registration" },
-  },
-  {
-    document_type: "addenda",
-    title: "Addenda log",
-    required: false,
-    storage_uri: null,
-    metadata: { source: "manual registration" },
-  },
-];
+function blankSupplier(): SupplierRecipientCreate {
+  return {
+    supplier_id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    supplier_name: "",
+    category: "",
+    scope_items: [],
+  };
+}
+
+function defaultDocuments(): RFQPackageDocumentCreate[] {
+  return [
+    {
+      document_type: "drawing",
+      title: "Civil drawings",
+      required: true,
+      storage_uri: "",
+      status: "pending",
+      metadata: {},
+    },
+    {
+      document_type: "specification",
+      title: "Project specifications",
+      required: true,
+      storage_uri: "",
+      status: "pending",
+      metadata: {},
+    },
+    {
+      document_type: "addenda",
+      title: "Current addenda",
+      required: false,
+      storage_uri: "",
+      status: "pending",
+      metadata: {},
+    },
+  ];
+}
 
 export function RFQBuilderPage() {
   const { rfqPackageId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const projectContext = readProjectContext(location.search);
   const [packages, setPackages] = useState<RFQPackage[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<RFQPackage | null>(null);
   const [readiness, setReadiness] = useState<RFQReadiness | null>(null);
+  const [buildResult, setBuildResult] = useState<RFQPackageBuildResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -74,32 +105,51 @@ export function RFQBuilderPage() {
   }, [rfqPackageId]);
 
   useEffect(() => {
-    // This effect synchronizes the page with the backend when the selected RFQ changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
   async function createPackage(payload: RFQPackageCreatePayload) {
-    const created = await rfqPackagesApi.create(payload);
-    navigate(`/rfq-builder/${created.id}`);
+    setIsMutating(true);
+    setError(null);
+    try {
+      const created = await rfqPackagesApi.create(payload);
+      navigate({
+        pathname: `/rfq-builder/${created.id}`,
+        search: location.search,
+      });
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to create RFQ package");
+    } finally {
+      setIsMutating(false);
+    }
   }
 
-  async function updateStatus(status: RFQPackageStatus) {
-    if (!selectedPackage) return;
-    await rfqPackagesApi.updateStatus(selectedPackage.id, status);
-    await refresh();
+  async function mutate(action: () => Promise<RFQPackage>) {
+    setIsMutating(true);
+    setError(null);
+    try {
+      const updated = await action();
+      setSelectedPackage(updated);
+      setBuildResult(null);
+      await refresh();
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update RFQ package");
+    } finally {
+      setIsMutating(false);
+    }
   }
 
-  async function selectSuppliers() {
+  async function buildPackages() {
     if (!selectedPackage) return;
-    await rfqPackagesApi.selectSuppliers(selectedPackage.id, sampleSuppliers);
-    await refresh();
-  }
-
-  async function registerDocuments() {
-    if (!selectedPackage) return;
-    await rfqPackagesApi.registerDocuments(selectedPackage.id, sampleDocuments);
-    await refresh();
+    setIsMutating(true);
+    setError(null);
+    try {
+      setBuildResult(await rfqPackagesApi.build(selectedPackage.id));
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to build RFQ drafts");
+    } finally {
+      setIsMutating(false);
+    }
   }
 
   return (
@@ -108,8 +158,7 @@ export function RFQBuilderPage() {
         <div>
           <h1 className="text-3xl font-semibold text-iron-950">RFQ Package Builder</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Create supplier RFQ packages, select recipients, register required bid documents, and
-            review package readiness before future issue automation is added.
+            Build supplier-specific RFQ scopes, confirm drawing and document attachments, preview draft packages, and manually track delivery responses.
           </p>
         </div>
         <button
@@ -122,29 +171,63 @@ export function RFQBuilderPage() {
         </button>
       </div>
 
+      <ProjectScopeNotice name={projectContext.projectName} />
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        Draft-only workflow: building or changing tracking status does not send email or contact suppliers.
+      </div>
       {error ? <StatusNotice tone="error" message={error} /> : null}
       {isLoading ? <StatusNotice tone="neutral" message="Loading RFQ packages..." /> : null}
 
       <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
         <div className="space-y-6">
-          <CreateRFQPackageForm onSubmit={(payload) => void createPackage(payload)} />
-          <RFQPackageList packages={packages} selectedId={rfqPackageId} />
+          <CreateRFQPackageForm
+            defaultProjectName={projectContext.projectName ?? ""}
+            isBusy={isMutating}
+            onSubmit={(payload) => void createPackage(payload)}
+          />
+          <RFQPackageList
+            packages={packages}
+            selectedId={rfqPackageId}
+            search={location.search}
+          />
         </div>
 
         {selectedPackage ? (
           <RFQPackageDetail
+            key={selectedPackage.id}
             rfqPackage={selectedPackage}
             readiness={readiness}
-            onStatusChange={(status) => void updateStatus(status)}
-            onSelectSuppliers={() => void selectSuppliers()}
-            onRegisterDocuments={() => void registerDocuments()}
+            buildResult={buildResult}
+            isBusy={isMutating}
+            onStatusChange={(status) =>
+              void mutate(() => rfqPackagesApi.updateStatus(selectedPackage.id, status))
+            }
+            onSaveSuppliers={(suppliers) =>
+              void mutate(() => rfqPackagesApi.selectSuppliers(selectedPackage.id, suppliers))
+            }
+            onGenerateScopes={() =>
+              void mutate(() => rfqPackagesApi.generateScopes(selectedPackage.id))
+            }
+            onSaveDocuments={(documents) =>
+              void mutate(() => rfqPackagesApi.registerDocuments(selectedPackage.id, documents))
+            }
+            onRecipientStatus={(recipientId, status, note) =>
+              void mutate(() =>
+                rfqPackagesApi.updateRecipientStatus(
+                  selectedPackage.id,
+                  recipientId,
+                  status,
+                  note,
+                ),
+              )
+            }
+            onBuild={() => void buildPackages()}
           />
         ) : (
           <div className="rounded-md border border-iron-100 bg-white p-6">
             <h2 className="text-base font-semibold text-iron-950">No RFQ selected</h2>
             <p className="mt-2 text-sm leading-6 text-iron-500">
-              Create a package or select one from the list to review recipients, documents, and
-              readiness.
+              Create a package or select one to edit supplier scopes, attachments, and tracking.
             </p>
           </div>
         )}
@@ -154,29 +237,34 @@ export function RFQBuilderPage() {
 }
 
 function CreateRFQPackageForm({
+  defaultProjectName,
+  isBusy,
   onSubmit,
 }: {
+  defaultProjectName: string;
+  isBusy: boolean;
   onSubmit: (payload: RFQPackageCreatePayload) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [projectName, setProjectName] = useState("");
+  const [projectName, setProjectName] = useState(defaultProjectName);
   const [scopeSummary, setScopeSummary] = useState("");
+  const [dueAt, setDueAt] = useState("");
   const [supplierTargets, setSupplierTargets] = useState("pipe, aggregates, traffic");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !scopeSummary.trim()) return;
     onSubmit({
       title: title.trim(),
       project_name: projectName.trim() || undefined,
-      scope_summary: scopeSummary.trim() || undefined,
+      scope_summary: scopeSummary.trim(),
+      due_at: dueAt ? new Date(dueAt).toISOString() : undefined,
       supplier_category_targets: supplierTargets
         .split(",")
         .map((target) => target.trim())
         .filter(Boolean),
     });
     setTitle("");
-    setProjectName("");
     setScopeSummary("");
   }
 
@@ -189,6 +277,7 @@ function CreateRFQPackageForm({
       <div className="space-y-4">
         <Field label="Package title">
           <input
+            required
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -200,18 +289,26 @@ function CreateRFQPackageForm({
             value={projectName}
             onChange={(event) => setProjectName(event.target.value)}
             className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
-            placeholder="King George utility upgrade"
           />
         </Field>
-        <Field label="Scope summary">
+        <Field label="Package scope">
           <textarea
+            required
             value={scopeSummary}
             onChange={(event) => setScopeSummary(event.target.value)}
             className="min-h-24 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
-            placeholder="Summarize the quote request scope."
+            placeholder="Define the overall supplier pricing scope."
           />
         </Field>
-        <Field label="Supplier category targeting">
+        <Field label="Quote return deadline">
+          <input
+            type="datetime-local"
+            value={dueAt}
+            onChange={(event) => setDueAt(event.target.value)}
+            className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Supplier category targets">
           <input
             value={supplierTargets}
             onChange={(event) => setSupplierTargets(event.target.value)}
@@ -221,10 +318,11 @@ function CreateRFQPackageForm({
       </div>
       <button
         type="submit"
-        className="mt-5 inline-flex items-center gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm font-semibold text-white"
+        disabled={isBusy}
+        className="mt-5 inline-flex items-center gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-iron-300"
       >
         <Plus className="h-4 w-4" />
-        Create
+        Create package
       </button>
     </form>
   );
@@ -233,9 +331,11 @@ function CreateRFQPackageForm({
 function RFQPackageList({
   packages,
   selectedId,
+  search,
 }: {
   packages: RFQPackage[];
   selectedId: string | undefined;
+  search: string;
 }) {
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
@@ -247,7 +347,7 @@ function RFQPackageList({
           packages.map((rfqPackage) => (
             <Link
               key={rfqPackage.id}
-              to={`/rfq-builder/${rfqPackage.id}`}
+              to={{ pathname: `/rfq-builder/${rfqPackage.id}`, search }}
               className={[
                 "block rounded-md border px-3 py-3 text-sm transition",
                 selectedId === rfqPackage.id
@@ -268,21 +368,27 @@ function RFQPackageList({
 function RFQPackageDetail({
   rfqPackage,
   readiness,
+  buildResult,
+  isBusy,
   onStatusChange,
-  onSelectSuppliers,
-  onRegisterDocuments,
+  onSaveSuppliers,
+  onGenerateScopes,
+  onSaveDocuments,
+  onRecipientStatus,
+  onBuild,
 }: {
   rfqPackage: RFQPackage;
   readiness: RFQReadiness | null;
+  buildResult: RFQPackageBuildResponse | null;
+  isBusy: boolean;
   onStatusChange: (status: RFQPackageStatus) => void;
-  onSelectSuppliers: () => void;
-  onRegisterDocuments: () => void;
+  onSaveSuppliers: (suppliers: SupplierRecipientCreate[]) => void;
+  onGenerateScopes: () => void;
+  onSaveDocuments: (documents: RFQPackageDocumentCreate[]) => void;
+  onRecipientStatus: (recipientId: string, status: RFQRecipientStatus, note: string) => void;
+  onBuild: () => void;
 }) {
   const statusOptions: RFQPackageStatus[] = ["draft", "assembling", "ready", "issued", "closed"];
-  const categoryTargets = useMemo(
-    () => rfqPackage.supplier_category_targets.join(", ") || "No targets set",
-    [rfqPackage.supplier_category_targets],
-  );
 
   return (
     <div className="space-y-6">
@@ -295,28 +401,52 @@ function RFQPackageDetail({
               {rfqPackage.scope_summary ?? "No scope summary yet."}
             </p>
           </div>
-          <select
-            value={rfqPackage.status}
-            onChange={(event) => onStatusChange(event.target.value as RFQPackageStatus)}
-            className="rounded-md border border-iron-100 bg-white px-3 py-2 text-sm"
-          >
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-iron-500">
+            Package status
+            <select
+              value={rfqPackage.status}
+              onChange={(event) => onStatusChange(event.target.value as RFQPackageStatus)}
+              className="rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-normal normal-case text-iron-800"
+            >
+              {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
         </div>
         <dl className="mt-5 grid gap-4 md:grid-cols-3">
           <InfoTile label="Project" value={rfqPackage.project_name ?? "Unassigned"} />
-          <InfoTile label="Category targets" value={categoryTargets} />
-          <InfoTile label="Status" value={rfqPackage.status} />
+          <InfoTile
+            label="Category targets"
+            value={rfqPackage.supplier_category_targets.join(", ") || "No targets set"}
+          />
+          <InfoTile
+            label="Quote return"
+            value={rfqPackage.due_at ? new Date(rfqPackage.due_at).toLocaleString("en-CA") : "Not set"}
+          />
         </dl>
       </div>
 
       <ReadinessPanel readiness={readiness} />
-      <SupplierSelectionTable rfqPackage={rfqPackage} onSelectSuppliers={onSelectSuppliers} />
-      <DocumentChecklistTable rfqPackage={rfqPackage} onRegisterDocuments={onRegisterDocuments} />
+      <SupplierScopeEditor
+        rfqPackage={rfqPackage}
+        isBusy={isBusy}
+        onSave={onSaveSuppliers}
+        onGenerate={onGenerateScopes}
+      />
+      <DocumentChecklistEditor
+        rfqPackage={rfqPackage}
+        isBusy={isBusy}
+        onSave={onSaveDocuments}
+      />
+      <RecipientTracking
+        rfqPackage={rfqPackage}
+        isBusy={isBusy}
+        onUpdate={onRecipientStatus}
+      />
+      <RFQDraftPackages
+        result={buildResult}
+        isBusy={isBusy}
+        onBuild={onBuild}
+      />
     </div>
   );
 }
@@ -328,14 +458,14 @@ function ReadinessPanel({ readiness }: { readiness: RFQReadiness | null }) {
         <div>
           <h2 className="text-base font-semibold text-iron-950">Package Readiness</h2>
           <p className="mt-1 text-sm text-iron-500">
-            Summary payload for deciding whether the package is ready to issue later.
+            All four checks must pass before the draft package is ready for manual issue.
           </p>
         </div>
         <div className="rounded-md bg-iron-950 px-3 py-2 text-sm font-semibold text-white">
           {readiness?.score ?? 0}%
         </div>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {readiness?.items.map((item) => (
           <div key={item.key} className="rounded-md border border-iron-100 p-3">
             <div className="flex items-center gap-2 text-sm font-medium text-iron-950">
@@ -354,121 +484,389 @@ function ReadinessPanel({ readiness }: { readiness: RFQReadiness | null }) {
   );
 }
 
-function SupplierSelectionTable({
+function SupplierScopeEditor({
   rfqPackage,
-  onSelectSuppliers,
+  isBusy,
+  onSave,
+  onGenerate,
 }: {
   rfqPackage: RFQPackage;
-  onSelectSuppliers: () => void;
+  isBusy: boolean;
+  onSave: (suppliers: SupplierRecipientCreate[]) => void;
+  onGenerate: () => void;
 }) {
-  const rows = rfqPackage.recipients.length > 0 ? rfqPackage.recipients : sampleSuppliers;
-
-  return (
-    <DataPanel
-      icon={<Users className="h-4 w-4" />}
-      title="Supplier Selection"
-      actionLabel="Use Placeholder Selection"
-      onAction={onSelectSuppliers}
-    >
-      <Table
-        headers={["Supplier", "Category", "Status"]}
-        rows={rows.map((row) => [
-          row.supplier_name,
-          row.category ?? "Uncategorized",
-          "status" in row ? row.status : "candidate",
-        ])}
-      />
-    </DataPanel>
+  const [suppliers, setSuppliers] = useState<SupplierRecipientCreate[]>(() =>
+    rfqPackage.recipients.length
+      ? rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
+          supplier_id,
+          supplier_name,
+          category,
+          scope_items,
+        }))
+      : [blankSupplier()],
   );
-}
 
-function DocumentChecklistTable({
-  rfqPackage,
-  onRegisterDocuments,
-}: {
-  rfqPackage: RFQPackage;
-  onRegisterDocuments: () => void;
-}) {
-  const rows = rfqPackage.documents.length > 0 ? rfqPackage.documents : sampleDocuments;
+  useEffect(() => {
+    if (!rfqPackage.recipients.length) return;
+    setSuppliers(
+      rfqPackage.recipients.map(({ supplier_id, supplier_name, category, scope_items }) => ({
+        supplier_id,
+        supplier_name,
+        category,
+        scope_items,
+      })),
+    );
+  }, [rfqPackage.recipients]);
 
-  return (
-    <DataPanel
-      icon={<Send className="h-4 w-4" />}
-      title="Document Checklist"
-      actionLabel="Register Placeholder Documents"
-      onAction={onRegisterDocuments}
-    >
-      <Table
-        headers={["Document", "Type", "Required", "Status"]}
-        rows={rows.map((row) => [
-          row.title,
-          row.document_type,
-          row.required ? "Required" : "Optional",
-          "status" in row ? row.status : "pending",
-        ])}
-      />
-    </DataPanel>
-  );
-}
+  function update(index: number, patch: Partial<SupplierRecipientCreate>) {
+    setSuppliers((current) =>
+      current.map((supplier, supplierIndex) =>
+        supplierIndex === index ? { ...supplier, ...patch } : supplier,
+      ),
+    );
+  }
 
-function DataPanel({
-  icon,
-  title,
-  actionLabel,
-  onAction,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  actionLabel: string;
-  onAction: () => void;
-  children: React.ReactNode;
-}) {
+  function save() {
+    onSave(
+      suppliers
+        .filter((supplier) => supplier.supplier_name.trim())
+        .map((supplier) => ({
+          ...supplier,
+          supplier_name: supplier.supplier_name.trim(),
+          category: supplier.category?.trim() || null,
+          scope_items: supplier.scope_items.map((item) => item.trim()).filter(Boolean),
+        })),
+    );
+  }
+
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 text-base font-semibold text-iron-950">
-          {icon}
-          {title}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4" />
+          <div>
+            <h2 className="text-base font-semibold text-iron-950">Supplier-specific scopes</h2>
+            <p className="text-sm text-iron-500">Leave scope blank to generate civil defaults from the supplier category.</p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={onAction}
-          className="rounded-md border border-iron-100 px-3 py-2 text-xs font-semibold text-iron-800"
-        >
-          {actionLabel}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" disabled={isBusy || !rfqPackage.recipients.length} onClick={onGenerate} className="rounded-md border border-iron-100 px-3 py-2 text-xs font-semibold disabled:text-iron-300">
+            Generate missing scopes
+          </button>
+          <button type="button" onClick={() => setSuppliers((current) => [...current, blankSupplier()])} className="inline-flex items-center gap-1 rounded-md border border-iron-100 px-3 py-2 text-xs font-semibold">
+            <Plus className="h-3 w-3" /> Add supplier
+          </button>
+        </div>
       </div>
-      {children}
+
+      <div className="mt-4 space-y-4">
+        {suppliers.map((supplier, index) => (
+          <div key={supplier.supplier_id} className="rounded-md border border-iron-100 p-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_220px_100px]">
+              <input
+                aria-label={`Supplier ${index + 1} name`}
+                value={supplier.supplier_name}
+                onChange={(event) => update(index, { supplier_name: event.target.value })}
+                className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+                placeholder="Supplier name"
+              />
+              <input
+                aria-label={`Supplier ${index + 1} category`}
+                value={supplier.category ?? ""}
+                onChange={(event) => update(index, { category: event.target.value })}
+                className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+                placeholder="pipe, aggregates, traffic..."
+              />
+              <button
+                type="button"
+                disabled={suppliers.length <= 1}
+                onClick={() => setSuppliers((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                className="inline-flex items-center justify-center gap-1 text-sm text-red-700 disabled:text-iron-300"
+              >
+                <Trash2 className="h-4 w-4" /> Remove
+              </button>
+            </div>
+            <textarea
+              aria-label={`Supplier ${index + 1} scope items`}
+              value={supplier.scope_items.join("\n")}
+              onChange={(event) => update(index, { scope_items: event.target.value.split("\n") })}
+              className="mt-3 min-h-28 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="One supplier-specific scope item per line"
+            />
+          </div>
+        ))}
+      </div>
+      <button type="button" disabled={isBusy} onClick={save} className="mt-4 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-iron-300">
+        Save suppliers and scopes
+      </button>
     </div>
   );
 }
 
-function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
+function DocumentChecklistEditor({
+  rfqPackage,
+  isBusy,
+  onSave,
+}: {
+  rfqPackage: RFQPackage;
+  isBusy: boolean;
+  onSave: (documents: RFQPackageDocumentCreate[]) => void;
+}) {
+  const [documents, setDocuments] = useState<RFQPackageDocumentCreate[]>(() =>
+    rfqPackage.documents.length
+      ? rfqPackage.documents.map(({ document_type, title, required, storage_uri, status, metadata }) => ({
+          document_type,
+          title,
+          required,
+          storage_uri,
+          status,
+          metadata,
+        }))
+      : defaultDocuments(),
+  );
+
+  useEffect(() => {
+    if (!rfqPackage.documents.length) return;
+    setDocuments(
+      rfqPackage.documents.map(({ document_type, title, required, storage_uri, status, metadata }) => ({
+        document_type,
+        title,
+        required,
+        storage_uri,
+        status,
+        metadata,
+      })),
+    );
+  }, [rfqPackage.documents]);
+
+  function update(index: number, patch: Partial<RFQPackageDocumentCreate>) {
+    setDocuments((current) =>
+      current.map((document, documentIndex) =>
+        documentIndex === index ? { ...document, ...patch } : document,
+      ),
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
-            {headers.map((header) => (
-              <th key={header} className="py-2 pr-4 font-semibold">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.join("-")} className="border-b border-iron-100 last:border-b-0">
-              {row.map((cell) => (
-                <td key={cell} className="py-3 pr-4 text-iron-800">
-                  {cell}
-                </td>
-              ))}
-            </tr>
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-iron-950">Drawing and document checklist</h2>
+          <p className="mt-1 text-sm text-iron-500">Attached items require a Drive, document, or storage reference.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            setDocuments((current) => [
+              ...current,
+              {
+                document_type: "other",
+                title: "",
+                required: false,
+                storage_uri: "",
+                status: "pending",
+                metadata: {},
+              },
+            ])
+          }
+          className="inline-flex items-center gap-1 rounded-md border border-iron-100 px-3 py-2 text-xs font-semibold"
+        >
+          <Plus className="h-3 w-3" /> Add document
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {documents.map((document, index) => (
+          <div key={index} className="grid gap-3 rounded-md border border-iron-100 p-3 md:grid-cols-[1fr_150px_140px_1fr_90px]">
+            <input
+              aria-label={`Document ${index + 1} title`}
+              value={document.title}
+              onChange={(event) => update(index, { title: event.target.value })}
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="Document title"
+            />
+            <input
+              aria-label={`Document ${index + 1} type`}
+              value={document.document_type}
+              onChange={(event) => update(index, { document_type: event.target.value })}
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="drawing"
+            />
+            <select
+              aria-label={`Document ${index + 1} status`}
+              value={document.status}
+              onChange={(event) => update(index, { status: event.target.value as RFQPackageDocumentStatus })}
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+            >
+              {documentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+            <input
+              aria-label={`Document ${index + 1} attachment reference`}
+              required={document.status === "attached"}
+              value={document.storage_uri ?? ""}
+              onChange={(event) => update(index, { storage_uri: event.target.value })}
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="Drive URL or document reference"
+            />
+            <label className="flex items-center gap-2 text-sm text-iron-700">
+              <input
+                aria-label={`Document ${index + 1} required`}
+                type="checkbox"
+                checked={document.required}
+                onChange={(event) => update(index, { required: event.target.checked })}
+              />
+              Required
+            </label>
+            <button
+              type="button"
+              disabled={documents.length <= 1}
+              onClick={() => setDocuments((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+              className="inline-flex items-center gap-1 text-xs text-red-700 md:col-span-5"
+            >
+              <Trash2 className="h-3 w-3" /> Remove document
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        disabled={isBusy}
+        onClick={() => onSave(documents.filter((document) => document.title.trim()))}
+        className="mt-4 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-iron-300"
+      >
+        Save attachment checklist
+      </button>
+    </div>
+  );
+}
+
+function RecipientTracking({
+  rfqPackage,
+  isBusy,
+  onUpdate,
+}: {
+  rfqPackage: RFQPackage;
+  isBusy: boolean;
+  onUpdate: (recipientId: string, status: RFQRecipientStatus, note: string) => void;
+}) {
+  const [statuses, setStatuses] = useState<Record<string, RFQRecipientStatus>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setStatuses(Object.fromEntries(rfqPackage.recipients.map((item) => [item.id, item.status])));
+    setNotes(Object.fromEntries(rfqPackage.recipients.map((item) => [item.id, item.status_note ?? ""])));
+  }, [rfqPackage.id, rfqPackage.recipients]);
+
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <h2 className="text-base font-semibold text-iron-950">Supplier delivery tracking</h2>
+      <p className="mt-1 text-sm text-iron-500">Manual status log only; no supplier message is sent from this screen.</p>
+      <div className="mt-4 space-y-3">
+        {rfqPackage.recipients.length ? rfqPackage.recipients.map((recipient) => (
+          <div key={recipient.id} className="grid gap-3 rounded-md border border-iron-100 p-3 md:grid-cols-[1fr_150px_1fr_110px]">
+            <div>
+              <div className="text-sm font-semibold text-iron-950">{recipient.supplier_name}</div>
+              <div className="text-xs text-iron-500">{recipient.category ?? "Uncategorized"}</div>
+            </div>
+            <select
+              aria-label={`${recipient.supplier_name} tracking status`}
+              value={statuses[recipient.id] ?? recipient.status}
+              onChange={(event) =>
+                setStatuses((current) => ({
+                  ...current,
+                  [recipient.id]: event.target.value as RFQRecipientStatus,
+                }))
+              }
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+            >
+              {recipientStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+            <input
+              aria-label={`${recipient.supplier_name} tracking note`}
+              value={notes[recipient.id] ?? ""}
+              onChange={(event) =>
+                setNotes((current) => ({ ...current, [recipient.id]: event.target.value }))
+              }
+              className="rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="Manual tracking note"
+            />
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() =>
+                onUpdate(
+                  recipient.id,
+                  statuses[recipient.id] ?? recipient.status,
+                  notes[recipient.id] ?? "",
+                )
+              }
+              className="rounded-md border border-iron-100 px-3 py-2 text-xs font-semibold disabled:text-iron-300"
+            >
+              Save status
+            </button>
+          </div>
+        )) : <p className="text-sm text-iron-500">Save supplier recipients to begin tracking.</p>}
+      </div>
+    </div>
+  );
+}
+
+function RFQDraftPackages({
+  result,
+  isBusy,
+  onBuild,
+}: {
+  result: RFQPackageBuildResponse | null;
+  isBusy: boolean;
+  onBuild: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-iron-950">Supplier draft packages</h2>
+          <p className="mt-1 text-sm text-iron-500">Generate individualized subjects, scope bodies, and attachment lists for review.</p>
+        </div>
+        <button
+          type="button"
+          disabled={isBusy}
+          onClick={onBuild}
+          className="inline-flex items-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-iron-300"
+        >
+          <PackageCheck className="h-4 w-4" /> Build draft packages
+        </button>
+      </div>
+
+      {result ? (
+        <div className="mt-4 space-y-4">
+          {result.ready ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Package is ready for manual review and issue.
+            </div>
+          ) : (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="font-semibold">Drafts generated with readiness blockers</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {result.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+              </ul>
+            </div>
+          )}
+          {result.packages.map((draft) => (
+            <details key={draft.recipient_id} className="rounded-md border border-iron-100 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-iron-950">
+                {draft.supplier_name} — {draft.subject}
+              </summary>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <InfoTile label="Tracking status" value={draft.status} />
+                <InfoTile label="Attachments" value={draft.attachment_names.join(", ") || "None"} />
+              </div>
+              <pre className="mt-3 whitespace-pre-wrap rounded-md bg-iron-50 p-4 text-xs leading-5 text-iron-800">
+                {draft.body}
+              </pre>
+            </details>
           ))}
-        </tbody>
-      </table>
+        </div>
+      ) : null}
     </div>
   );
 }
