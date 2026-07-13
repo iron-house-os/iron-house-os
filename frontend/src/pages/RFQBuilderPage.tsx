@@ -128,7 +128,8 @@ export function RFQBuilderPage() {
     setIsMutating(true);
     setError(null);
     try {
-      await action();
+      const updated = await action();
+      setSelectedPackage(updated);
       setBuildResult(null);
       await refresh();
     } catch (currentError) {
