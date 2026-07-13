@@ -235,7 +235,9 @@ describe("EstimatingPage", () => {
     await user.click(screen.getByRole("button", { name: /Calculate/i }));
 
     await waitFor(() => expect(summaryPayloads).toHaveLength(1));
-    const submitted = summaryPayloads[0];
+    const submitted = summaryPayloads[0] as {
+      line_items: Array<{ vendor_quotes: unknown[] }>;
+    };
     expect(submitted.line_items[0].vendor_quotes).toEqual([
       expect.objectContaining({
         supplier: "Preferred Supplier",
