@@ -7,13 +7,17 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.rfq_draft import RFQDraftRequest, RFQDraftResponse
 from app.schemas.rfq_package import (
+    RFQPackageBuildResponse,
     RFQPackageCreate,
     RFQPackageDocumentCreate,
+    RFQPackageDocumentStatusUpdate,
     RFQPackageList,
     RFQPackageRead,
     RFQPackageReadiness,
     RFQPackageUpdateStatus,
+    RFQScopeGenerationRequest,
     SupplierRecipientCreate,
+    SupplierRecipientStatusUpdate,
 )
 from app.services import rfq_drafts, rfq_packages
 
@@ -66,6 +70,33 @@ def select_rfq_package_suppliers(
     return rfq_packages.select_rfq_package_suppliers(db, rfq_package_id, payload)
 
 
+@router.post("/{rfq_package_id}/supplier-scopes", response_model=RFQPackageRead)
+def generate_rfq_supplier_scopes(
+    rfq_package_id: UUID,
+    payload: RFQScopeGenerationRequest,
+    db: DBSession,
+) -> RFQPackageRead:
+    return rfq_packages.generate_rfq_supplier_scopes(db, rfq_package_id, payload)
+
+
+@router.patch(
+    "/{rfq_package_id}/suppliers/{recipient_id}/status",
+    response_model=RFQPackageRead,
+)
+def update_rfq_recipient_status(
+    rfq_package_id: UUID,
+    recipient_id: UUID,
+    payload: SupplierRecipientStatusUpdate,
+    db: DBSession,
+) -> RFQPackageRead:
+    return rfq_packages.update_rfq_recipient_status(
+        db,
+        rfq_package_id,
+        recipient_id,
+        payload,
+    )
+
+
 @router.put("/{rfq_package_id}/documents", response_model=RFQPackageRead)
 def register_rfq_package_documents(
     rfq_package_id: UUID,
@@ -75,9 +106,35 @@ def register_rfq_package_documents(
     return rfq_packages.register_rfq_package_documents(db, rfq_package_id, payload)
 
 
+@router.patch(
+    "/{rfq_package_id}/documents/{document_id}/status",
+    response_model=RFQPackageRead,
+)
+def update_rfq_document_status(
+    rfq_package_id: UUID,
+    document_id: UUID,
+    payload: RFQPackageDocumentStatusUpdate,
+    db: DBSession,
+) -> RFQPackageRead:
+    return rfq_packages.update_rfq_document_status(
+        db,
+        rfq_package_id,
+        document_id,
+        payload,
+    )
+
+
 @router.get("/{rfq_package_id}/readiness", response_model=RFQPackageReadiness)
 def read_rfq_package_readiness(
     rfq_package_id: UUID,
     db: DBSession,
 ) -> RFQPackageReadiness:
     return rfq_packages.get_rfq_package_readiness(db, rfq_package_id)
+
+
+@router.post("/{rfq_package_id}/build", response_model=RFQPackageBuildResponse)
+def build_rfq_supplier_packages(
+    rfq_package_id: UUID,
+    db: DBSession,
+) -> RFQPackageBuildResponse:
+    return rfq_packages.build_rfq_supplier_packages(db, rfq_package_id)
