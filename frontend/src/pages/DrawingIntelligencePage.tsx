@@ -1,71 +1,87 @@
-import { FileSearch, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FileSearch, RefreshCw, UploadCloud } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
-  DrawingSetAnalysisResponse,
-  DrawingSheetInput,
+  CivilDrawingAnalysis,
+  DrawingIssue,
   drawingIntelligenceApi,
 } from "../api/drawingIntelligence";
-
-function blankSheet(): DrawingSheetInput {
-  return {
-    sheet_number: "C-001",
-    title: "Civil Cover Sheet",
-    filename: "C-001 Civil Cover Sheet Rev A.pdf",
-    revision: "",
-    scale: "",
-    raw_text: "City of Surrey civil drawings issued for tender revision A",
-  };
-}
+import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
+import { readProjectContext } from "../utils/projectContext";
 
 export function DrawingIntelligencePage() {
-  const [projectName, setProjectName] = useState("Iron House Tender Review");
+  const location = useLocation();
+  const projectContext = readProjectContext(location.search);
+  const [projectId, setProjectId] = useState(projectContext.projectId ?? "");
+  const [title, setTitle] = useState("");
   const [municipality, setMunicipality] = useState("");
-  const [sheets, setSheets] = useState<DrawingSheetInput[]>([
-    blankSheet(),
-    {
-      sheet_number: "C-101",
-      title: "Roadworks and Utility Plan",
-      filename: "C-101 Roadworks Utility Plan.pdf",
-      scale: "1:250",
-      raw_text: "storm sanitary watermain roadworks utility plan 1:250",
-    },
-    {
-      sheet_number: "C-201",
-      title: "Plan and Profile",
-      filename: "C-201 Plan and Profile.pdf",
-      raw_text: "plan and profile sanitary storm watermain",
-    },
-  ]);
-  const [result, setResult] = useState<DrawingSetAnalysisResponse | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [analyses, setAnalyses] = useState<CivilDrawingAnalysis[]>([]);
+  const [result, setResult] = useState<CivilDrawingAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function analyze(event: FormEvent<HTMLFormElement>) {
+  const loadProjectAnalyses = useCallback(async () => {
+    if (!projectId.trim()) {
+      setAnalyses([]);
+      return;
+    }
+    setError(null);
+    try {
+      const payload = await drawingIntelligenceApi.projectAnalyses(projectId.trim());
+      setAnalyses(payload.items);
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to load drawing analyses");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadProjectAnalyses();
+  }, [loadProjectAnalyses]);
+
+  async function ingest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!file || !projectId.trim()) return;
     setIsLoading(true);
     setError(null);
     try {
-      setResult(
-        await drawingIntelligenceApi.analyze({
-          project_name: projectName,
-          municipality: municipality || null,
-          sheets: sheets.filter((sheet) => sheet.title.trim()),
-        }),
-      );
+      const analysis = await drawingIntelligenceApi.ingest({
+        file,
+        project_id: projectId.trim(),
+        title: title.trim() || undefined,
+        municipality: municipality.trim() || undefined,
+      });
+      setResult(analysis);
+      setAnalyses((current) => [
+        analysis,
+        ...current.filter((item) => item.source.document_id !== analysis.source.document_id),
+      ]);
     } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "Unable to analyze drawings");
+      setError(currentError instanceof Error ? currentError.message : "Unable to analyze the civil PDF");
     } finally {
       setIsLoading(false);
     }
   }
 
-  function updateSheet(index: number, patch: Partial<DrawingSheetInput>) {
-    setSheets((current) => current.map((sheet, currentIndex) => (currentIndex === index ? { ...sheet, ...patch } : sheet)));
-  }
-
-  function removeSheet(index: number) {
-    setSheets((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  async function reanalyze() {
+    if (!result) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const analysis = await drawingIntelligenceApi.reanalyze(
+        result.source.document_id,
+        municipality.trim() || undefined,
+      );
+      setResult(analysis);
+      setAnalyses((current) => current.map((item) =>
+        item.source.document_id === analysis.source.document_id ? analysis : item,
+      ));
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to reanalyze the PDF");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -74,124 +90,154 @@ export function DrawingIntelligencePage() {
         <div>
           <h1 className="text-3xl font-semibold text-iron-950">Drawing Intelligence</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Build 24 core metadata engine: classify sheets, detect revisions, scales, municipalities, duplicates, and missing drawing-set signals.
+            Ingest project civil PDFs, retain their source hash and page evidence, surface quantity candidates, and flag constructability or municipal-standard review items.
           </p>
+        </div>
+        <button type="button" onClick={() => void loadProjectAnalyses()} className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-semibold text-iron-800">
+          <RefreshCw className="h-4 w-4" /> Refresh analyses
+        </button>
+      </div>
+
+      <ProjectScopeNotice name={projectContext.projectName} />
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">
+        Evidence-first workflow: extracted quantities are candidates, never approved takeoff values. Scanned pages are marked for OCR, and municipal references require human compliance review.
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <form onSubmit={ingest} className="rounded-md border border-iron-100 bg-white p-5">
+          <div className="flex items-center gap-2">
+            <UploadCloud className="h-5 w-5 text-signal-blue" />
+            <h2 className="text-base font-semibold text-iron-950">Ingest civil PDF</h2>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Field label="Project ID">
+              <input aria-label="Drawing project ID" required value={projectId} onChange={(event) => setProjectId(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Project UUID" />
+            </Field>
+            <Field label="Municipality">
+              <input aria-label="Drawing municipality" value={municipality} onChange={(event) => setMunicipality(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Surrey" />
+            </Field>
+            <Field label="Drawing-set title">
+              <input aria-label="Drawing set title" value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" placeholder="Issued for Tender Civil Drawings" />
+            </Field>
+            <Field label="Civil PDF">
+              <input aria-label="Civil PDF file" type="file" accept="application/pdf,.pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+            </Field>
+          </div>
+          {file ? <p className="mt-3 text-xs text-iron-500">Selected: {file.name}</p> : null}
+          {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+          <button type="submit" disabled={isLoading || !file || !projectId.trim()} className="mt-4 inline-flex items-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-iron-300">
+            {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4" />}
+            Ingest and analyze PDF
+          </button>
+        </form>
+
+        <div className="rounded-md border border-iron-100 bg-white p-5">
+          <h2 className="text-base font-semibold text-iron-950">Project analyses</h2>
+          <p className="mt-1 text-sm text-iron-500">Persisted reports for the selected project.</p>
+          <div className="mt-4 space-y-2">
+            {analyses.length ? analyses.map((analysis) => (
+              <button key={analysis.source.document_id} type="button" onClick={() => setResult(analysis)} className="w-full rounded-md border border-iron-100 p-3 text-left hover:border-iron-500">
+                <div className="text-sm font-semibold text-iron-950">{analysis.title}</div>
+                <div className="mt-1 text-xs text-iron-500">{analysis.source.page_count} pages · {analysis.extraction_status}</div>
+              </button>
+            )) : <p className="text-sm text-iron-500">No analyzed civil PDFs for this project.</p>}
+          </div>
         </div>
       </div>
 
-      <form className="space-y-6" onSubmit={analyze}>
-        <div className="rounded-md border border-iron-100 bg-white p-5">
-          <h2 className="text-base font-semibold text-iron-950">Drawing Set</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <Input label="Project name" value={projectName} onChange={setProjectName} />
-            <Input label="Municipality" value={municipality} onChange={setMunicipality} />
-          </div>
-        </div>
-
-        <div className="rounded-md border border-iron-100 bg-white p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-iron-950">Sheet Register</h2>
-              <p className="mt-1 text-sm text-iron-500">Enter sheet metadata now. OCR/PDF ingestion can populate this later.</p>
-            </div>
-            <button type="button" onClick={() => setSheets((current) => [...current, blankSheet()])} className="inline-flex items-center gap-2 rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
-              <Plus className="h-4 w-4" /> Add sheet
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            {sheets.map((sheet, index) => (
-              <div key={index} className="rounded-md border border-iron-100 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-iron-950">Sheet {index + 1}</div>
-                  <button type="button" onClick={() => removeSheet(index)} disabled={sheets.length <= 1} className="inline-flex items-center gap-2 text-sm text-red-700">
-                    <Trash2 className="h-4 w-4" /> Remove
-                  </button>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <Input label="Sheet #" value={sheet.sheet_number ?? ""} onChange={(value) => updateSheet(index, { sheet_number: value })} />
-                  <Input label="Title" value={sheet.title} onChange={(value) => updateSheet(index, { title: value })} />
-                  <Input label="Filename" value={sheet.filename ?? ""} onChange={(value) => updateSheet(index, { filename: value })} />
-                  <Input label="Revision" value={sheet.revision ?? ""} onChange={(value) => updateSheet(index, { revision: value })} />
-                  <Input label="Scale" value={sheet.scale ?? ""} onChange={(value) => updateSheet(index, { scale: value })} />
-                </div>
-                <label className="mt-3 grid gap-1 text-sm">
-                  <span className="font-medium text-iron-700">Extracted / raw text</span>
-                  <textarea value={sheet.raw_text ?? ""} onChange={(event) => updateSheet(index, { raw_text: event.target.value })} className="min-h-20 rounded-md border border-iron-100 px-3 py-2" />
-                </label>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
-
-        <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white">
-          {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4" />}
-          Analyze drawing set
-        </button>
-      </form>
-
-      {result ? <AnalysisResult result={result} /> : null}
+      {result ? <AnalysisReport result={result} isLoading={isLoading} onReanalyze={() => void reanalyze()} /> : null}
     </section>
   );
 }
 
-function AnalysisResult({ result }: { result: DrawingSetAnalysisResponse }) {
+function AnalysisReport({
+  result,
+  isLoading,
+  onReanalyze,
+}: {
+  result: CivilDrawingAnalysis;
+  isLoading: boolean;
+  onReanalyze: () => void;
+}) {
+  const reviewCount = result.constructability_issues.length + result.municipal_standard_issues.length;
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Sheets" value={String(result.sheet_count)} />
-        <SummaryCard label="Disciplines" value={String(Object.keys(result.disciplines).length)} />
-        <SummaryCard label="Sheet Types" value={String(Object.keys(result.sheet_types).length)} />
-        <SummaryCard label="Municipality Hints" value={result.municipality_hints.join(", ") || "None"} />
+      <div className="flex flex-col gap-3 rounded-md border border-iron-100 bg-white p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-iron-500">Analyzed source</div>
+          <h2 className="mt-1 text-xl font-semibold text-iron-950">{result.title}</h2>
+          <p className="mt-1 text-xs text-iron-500">{result.source.original_filename} · SHA-256 {result.source.sha256_hash}</p>
+        </div>
+        <button type="button" disabled={isLoading} onClick={onReanalyze} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold disabled:text-iron-300">Reanalyze stored PDF</button>
       </div>
 
-      {result.warnings.length ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <div className="font-semibold">Drawing set warnings</div>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-          </ul>
-        </div>
-      ) : null}
+      <div className="grid gap-4 md:grid-cols-4">
+        <SummaryCard label="Extraction" value={result.extraction_status} />
+        <SummaryCard label="Pages" value={String(result.source.page_count)} />
+        <SummaryCard label="Quantity candidates" value={String(result.quantity_candidates.length)} />
+        <SummaryCard label="Review flags" value={String(reviewCount)} />
+      </div>
 
-      <div className="overflow-hidden rounded-md border border-iron-100 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500">
-            <tr>
-              <th className="px-3 py-2">Sheet</th>
-              <th className="px-3 py-2">Title</th>
-              <th className="px-3 py-2">Discipline</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Revision</th>
-              <th className="px-3 py-2">Scale</th>
-              <th className="px-3 py-2">Warnings</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.sheets.map((sheet, index) => (
-              <tr key={`${sheet.sheet_number ?? "sheet"}-${index}`} className="border-t border-iron-100">
-                <td className="px-3 py-2 font-medium text-iron-950">{sheet.sheet_number ?? "—"}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.title}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.discipline}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.sheet_type}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.revision ?? "—"}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.scale ?? "—"}</td>
-                <td className="px-3 py-2 text-iron-700">{sheet.warnings.join(", ") || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {result.warnings.map((warning) => (
+        <div key={warning} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{warning}</div>
+      ))}
+
+      <div className="rounded-md border border-iron-100 bg-white p-5">
+        <h3 className="text-base font-semibold text-iron-950">Quantity candidates</h3>
+        <p className="mt-1 text-sm text-iron-500">Candidate quantities require verification against the PDF, scale, notes, and applicable takeoff rules.</p>
+        {result.quantity_candidates.length ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500"><tr><th className="px-3 py-2">Description</th><th className="px-3 py-2">Quantity</th><th className="px-3 py-2">Page</th><th className="px-3 py-2">Confidence</th></tr></thead>
+              <tbody>{result.quantity_candidates.map((candidate, index) => (
+                <tr key={`${candidate.page_number}-${candidate.quantity}-${index}`} className="border-t border-iron-100"><td className="px-3 py-2 text-iron-700">{candidate.description}</td><td className="px-3 py-2 font-semibold text-iron-950">{candidate.quantity} {candidate.unit}</td><td className="px-3 py-2 text-iron-700">{candidate.page_number}</td><td className="px-3 py-2 text-iron-700">{candidate.confidence}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <p className="mt-4 text-sm text-iron-500">No explicit civil quantity candidates were found in embedded text.</p>}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <IssueList title="Constructability review" issues={result.constructability_issues} />
+        <IssueList title="Municipal standards review" issues={result.municipal_standard_issues} />
+      </div>
+
+      <div className="rounded-md border border-iron-100 bg-white p-5">
+        <h3 className="text-base font-semibold text-iron-950">Page extraction trace</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {result.pages.map((page) => (
+            <div key={page.page_number} className="rounded-md border border-iron-100 p-3">
+              <div className="text-sm font-semibold text-iron-950">Page {page.page_number} · {page.character_count} characters</div>
+              <p className="mt-2 line-clamp-4 text-xs leading-5 text-iron-500">{page.text_preview ?? page.extraction_warning ?? "No text"}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="grid gap-1 text-sm"><span className="font-medium text-iron-700">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2" /></label>;
+function IssueList({ title, issues }: { title: string; issues: DrawingIssue[] }) {
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <h3 className="text-base font-semibold text-iron-950">{title}</h3>
+      <div className="mt-4 space-y-3">
+        {issues.length ? issues.map((issue, index) => (
+          <div key={`${issue.title}-${issue.page_number ?? index}`} className={`rounded-md border p-3 ${issue.severity === "critical" ? "border-red-200 bg-red-50" : issue.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50"}`}>
+            <div className="text-sm font-semibold text-iron-950">{issue.title}</div>
+            <p className="mt-1 text-xs leading-5 text-iron-700">{issue.detail}</p>
+            {issue.page_number ? <div className="mt-2 text-xs text-iron-500">Page {issue.page_number}</div> : null}
+          </div>
+        )) : <p className="text-sm text-iron-500">No automated flags detected; manual review is still required.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block"><span className="mb-1 block text-sm font-medium text-iron-800">{label}</span>{children}</label>;
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md border border-iron-100 bg-white p-4"><div className="text-sm font-medium text-iron-500">{label}</div><div className="mt-2 text-xl font-semibold text-iron-950">{value}</div></div>;
+  return <div className="rounded-md border border-iron-100 bg-white p-4"><div className="text-sm font-medium text-iron-500">{label}</div><div className="mt-2 text-xl font-semibold capitalize text-iron-950">{value}</div></div>;
 }
