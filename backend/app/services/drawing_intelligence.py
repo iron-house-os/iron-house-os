@@ -409,7 +409,7 @@ def _municipal_standard_issues(
     municipality: str | None,
 ) -> list[DrawingIssue]:
     issues: list[DrawingIssue] = []
-    all_text = "\n".join(text for _, text in page_texts).casefold()
+    all_text = "\n".join(text for _, text in page_texts).strip().casefold()
     reference_lines = [
         (page_number, line)
         for page_number, text in page_texts
