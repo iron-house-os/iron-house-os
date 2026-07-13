@@ -169,6 +169,86 @@ describe("EstimatingPage", () => {
     ]);
   });
 
+  it("loads qualified supplier selections from quote comparison state", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/estimating",
+            state: {
+              quoteLineItems: [
+                {
+                  code: "PIPE-001",
+                  description: "PVC storm pipe supply",
+                  item_type: "material",
+                  quantity: 1,
+                  unit: "LS",
+                  labour: [],
+                  equipment: [],
+                  materials: [],
+                  disposal: [],
+                  vendor_quotes: [
+                    {
+                      supplier: "Preferred Supplier",
+                      scope: "Supply PVC storm pipe",
+                      amount: 11250,
+                      is_qualified: true,
+                      qualification_notes: [],
+                      is_selected: true,
+                      selection_reason: "Complete scope and confirmed delivery",
+                      notes: "Confirmed delivery",
+                    },
+                    {
+                      supplier: "Lowest Supplier",
+                      scope: "Supply PVC storm pipe",
+                      amount: 10000,
+                      is_qualified: true,
+                      qualification_notes: [],
+                      is_selected: false,
+                      selection_reason: null,
+                      notes: null,
+                    },
+                  ],
+                  direct_unit_cost: null,
+                  notes: "Supplier selection: Complete scope and confirmed delivery",
+                },
+              ],
+            },
+          },
+        ]}
+      >
+        <EstimatingPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText("Loaded 1 estimate line item from qualified supplier selections."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Line item 1 quote supplier")).toHaveValue("Preferred Supplier");
+    expect(screen.getByLabelText("Line item 1 quote amount")).toHaveValue(11250);
+    expect(screen.getByLabelText("Line item 1 selection reason")).toHaveValue(
+      "Complete scope and confirmed delivery",
+    );
+    expect(screen.getByText("1 qualified alternative quote retained for workbook comparison.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Calculate/i }));
+
+    await waitFor(() => expect(summaryPayloads).toHaveLength(1));
+    const submitted = summaryPayloads[0];
+    expect(submitted.line_items[0].vendor_quotes).toEqual([
+      expect.objectContaining({
+        supplier: "Preferred Supplier",
+        is_selected: true,
+        selection_reason: "Complete scope and confirmed delivery",
+      }),
+      expect.objectContaining({
+        supplier: "Lowest Supplier",
+        is_selected: false,
+      }),
+    ]);
+  });
+
   it("blocks calculation and workbook export until a project name is entered", async () => {
     const user = userEvent.setup();
     render(
