@@ -80,6 +80,7 @@ export type SupplierRFQPackageDraft = {
   supplier_id: string;
   supplier_name: string;
   category?: string | null;
+  recipient_email?: string | null;
   status: RFQRecipientStatus;
   subject: string;
   body: string;
