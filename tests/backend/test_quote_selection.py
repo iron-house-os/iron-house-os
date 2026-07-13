@@ -4,6 +4,7 @@ from app.schemas.quote_integration import (
     QuoteStatus,
     SupplierQuoteCreate,
 )
+from app.services.estimates import calculate_line_item
 from app.services.quote_comparison import compare_supplier_quotes
 from app.services.quote_selection import select_quotes_for_estimate
 
@@ -52,6 +53,9 @@ def test_automatically_selects_lowest_received_qualified_quote() -> None:
     assert result.decisions[0].qualified_quote_count == 2
     assert result.line_items[0].vendor_quotes[0].supplier == "Qualified B"
     assert result.line_items[0].vendor_quotes[0].is_selected is True
+    calculated = calculate_line_item(result.line_items[0])
+    assert calculated.material_cost == 9500
+    assert calculated.subcontract_cost == 0
 
 
 def test_preserves_documented_non_low_selection_in_estimate_line_item() -> None:
