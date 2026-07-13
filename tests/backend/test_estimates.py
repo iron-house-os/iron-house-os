@@ -85,7 +85,11 @@ def test_vendor_quotes_respect_selected_quote() -> None:
         vendor_quotes=[
             VendorQuoteInput(supplier="Lowest", scope="Paving", amount=10000),
             VendorQuoteInput(
-                supplier="Qualified selected", scope="Paving", amount=11250, is_selected=True
+                supplier="Qualified selected",
+                scope="Paving",
+                amount=11250,
+                is_selected=True,
+                selection_reason="Complete scope and schedule",
             ),
         ],
     )
@@ -94,6 +98,49 @@ def test_vendor_quotes_respect_selected_quote() -> None:
 
     assert result.subcontract_cost == 11250
     assert result.selected_quote_supplier == "Qualified selected"
+
+
+def test_vendor_quotes_ignore_unqualified_lower_quote() -> None:
+    item = EstimateLineItem(
+        description="Pipe supply",
+        quantity=1,
+        vendor_quotes=[
+            VendorQuoteInput(
+                supplier="Incomplete quote",
+                scope="Pipe",
+                amount=9000,
+                is_qualified=False,
+                qualification_notes=["Freight excluded"],
+            ),
+            VendorQuoteInput(supplier="Qualified quote", scope="Pipe", amount=10000),
+        ],
+    )
+
+    result = calculate_line_item(item)
+
+    assert result.subcontract_cost == 10000
+    assert result.selected_quote_supplier == "Qualified quote"
+
+
+def test_vendor_quotes_fall_back_to_lowest_when_non_low_selection_has_no_reason() -> None:
+    item = EstimateLineItem(
+        description="Paving",
+        quantity=1,
+        vendor_quotes=[
+            VendorQuoteInput(supplier="Lowest", scope="Paving", amount=10000),
+            VendorQuoteInput(
+                supplier="Undocumented selection",
+                scope="Paving",
+                amount=11250,
+                is_selected=True,
+            ),
+        ],
+    )
+
+    result = calculate_line_item(item)
+
+    assert result.subcontract_cost == 10000
+    assert result.selected_quote_supplier == "Lowest"
 
 
 def test_default_production_rate_activity_populates_crew_and_equipment() -> None:
