@@ -9,6 +9,7 @@ const requests: Array<{ url: string; method: string; body: unknown }> = [];
 
 let packageState: Record<string, any>;
 let attachmentsReady = false;
+let workflowState: Record<string, any>;
 
 function resetPackage() {
   attachmentsReady = false;
@@ -26,6 +27,18 @@ function resetPackage() {
     documents: [],
     created_at: "2026-07-13T10:00:00Z",
     updated_at: "2026-07-13T10:00:00Z",
+  };
+  workflowState = {
+    rfq_package_id: "rfq-1",
+    status: "preview_only",
+    prepared_at: null,
+    stale: false,
+    drive_package: null,
+    gmail_drafts: [],
+    supplier_responses: [],
+    blockers: [],
+    external_actions_performed: false,
+    send_requires_approval: true,
   };
 }
 
@@ -69,6 +82,9 @@ describe("RFQBuilderPage", () => {
         }
         if (url.endsWith("/rfqs/rfq-1/readiness")) {
           return jsonResponse(readiness());
+        }
+        if (url.endsWith("/rfqs/rfq-1/communication-workflow") && method === "GET") {
+          return jsonResponse(workflowState);
         }
         if (url.endsWith("/rfqs/rfq-1") && method === "GET") {
           return jsonResponse(packageState);
@@ -134,6 +150,66 @@ describe("RFQBuilderPage", () => {
             ],
           });
         }
+        if (url.endsWith("/rfqs/rfq-1/communication-workflow/prepare") && method === "POST") {
+          workflowState = {
+            ...workflowState,
+            prepared_at: "2026-07-13T15:40:00Z",
+            drive_package: {
+              folder_uri: body.drive_folder_uri,
+              manifest_uri: body.drive_manifest_uri ?? null,
+              reusable: true,
+              document_references: packageState.documents.map(
+                (document: Record<string, any>) => document.storage_uri,
+              ),
+              saved_at: "2026-07-13T15:40:00Z",
+              source_fingerprint: "fingerprint-1",
+            },
+            gmail_drafts: [
+              {
+                recipient_id: "recipient-1",
+                supplier_id: packageState.recipients[0].supplier_id,
+                supplier_name: packageState.recipients[0].supplier_name,
+                to: packageState.recipients[0].recipient_email,
+                subject: "RFQ - King George Utility Upgrade - pipe - Pacific Pipe Supply",
+                body: "Hello, draft only.",
+                attachment_references: packageState.documents.map(
+                  (document: Record<string, any>) => document.storage_uri,
+                ),
+                status: "preview_only",
+                ready_for_draft_creation: true,
+                send_approved: false,
+              },
+            ],
+          };
+          return jsonResponse(workflowState);
+        }
+        if (url.endsWith("/rfqs/rfq-1/supplier-responses") && method === "POST") {
+          workflowState = {
+            ...workflowState,
+            supplier_responses: [
+              ...workflowState.supplier_responses,
+              {
+                id: "response-1",
+                supplier_id: body.supplier_id,
+                supplier_name: "Pacific Pipe Supply",
+                received_at: "2026-07-13T15:45:00Z",
+                recorded_at: "2026-07-13T15:45:00Z",
+                gmail_thread_uri: body.gmail_thread_uri ?? null,
+                drive_file_uri: body.drive_file_uri ?? null,
+                notes: body.notes ?? null,
+              },
+            ],
+          };
+          packageState = {
+            ...packageState,
+            recipients: packageState.recipients.map((recipient: Record<string, any>) => ({
+              ...recipient,
+              status: recipient.supplier_id === body.supplier_id ? "replied" : recipient.status,
+              status_note: recipient.supplier_id === body.supplier_id ? body.notes : recipient.status_note,
+            })),
+          };
+          return jsonResponse(workflowState, 201);
+        }
         throw new Error(`Unexpected request: ${method} ${url}`);
       }),
     );
@@ -160,13 +236,41 @@ describe("RFQBuilderPage", () => {
 
     await user.type(screen.getByLabelText("Supplier 1 name"), "Pacific Pipe Supply");
     await user.type(screen.getByLabelText("Supplier 1 category"), "pipe");
+    await user.type(
+      screen.getByLabelText("Supplier 1 email"),
+      "estimating@pacific-pipe.example",
+    );
     await user.click(screen.getByRole("button", { name: "Save suppliers and scopes" }));
 
+    await waitFor(() => {
+      expect(
+        requests.some(
+          (request) =>
+            request.url.endsWith("/rfqs/rfq-1/suppliers")
+            && request.method === "PUT",
+        ),
+      ).toBe(true);
+    });
+    expect(
+      requests.find(
+        (request) =>
+          request.url.endsWith("/rfqs/rfq-1/suppliers")
+          && request.method === "PUT",
+      )?.body,
+    ).toEqual([
+      expect.objectContaining({
+        supplier_name: "Pacific Pipe Supply",
+        category: "pipe",
+      }),
+    ]);
+    expect(
+      await screen.findByLabelText("Pacific Pipe Supply tracking status"),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect((screen.getByLabelText("Supplier 1 scope items") as HTMLTextAreaElement).value)
         .toContain("Provide itemized pricing");
     });
-    expect(screen.getByText("Pacific Pipe Supply")).toBeInTheDocument();
+    expect(screen.getAllByText("Pacific Pipe Supply").length).toBeGreaterThan(0);
 
     await user.selectOptions(
       screen.getByLabelText("Pacific Pipe Supply tracking status"),
@@ -213,6 +317,35 @@ describe("RFQBuilderPage", () => {
       ),
     ).toBeInTheDocument();
 
+    await user.type(
+      screen.getByLabelText("Drive package folder reference"),
+      "drive://projects/kg/rfq/stormwater",
+    );
+    await user.type(
+      screen.getByLabelText("Workflow sender email"),
+      "estimating@ironhouse.example",
+    );
+    await user.click(screen.getByRole("button", { name: "Save reusable draft workflow" }));
+
+    expect(
+      await screen.findByText("Preview-only workflow saved. No Gmail or Drive action was performed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Ready for separately approved draft creation"),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText("Drive response file reference"),
+      "drive://projects/kg/responses/pacific-pipe.pdf",
+    );
+    await user.type(
+      screen.getByLabelText("Response notes"),
+      "Quote received and saved.",
+    );
+    await user.click(screen.getByRole("button", { name: "Record response reference" }));
+
+    expect(await screen.findByText("Quote received and saved.")).toBeInTheDocument();
+
     const supplierRequest = requests.find(
       (request) => request.url.endsWith("/rfqs/rfq-1/suppliers") && request.method === "PUT",
     );
@@ -220,8 +353,23 @@ describe("RFQBuilderPage", () => {
       expect.objectContaining({
         supplier_name: "Pacific Pipe Supply",
         category: "pipe",
+        recipient_email: "estimating@pacific-pipe.example",
         scope_items: [],
       }),
     ]);
+    expect(
+      requests.some(
+        (request) =>
+          request.url.endsWith("/communication-workflow/prepare")
+          && request.method === "POST",
+      ),
+    ).toBe(true);
+    expect(
+      requests.some(
+        (request) =>
+          request.url.endsWith("/supplier-responses")
+          && request.method === "POST",
+      ),
+    ).toBe(true);
   });
 });
