@@ -2,38 +2,27 @@
 """Smoke-test a deployed Iron House OS release using only the standard library."""
 
 from argparse import ArgumentParser
-from base64 import b64encode
 from datetime import UTC, datetime
+from http.cookiejar import CookieJar
 import json
 import os
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPCookieProcessor, OpenerDirector, Request, build_opener
 from uuid import uuid4
-
-
-def _authorization(username: str | None, password: str | None) -> str | None:
-    if not username and not password:
-        return None
-    if not username or not password:
-        raise SystemExit("Both username and password are required when authentication is enabled.")
-    token = b64encode(f"{username}:{password}".encode()).decode()
-    return f"Basic {token}"
 
 
 def _request(
     base_url: str,
     path: str,
     *,
+    opener: OpenerDirector,
     method: str = "GET",
     payload: dict | None = None,
     body: bytes | None = None,
     content_type: str | None = None,
-    authorization: str | None = None,
     expected: tuple[int, ...] = (200,),
 ) -> tuple[int, bytes]:
     headers = {"Accept": "application/json"}
-    if authorization:
-        headers["Authorization"] = authorization
     if payload is not None:
         body = json.dumps(payload).encode()
         content_type = "application/json"
@@ -46,7 +35,7 @@ def _request(
         method=method,
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with opener.open(request, timeout=30) as response:
             status_code = response.status
             response_body = response.read()
     except HTTPError as exc:
@@ -122,15 +111,31 @@ def _multipart(fields: dict[str, str], filename: str, file_bytes: bytes) -> tupl
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
-def run(base_url: str, authorization: str | None, full: bool) -> dict:
-    _, homepage = _request(base_url, "/", authorization=authorization)
+def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: bool) -> dict:
+    _, homepage = _request(base_url, "/", opener=opener)
     if b"Iron House" not in homepage:
         raise RuntimeError("The frontend response did not contain the Iron House application shell.")
-    readiness = _json_request(base_url, "/readiness", authorization=authorization)
+    readiness = _json_request(base_url, "/readiness", opener=opener)
     if readiness.get("status") != "ready":
         raise RuntimeError(f"Release is not ready: {readiness}")
+    session = _json_request(
+        base_url,
+        "/api/v1/auth/login",
+        opener=opener,
+        method="POST",
+        payload={"email": email, "password": password},
+    )
+    if session.get("authentication") != "authenticated":
+        raise RuntimeError(f"Release login failed: {session}")
+    current_user = _json_request(base_url, "/api/v1/auth/me", opener=opener)
+    if current_user.get("user", {}).get("email") != email.lower():
+        raise RuntimeError(f"Release session identity mismatch: {current_user}")
     if not full:
-        return {"mode": "read-only", "status": "passed"}
+        return {
+            "mode": "read-only",
+            "status": "passed",
+            "authenticated_user": current_user["user"]["email"],
+        }
 
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     project = _json_request(
@@ -138,11 +143,11 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
         "/api/v1/projects",
         method="POST",
         payload={
-            "name": f"Build 207 release smoke {stamp}",
+            "name": f"Build 208 release smoke {stamp}",
             "municipality": "Surrey",
             "project_number": f"SMOKE-{stamp}",
         },
-        authorization=authorization,
+        opener=opener,
         expected=(201,),
     )
     estimate = _json_request(
@@ -179,7 +184,7 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
             "assumptions": ["Automated release validation only."],
             "exclusions": [],
         },
-        authorization=authorization,
+        opener=opener,
     )
     if estimate.get("final_price") != 1:
         raise RuntimeError(f"Unexpected estimate result: {estimate}")
@@ -189,13 +194,13 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
         "/api/v1/rfqs",
         method="POST",
         payload={
-            "title": f"Build 207 release RFQ {stamp}",
+            "title": f"Build 208 release RFQ {stamp}",
             "project_id": project["id"],
             "project_name": project["name"],
             "scope_summary": "Automated release validation only.",
             "supplier_category_targets": [],
         },
-        authorization=authorization,
+        opener=opener,
         expected=(201,),
     )
 
@@ -203,10 +208,10 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
     multipart, content_type = _multipart(
         {
             "project_id": project["id"],
-            "title": "Build 207 release drawing",
+            "title": "Build 208 release drawing",
             "municipality": "Surrey",
         },
-        "build-207-release.pdf",
+        "build-208-release.pdf",
         pdf,
     )
     drawing = _json_request(
@@ -215,7 +220,7 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
         method="POST",
         body=multipart,
         content_type=content_type,
-        authorization=authorization,
+        opener=opener,
         expected=(201,),
     )
     if drawing["source"]["project_id"] != project["id"]:
@@ -233,12 +238,14 @@ def run(base_url: str, authorization: str | None, full: bool) -> dict:
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--base-url", default=os.getenv("IHOS_BASE_URL", "http://127.0.0.1:8080"))
-    parser.add_argument("--username", default=os.getenv("IHOS_ADMIN_USERNAME"))
-    parser.add_argument("--password", default=os.getenv("IHOS_ADMIN_PASSWORD"))
+    parser.add_argument("--email", default=os.getenv("BOOTSTRAP_ADMIN_EMAIL"))
+    parser.add_argument("--password", default=os.getenv("BOOTSTRAP_ADMIN_PASSWORD"))
     parser.add_argument("--full", action="store_true", help="Create release-smoke records and upload a PDF.")
     args = parser.parse_args()
-    authorization = _authorization(args.username, args.password)
-    print(json.dumps(run(args.base_url, authorization, args.full), indent=2))
+    if not args.email or not args.password:
+        raise SystemExit("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required.")
+    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    print(json.dumps(run(args.base_url, opener, args.email, args.password, args.full), indent=2))
 
 
 if __name__ == "__main__":

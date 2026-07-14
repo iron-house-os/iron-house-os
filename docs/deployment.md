@@ -1,6 +1,6 @@
 # Iron House OS release runbook
 
-Build 207 packages IHOS as a single-node production stack. Nginx serves the compiled responsive web app, protects it with a temporary browser login, and proxies `/api/v1` to FastAPI. FastAPI runs Alembic and an idempotent model-schema bootstrap before accepting traffic, then stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
+Build 207 packages IHOS as a single-node production stack. Build 208 adds database-backed user accounts and signed HTTP-only sessions. Nginx serves the compiled responsive web app and proxies `/api/v1` to FastAPI; FastAPI protects business routes, runs the schema bootstrap, creates the first administrator once, and stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
 
 ## Host requirements
 
@@ -9,7 +9,7 @@ Build 207 packages IHOS as a single-node production stack. Nginx serves the comp
 - An HTTPS reverse proxy or managed load balancer in front of port 8080
 - Automated backups for the `postgres_data` and `backend_data` volumes
 
-Do not expose the Compose port directly to the public internet. The built-in login gate is suitable for controlled staging access, but HTTPS must be terminated upstream so credentials and project data are encrypted in transit.
+Do not expose the Compose port directly to the public internet. HTTPS must be terminated upstream so credentials, session cookies, and project data are encrypted in transit.
 
 ## First deployment
 
@@ -20,7 +20,7 @@ cp .env.production.example .env.production
 openssl rand -hex 32
 ```
 
-Use generated values for the database password, application secret, and browser login password. Keep `.env.production` out of source control.
+Use generated values for the database password, application secret, and bootstrap administrator password. Keep `.env.production` out of source control. Leave `SESSION_COOKIE_SECURE=true` for every HTTPS deployment.
 
 2. Validate the fully rendered Compose configuration.
 
@@ -28,13 +28,13 @@ Use generated values for the database password, application secret, and browser 
 docker compose --env-file .env.production -f docker-compose.production.yml config --quiet
 ```
 
-3. Build and start the stack. The backend applies Alembic, creates any model-backed tables missing from a clean database, and then starts Uvicorn.
+3. Build and start the stack. The backend applies Alembic, creates any model-backed tables missing from a clean database, creates the bootstrap administrator only when its email does not already exist, and then starts Uvicorn.
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
 ```
 
-4. Run the read-only release check first.
+4. Run the read-only release check first. An HTTP loopback check requires `SESSION_COOKIE_SECURE=false` and must only be used while port 8080 is firewalled or bound to localhost. Restore `SESSION_COOKIE_SECURE=true` before public HTTPS access.
 
 ```bash
 set -a
@@ -55,7 +55,15 @@ python scripts/release_smoke.py --base-url http://127.0.0.1:8080 --full
 python scripts/release_smoke.py --base-url https://your-staging-host.example
 ```
 
-The public URL can then be shared from a phone or desktop browser as a QR code. Credentials must be shared separately and rotated when staging access changes.
+The public URL can then be shared from a phone or desktop browser as a QR code. Each person should receive an individual user account; do not share the bootstrap administrator password.
+
+## User access
+
+- Sign in with the bootstrap administrator email and password from `.env.production`.
+- Administrators can create, update, deactivate, and reset accounts through `/api/v1/users`.
+- Roles are `admin`, `operations_manager`, `estimator`, and `viewer`.
+- Role changes, deactivation, and password resets invalidate that user's existing sessions.
+- Remove `BOOTSTRAP_ADMIN_PASSWORD` from routine operator notes after the first successful start. The startup task never overwrites an existing account password.
 
 ## Operations
 
@@ -84,6 +92,7 @@ Never add `--volumes` to the production shutdown command unless a verified resto
 
 - Build 207 does not provision a cloud account, domain, certificate, or paid infrastructure.
 - The repository does not yet have an Alembic baseline; clean deployments use an idempotent SQLAlchemy model-schema bootstrap after Alembic.
-- The temporary Nginx browser login is one shared credential, not per-user authorization or an audit identity.
+- User roles currently control account administration and document-audit access; fine-grained permissions for every business module remain future work.
+- Login throttling, password recovery email, and multi-factor authentication are not yet implemented.
 - Local Docker volumes are single-node storage; object storage, replication, and automated restore drills remain future release work.
 - Gmail and Drive remain preview-only and perform no external actions.

@@ -1,11 +1,13 @@
-import { Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 import { PropsWithChildren, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { modules } from "../modules";
+import { useAuth } from "../contexts/AuthContext";
 
 export function AppLayout({ children }: PropsWithChildren) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-iron-50 text-iron-950">
@@ -55,9 +57,22 @@ export function AppLayout({ children }: PropsWithChildren) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="hidden text-sm text-iron-500 lg:block">Phase 1 project foundation</div>
-          <div className="rounded-md bg-signal-green px-3 py-1 text-xs font-semibold text-white">
-            Scaffold
+          <div className="hidden text-sm text-iron-500 lg:block">
+            Signed in as {user?.display_name}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-signal-green px-3 py-1 text-xs font-semibold capitalize text-white">
+              {user?.role.replace("_", " ")}
+            </div>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="rounded-md border border-iron-100 p-2 text-iron-700 transition hover:bg-iron-100"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 lg:px-8">{children}</main>

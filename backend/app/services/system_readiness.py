@@ -51,6 +51,7 @@ def get_system_readiness(*, probe_runtime: bool = False) -> dict[str, object]:
         "estimate_workspace": "enabled",
         "rfq_linkage": "enabled",
         "project_readiness": "enabled",
+        "user_session_authentication": "enabled",
         "deployment_environment": settings.environment,
     }
     ready = True

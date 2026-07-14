@@ -21,7 +21,7 @@ def setup_function() -> None:
 def test_viewer_cannot_read_audit_events() -> None:
     with pytest.raises(HTTPException) as exc_info:
         document_audit_events(
-            DocumentAuditPrincipal(role="viewer"),
+        DocumentAuditPrincipal(role="viewer", actor="viewer@example.com"),
             limit=50,
             action=None,
             outcome=None,
@@ -32,7 +32,7 @@ def test_viewer_cannot_read_audit_events() -> None:
 
 
 def test_estimator_can_read_but_cannot_export() -> None:
-    principal = DocumentAuditPrincipal(role="estimator")
+    principal = DocumentAuditPrincipal(role="estimator", actor="estimator@example.com")
     emit_document_audit_event(DocumentAuditEvent(action="upload"))
 
     result = document_audit_events(
@@ -61,7 +61,7 @@ def test_operations_manager_can_export_and_admin_can_summarize() -> None:
     emit_document_audit_event(DocumentAuditEvent(action="upload"))
 
     response = document_audit_export(
-        DocumentAuditPrincipal(role="operations_manager"),
+        DocumentAuditPrincipal(role="operations_manager", actor="ops@example.com"),
         limit=200,
         action=None,
         outcome=None,
@@ -70,5 +70,7 @@ def test_operations_manager_can_export_and_admin_can_summarize() -> None:
     )
     assert response.media_type == "text/csv"
 
-    summary = document_audit_summary(DocumentAuditPrincipal(role="admin"))
+    summary = document_audit_summary(
+        DocumentAuditPrincipal(role="admin", actor="admin@example.com")
+    )
     assert summary["total"] == 1

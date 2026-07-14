@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 export type DocumentAuditEvent = {
   action: string;
   document_id?: string;
@@ -39,7 +41,7 @@ function buildQuery(filters: DocumentAuditFilters = {}): string {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await apiFetch(`${API_BASE_URL}${path}`);
   if (!response.ok) throw new Error(`Request failed with ${response.status}`);
   return response.json() as Promise<T>;
 }

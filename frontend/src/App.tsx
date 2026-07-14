@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { modules } from "./modules";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -10,6 +11,7 @@ import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
+import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -21,7 +23,17 @@ import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
 
-export function App() {
+function AuthenticatedApp() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-iron-950 text-sm font-medium text-white">
+        Loading Iron House OS…
+      </main>
+    );
+  }
+  if (!user) return <LoginPage />;
+
   const placeholderModules = modules.filter(
     (module) =>
       ![
@@ -75,5 +87,13 @@ export function App() {
         ))}
       </Routes>
     </AppLayout>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   );
 }

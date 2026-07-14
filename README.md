@@ -53,7 +53,7 @@ npm run dev
 
 ## Production Release
 
-Build 207 adds a production Compose stack with a compiled Nginx frontend, same-origin API proxying, startup migrations and schema bootstrap, PostgreSQL persistence, document and audit persistence, runtime readiness probes, temporary browser login protection, and a full release smoke test.
+Build 207 added the production Compose stack. Build 208 replaces the shared browser password with database-backed user accounts, signed HTTP-only sessions, role-aware administration, authenticated audit identity, and an in-app login/logout flow.
 
 ```bash
 cp .env.production.example .env.production
@@ -62,7 +62,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 python scripts/release_smoke.py --base-url http://127.0.0.1:8080 --full
 ```
 
-The smoke test expects `IHOS_ADMIN_USERNAME` and `IHOS_ADMIN_PASSWORD` in the environment when the login gate is enabled. It creates clearly named validation records in full mode; omit `--full` for a read-only health and application-shell check.
+The smoke test expects `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`. It signs in through the application before testing protected APIs. Full mode creates clearly named validation records; omit `--full` for a read-only health, login, and application-shell check.
 
 See [the release runbook](docs/deployment.md) before exposing IHOS outside a trusted network. A public deployment must terminate HTTPS upstream and back up both persistent volumes.
 

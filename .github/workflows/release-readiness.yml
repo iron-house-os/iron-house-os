@@ -34,8 +34,10 @@ jobs:
       POSTGRES_USER: iron_house
       POSTGRES_PASSWORD: build-207-ci-database-password
       SECRET_KEY: build-207-ci-secret-key-at-least-32-characters
-      IHOS_ADMIN_USERNAME: build207
-      IHOS_ADMIN_PASSWORD: build-207-ci-login-password
+      BOOTSTRAP_ADMIN_EMAIL: build208@ironhousecivil.com
+      BOOTSTRAP_ADMIN_PASSWORD: build-208-ci-login-password
+      BOOTSTRAP_ADMIN_NAME: Build 208 Release User
+      SESSION_COOKIE_SECURE: "false"
       IHOS_PORT: "8080"
     steps:
       - uses: actions/checkout@v4
@@ -47,8 +49,8 @@ jobs:
         run: >-
           python scripts/release_smoke.py
           --base-url http://127.0.0.1:8080
-          --username "$IHOS_ADMIN_USERNAME"
-          --password "$IHOS_ADMIN_PASSWORD"
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
           --full
       - name: Show production logs on failure
         if: failure()

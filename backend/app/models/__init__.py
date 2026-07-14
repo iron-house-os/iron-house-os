@@ -13,7 +13,7 @@ from app.models.rfq import (
 )
 from app.models.supplier import Supplier
 from app.models.tender import Tender
-from app.models.user import Employee
+from app.models.user import Employee, UserAccount
 
 __all__ = [
     "Bid",
@@ -33,4 +33,5 @@ __all__ = [
     "Supplier",
     "Takeoff",
     "Tender",
+    "UserAccount",
 ]
