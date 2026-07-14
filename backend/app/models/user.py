@@ -28,3 +28,13 @@ class UserAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    password_reset_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class LoginThrottle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "login_throttles"
+
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

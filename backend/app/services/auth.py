@@ -1,6 +1,7 @@
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 import hashlib
 import hmac
 import secrets
@@ -11,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.user import UserAccount
+from app.models.user import LoginThrottle, UserAccount
 from app.schemas.auth import UserAccountCreate, UserAccountUpdate
 
 PASSWORD_ALGORITHM = "pbkdf2_sha256"
@@ -29,6 +30,21 @@ class AuthenticatedUser:
     display_name: str
     role: str
     session_version: int
+    password_reset_required: bool = False
+
+
+class AuthenticationStatus(StrEnum):
+    AUTHENTICATED = "authenticated"
+    INVALID = "invalid"
+    LOCKED = "locked"
+
+
+@dataclass(frozen=True)
+class AuthenticationResult:
+    status: AuthenticationStatus
+    subject_hash: str
+    account: UserAccount | None = None
+    locked_until: datetime | None = None
 
 
 def normalize_email(email: str) -> str:
@@ -67,6 +83,19 @@ def verify_password(password: str, encoded: str) -> bool:
     except (TypeError, ValueError):
         return False
     return hmac.compare_digest(actual, expected)
+
+
+DUMMY_PASSWORD_HASH = hash_password("not-a-real-iron-house-password")
+
+
+def login_subject_hash(email: str) -> str:
+    return hashlib.sha256(normalize_email(email).encode()).hexdigest()
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=UTC)
 
 
 def create_session_token(account: UserAccount) -> str:
@@ -110,19 +139,64 @@ def account_to_principal(account: UserAccount) -> AuthenticatedUser:
         display_name=account.display_name,
         role=account.role,
         session_version=account.session_version,
+        password_reset_required=account.password_reset_required,
     )
 
 
-def authenticate(db: Session, email: str, password: str) -> UserAccount | None:
+def authenticate(db: Session, email: str, password: str) -> AuthenticationResult:
     normalized_email = normalize_email(email)
+    subject_hash = login_subject_hash(normalized_email)
+    now = datetime.now(UTC)
+    throttle = db.scalar(
+        select(LoginThrottle)
+        .where(LoginThrottle.key_hash == subject_hash)
+        .with_for_update()
+    )
+    locked_until = _utc(throttle.locked_until) if throttle is not None else None
+    if locked_until is not None and locked_until > now:
+        return AuthenticationResult(
+            status=AuthenticationStatus.LOCKED,
+            subject_hash=subject_hash,
+            locked_until=locked_until,
+        )
+    if throttle is not None and throttle.locked_until is not None:
+        throttle.failed_attempts = 0
+        throttle.locked_until = None
+
     account = db.scalar(select(UserAccount).where(func.lower(UserAccount.email) == normalized_email))
-    if account is None or not account.is_active or not verify_password(password, account.password_hash):
-        return None
+    password_matches = verify_password(
+        password,
+        account.password_hash if account is not None else DUMMY_PASSWORD_HASH,
+    )
+    if account is None or not account.is_active or not password_matches:
+        if throttle is None:
+            throttle = LoginThrottle(key_hash=subject_hash, failed_attempts=0)
+        throttle.failed_attempts += 1
+        throttle.last_failed_at = now
+        settings = get_settings()
+        status = AuthenticationStatus.INVALID
+        if throttle.failed_attempts >= settings.login_max_failed_attempts:
+            throttle.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+            status = AuthenticationStatus.LOCKED
+        db.add(throttle)
+        db.commit()
+        return AuthenticationResult(
+            status=status,
+            subject_hash=subject_hash,
+            locked_until=_utc(throttle.locked_until),
+        )
+
+    if throttle is not None:
+        db.delete(throttle)
     account.last_login_at = datetime.now(UTC)
     db.add(account)
     db.commit()
     db.refresh(account)
-    return account
+    return AuthenticationResult(
+        status=AuthenticationStatus.AUTHENTICATED,
+        subject_hash=subject_hash,
+        account=account,
+    )
 
 
 def get_account(db: Session, account_id: UUID) -> UserAccount | None:
@@ -144,6 +218,7 @@ def create_account(db: Session, payload: UserAccountCreate) -> UserAccount:
         password_hash=hash_password(payload.password),
         is_active=True,
         session_version=1,
+        password_reset_required=True,
     )
     db.add(account)
     db.commit()
@@ -190,10 +265,45 @@ def update_account(
     return account
 
 
-def reset_password(db: Session, account: UserAccount, password: str) -> UserAccount:
+def clear_login_throttle(db: Session, email: str) -> None:
+    throttle = db.scalar(
+        select(LoginThrottle).where(LoginThrottle.key_hash == login_subject_hash(email))
+    )
+    if throttle is not None:
+        db.delete(throttle)
+
+
+def begin_admin_recovery(db: Session, account: UserAccount, password: str) -> UserAccount:
     account.password_hash = hash_password(password)
     account.session_version += 1
+    account.password_reset_required = True
+    clear_login_throttle(db, account.email)
     db.add(account)
     db.commit()
     db.refresh(account)
     return account
+
+
+def change_password(
+    db: Session,
+    account: UserAccount,
+    *,
+    current_password: str,
+    new_password: str,
+) -> UserAccount:
+    if not verify_password(current_password, account.password_hash):
+        raise ValueError("Current password is incorrect.")
+    if verify_password(new_password, account.password_hash):
+        raise ValueError("New password must be different from the current password.")
+    account.password_hash = hash_password(new_password)
+    account.password_reset_required = False
+    account.session_version += 1
+    clear_login_throttle(db, account.email)
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+def reset_password(db: Session, account: UserAccount, password: str) -> UserAccount:
+    return begin_admin_recovery(db, account, password)

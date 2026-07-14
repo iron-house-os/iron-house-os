@@ -22,6 +22,8 @@ openssl rand -hex 32
 
 Use generated values for the database password, application secret, and bootstrap administrator password. Keep `.env.production` out of source control. Leave `SESSION_COOKIE_SECURE=true` for every HTTPS deployment.
 
+The default login safeguard locks a normalized email subject after five failures for 15 minutes. Override `LOGIN_MAX_FAILED_ATTEMPTS` or `LOGIN_LOCKOUT_MINUTES` only through the protected environment file and keep values within the application validation bounds.
+
 2. Validate the fully rendered Compose configuration.
 
 ```bash
@@ -65,6 +67,7 @@ The public URL can then be shared from a phone or desktop browser as a QR code. 
 - Viewers are read-only. Estimators can mutate estimating, procurement, project, document, tender, and bid workflows but not fleet data or users. Operations managers can mutate all business modules. Only administrators can manage user accounts.
 - Denied module actions are written to the durable audit stream without request bodies, credentials, or session tokens.
 - Role changes, deactivation, and password resets invalidate that user's existing sessions.
+- Administrator-created and administrator-recovered accounts must replace their temporary password before opening a business module. Recovery clears any active login lockout.
 - Remove `BOOTSTRAP_ADMIN_PASSWORD` from routine operator notes after the first successful start. The startup task never overwrites an existing account password.
 
 ## Operations

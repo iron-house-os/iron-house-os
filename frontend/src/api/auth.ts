@@ -6,6 +6,7 @@ export type AuthUser = {
   display_name: string;
   role: "admin" | "operations_manager" | "estimator" | "viewer";
   is_active: boolean;
+  password_reset_required: boolean;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -45,5 +46,13 @@ export const authApi = {
     if (!response.ok && response.status !== 401) {
       throw new Error(`Logout failed with ${response.status}`);
     }
+  },
+  changePassword: async (currentPassword: string, newPassword: string): Promise<AuthUser> => {
+    const response = await apiFetch(`${API_BASE_URL}/auth/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    return (await readAuthResponse(response)).user;
   },
 };

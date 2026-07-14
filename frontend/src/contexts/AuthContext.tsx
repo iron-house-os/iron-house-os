@@ -8,6 +8,7 @@ type AuthContextValue = {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,9 +53,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setUser(await authApi.changePassword(currentPassword, newPassword));
+  }, []);
+
   const value = useMemo(
-    () => ({ user, isLoading, login, logout }),
-    [isLoading, login, logout, user],
+    () => ({ user, isLoading, login, logout, changePassword }),
+    [changePassword, isLoading, login, logout, user],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

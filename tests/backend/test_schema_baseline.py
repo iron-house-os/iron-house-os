@@ -53,6 +53,9 @@ def test_baseline_adopts_complete_build_208_schema_without_losing_data(
     database_url = f"sqlite:///{tmp_path / 'build-208.db'}"
     engine = create_engine(database_url)
     Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE login_throttles"))
+        connection.execute(text("ALTER TABLE user_accounts DROP COLUMN password_reset_required"))
     project_id = uuid4()
     with Session(engine) as session:
         session.add(

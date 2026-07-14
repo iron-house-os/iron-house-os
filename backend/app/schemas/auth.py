@@ -20,6 +20,7 @@ class UserAccountRead(BaseModel):
     display_name: str
     role: UserRole
     is_active: bool
+    password_reset_required: bool
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -63,6 +64,11 @@ class UserAccountUpdate(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     password: str = Field(min_length=12, max_length=512)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=12, max_length=512)
 
 
 class AuthStatus(BaseModel):

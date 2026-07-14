@@ -11,6 +11,7 @@ const userAccount = {
   display_name: "Jeremie Peters",
   role: "admin",
   is_active: true,
+  password_reset_required: false,
   last_login_at: null,
   created_at: "2026-07-14T00:00:00Z",
   updated_at: "2026-07-14T00:00:00Z",
@@ -84,5 +85,50 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Email or password is incorrect.");
+  });
+
+  it("requires a permanent password after administrator-assisted recovery", async () => {
+    const recoveryAccount = { ...userAccount, password_reset_required: true };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/auth/me")) {
+        return new Response(
+          JSON.stringify({ authentication: "authenticated", user: recoveryAccount }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/auth/change-password")) {
+        return new Response(
+          JSON.stringify({
+            authentication: "authenticated",
+            user: { ...recoveryAccount, password_reset_required: false },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/projects")) {
+        return new Response(JSON.stringify({ items: [], total: 0 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Choose a permanent password")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Temporary password"), "temporary-password-2026");
+    await user.type(screen.getByLabelText("New password"), "permanent-password-2026");
+    await user.type(screen.getByLabelText("Confirm new password"), "permanent-password-2026");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+
+    expect(await screen.findByText("Signed in as Jeremie Peters")).toBeInTheDocument();
   });
 });

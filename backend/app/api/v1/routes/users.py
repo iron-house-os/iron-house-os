@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import AdminUser
@@ -14,6 +14,8 @@ from app.schemas.auth import (
     UserAccountUpdate,
 )
 from app.services import auth
+from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
+from app.services.request_context import get_request_audit_context
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -63,8 +65,19 @@ def update_user(
 def reset_user_password(
     account_id: UUID,
     payload: PasswordResetRequest,
-    _: AdminUser,
+    request: Request,
+    admin: AdminUser,
     db: DBSession,
 ) -> UserAccountRead:
     account = _account_or_404(db, account_id)
-    return UserAccountRead.model_validate(auth.reset_password(db, account, payload.password))
+    recovered = auth.begin_admin_recovery(db, account, payload.password)
+    context = get_request_audit_context(request)
+    emit_document_audit_event(
+        DocumentAuditEvent(
+            action="account_recovery",
+            actor=admin.email,
+            request_id=context.request_id,
+            metadata={"target_account_id": str(account.id)},
+        )
+    )
+    return UserAccountRead.model_validate(recovered)
