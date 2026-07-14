@@ -102,6 +102,22 @@ jobs:
           --email "$BOOTSTRAP_ADMIN_EMAIL"
           --password "$BOOTSTRAP_ADMIN_PASSWORD"
           --input /tmp/ihos-recovery-probe.json
+      - name: Build release-candidate evidence
+        run: >-
+          python scripts/release_candidate_evidence.py
+          --output release-candidate-evidence
+          --release-id "$GITHUB_SHA"
+          --gate ci=not_run
+          --gate browser_mobile_accessibility=not_run
+          --gate production_stack_smoke=passed
+          --gate backup_restore=passed
+      - name: Upload release-candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-evidence-${{ github.sha }}
+          path: release-candidate-evidence
+          if-no-files-found: error
+          retention-days: 30
       - name: Show production logs on failure
         if: failure()
         run: docker compose --env-file .env.production.example -f docker-compose.production.yml logs --no-color
