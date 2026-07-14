@@ -1,6 +1,6 @@
 from tempfile import NamedTemporaryFile
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
 from app.db.session import engine
@@ -12,6 +12,10 @@ def _database_readiness() -> tuple[bool, str]:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
+            inspector = inspect(connection)
+            required_tables = ("projects", "documents", "rfq_packages")
+            if any(not inspector.has_table(table) for table in required_tables):
+                return False, "schema_incomplete"
     except Exception:
         return False, "unavailable"
     return True, "ready"
