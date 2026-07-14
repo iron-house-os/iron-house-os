@@ -19,6 +19,9 @@ def create_build_208_state() -> None:
     if inspect(engine).get_table_names():
         raise RuntimeError("Build 208 upgrade probe database must start empty.")
     Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE login_throttles"))
+        connection.execute(text("ALTER TABLE user_accounts DROP COLUMN password_reset_required"))
     with Session(engine) as session:
         session.add(
             Project(

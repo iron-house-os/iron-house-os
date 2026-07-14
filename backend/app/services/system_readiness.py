@@ -19,6 +19,7 @@ def _database_readiness() -> tuple[bool, str]:
                 "documents",
                 "rfq_packages",
                 "user_accounts",
+                "login_throttles",
                 "alembic_version",
             )
             if any(not inspector.has_table(table) for table in required_tables):

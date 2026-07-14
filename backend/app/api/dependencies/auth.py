@@ -55,6 +55,27 @@ def require_module_access(request: Request, user: CurrentUser) -> AuthenticatedU
         )
     module = path_parts[len(prefix)]
     permission = required_permission(module, request.method)
+    if user.password_reset_required:
+        context = get_request_audit_context(request)
+        emit_document_audit_event(
+            DocumentAuditEvent(
+                action="module_access",
+                outcome="denied",
+                actor=user.email,
+                request_id=context.request_id,
+                metadata={
+                    "module": module,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "reason": "password_change_required",
+                    "role": user.role,
+                },
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Change your temporary password before accessing business modules.",
+        )
     if can_access_module(user.role, module, permission):
         return user
 

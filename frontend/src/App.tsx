@@ -12,6 +12,7 @@ import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
+import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -33,6 +34,7 @@ function AuthenticatedApp() {
     );
   }
   if (!user) return <LoginPage />;
+  if (user.password_reset_required) return <PasswordRecoveryPage />;
 
   const placeholderModules = modules.filter(
     (module) =>

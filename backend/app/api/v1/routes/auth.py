@@ -1,16 +1,25 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.user import UserAccount
-from app.schemas.auth import AuthStatus, LoginRequest, RoleAccessRead, UserAccountRead
+from app.schemas.auth import (
+    AuthStatus,
+    LoginRequest,
+    PasswordChangeRequest,
+    RoleAccessRead,
+    UserAccountRead,
+)
+from app.services import auth
 from app.services.access_control import describe_role_access
-from app.services.auth import authenticate, create_session_token
+from app.services.auth import AuthenticationStatus, authenticate, create_session_token
+from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
+from app.services.request_context import get_request_audit_context
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -39,13 +48,49 @@ def auth_capability() -> dict[str, str]:
 
 
 @router.post("/login", response_model=AuthStatus, status_code=status.HTTP_200_OK)
-def login(payload: LoginRequest, response: Response, db: DBSession) -> AuthStatus:
-    account = authenticate(db, str(payload.email), payload.password)
-    if account is None:
+def login(payload: LoginRequest, request: Request, response: Response, db: DBSession) -> AuthStatus:
+    result = authenticate(db, str(payload.email), payload.password)
+    context = get_request_audit_context(request)
+    if result.status == AuthenticationStatus.LOCKED:
+        retry_after = max(
+            1,
+            int(((result.locked_until or datetime.now(UTC)) - datetime.now(UTC)).total_seconds()),
+        )
+        emit_document_audit_event(
+            DocumentAuditEvent(
+                action="login",
+                outcome="locked",
+                request_id=context.request_id,
+                metadata={"subject_hash": result.subject_hash},
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Sign-in is temporarily unavailable. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    if result.status != AuthenticationStatus.AUTHENTICATED or result.account is None:
+        emit_document_audit_event(
+            DocumentAuditEvent(
+                action="login",
+                outcome="denied",
+                request_id=context.request_id,
+                metadata={"subject_hash": result.subject_hash},
+            )
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email or password is incorrect.",
         )
+    account = result.account
+    emit_document_audit_event(
+        DocumentAuditEvent(
+            action="login",
+            actor=account.email,
+            request_id=context.request_id,
+            metadata={"subject_hash": result.subject_hash},
+        )
+    )
     _set_session_cookie(response, create_session_token(account))
     return AuthStatus(authentication="authenticated", user=UserAccountRead.model_validate(account))
 
@@ -73,3 +118,43 @@ def current_account(user: CurrentUser, db: DBSession) -> AuthStatus:
 @router.get("/me/permissions", response_model=RoleAccessRead)
 def current_permissions(user: CurrentUser) -> RoleAccessRead:
     return RoleAccessRead(role=user.role, modules=describe_role_access(user.role))
+
+
+@router.post("/change-password", response_model=AuthStatus)
+def change_current_password(
+    payload: PasswordChangeRequest,
+    request: Request,
+    response: Response,
+    user: CurrentUser,
+    db: DBSession,
+) -> AuthStatus:
+    account = db.get(UserAccount, user.id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found.")
+    context = get_request_audit_context(request)
+    try:
+        account = auth.change_password(
+            db,
+            account,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except ValueError as exc:
+        emit_document_audit_event(
+            DocumentAuditEvent(
+                action="password_change",
+                outcome="denied",
+                actor=user.email,
+                request_id=context.request_id,
+            )
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    emit_document_audit_event(
+        DocumentAuditEvent(
+            action="password_change",
+            actor=account.email,
+            request_id=context.request_id,
+        )
+    )
+    _set_session_cookie(response, create_session_token(account))
+    return AuthStatus(authentication="authenticated", user=UserAccountRead.model_validate(account))
