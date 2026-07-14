@@ -1,13 +1,13 @@
 # Iron House OS release runbook
 
-Build 207 packages IHOS as a single-node production stack. Build 208 adds database-backed user accounts and signed HTTP-only sessions. Nginx serves the compiled responsive web app and proxies `/api/v1` to FastAPI; FastAPI protects business routes, runs the schema bootstrap, creates the first administrator once, and stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
+Build 207 packages IHOS as a single-node production stack. Build 208 adds database-backed user accounts and signed HTTP-only sessions. Build 209 makes Alembic the schema authority and adds database-plus-upload recovery bundles with an automated restore drill. Nginx serves the compiled responsive web app and proxies `/api/v1` to FastAPI; FastAPI protects business routes, applies migrations, creates the first administrator once, and stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
 
 ## Host requirements
 
 - A Docker host with Docker Compose v2
 - A DNS name pointed at the host
 - An HTTPS reverse proxy or managed load balancer in front of port 8080
-- Automated backups for the `postgres_data` and `backend_data` volumes
+- Scheduled, off-host storage for recovery bundles created by `scripts/backup.sh`
 
 Do not expose the Compose port directly to the public internet. HTTPS must be terminated upstream so credentials, session cookies, and project data are encrypted in transit.
 
@@ -28,7 +28,7 @@ Use generated values for the database password, application secret, and bootstra
 docker compose --env-file .env.production -f docker-compose.production.yml config --quiet
 ```
 
-3. Build and start the stack. The backend applies Alembic, creates any model-backed tables missing from a clean database, creates the bootstrap administrator only when its email does not already exist, and then starts Uvicorn.
+3. Build and start the stack. The backend applies Alembic, creates the bootstrap administrator only when its email does not already exist, and then starts Uvicorn. A partial unversioned schema fails migration instead of being changed implicitly.
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
@@ -88,11 +88,44 @@ docker compose --env-file .env.production -f docker-compose.production.yml down
 
 Never add `--volumes` to the production shutdown command unless a verified restore is available and data deletion is intentional.
 
+## Backup
+
+Create a consistent recovery bundle during a short maintenance window. The script pauses the application services, dumps PostgreSQL, archives `/app/data`, writes SHA-256 checksums and the Alembic revision, then restarts the stack. It refuses to overwrite an existing destination and never copies the environment file.
+
+```bash
+set -a
+source .env.production
+set +a
+scripts/backup.sh --output "/secure/off-host/ihos-$(date -u +%Y%m%dT%H%M%SZ)"
+```
+
+Copy completed bundles off the Docker host. Keep `.env.production` and its secret-key recovery procedure in a separate protected secret store; neither belongs in the data bundle.
+
+## Restore
+
+Restore is intentionally destructive and requires an explicit confirmation flag. By default it creates a timestamped safety backup under `backups/pre-restore`, verifies the requested bundle checksums before changing data, recreates the database, restores uploads and audit data, applies any newer migrations, starts the stack, and runs the authenticated read-only release check.
+
+```bash
+set -a
+source .env.production
+set +a
+scripts/restore.sh \
+  --backup /secure/off-host/ihos-20260714T120000Z \
+  --confirm-restore
+```
+
+`--skip-safety-backup` is reserved for disposable CI restore drills. After a production restore, run the full smoke path and inspect a known project and document:
+
+```bash
+python scripts/release_smoke.py --base-url https://your-production-host.example --full
+```
+
+The release-readiness workflow performs the same backup and restore against a disposable production stack, then proves that a sentinel database record and its uploaded PDF survived with the same checksum.
+
 ## Known limitations
 
 - Build 207 does not provision a cloud account, domain, certificate, or paid infrastructure.
-- The repository does not yet have an Alembic baseline; clean deployments use an idempotent SQLAlchemy model-schema bootstrap after Alembic.
 - User roles currently control account administration and document-audit access; fine-grained permissions for every business module remain future work.
 - Login throttling, password recovery email, and multi-factor authentication are not yet implemented.
-- Local Docker volumes are single-node storage; object storage, replication, and automated restore drills remain future release work.
+- Local Docker volumes remain single-node storage; scheduling and off-host retention of recovery bundles are operator responsibilities.
 - Gmail and Drive remain preview-only and perform no external actions.

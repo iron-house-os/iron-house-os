@@ -9,7 +9,7 @@ on:
       - "frontend/**"
       - "docker-compose.production.yml"
       - ".env.production.example"
-      - "scripts/release_smoke.py"
+      - "scripts/**"
       - ".github/workflows/release-readiness.yml"
   pull_request:
     branches: [main]
@@ -18,7 +18,7 @@ on:
       - "frontend/**"
       - "docker-compose.production.yml"
       - ".env.production.example"
-      - "scripts/release_smoke.py"
+      - "scripts/**"
       - ".github/workflows/release-readiness.yml"
 
 permissions:
@@ -34,9 +34,9 @@ jobs:
       POSTGRES_USER: iron_house
       POSTGRES_PASSWORD: build-207-ci-database-password
       SECRET_KEY: build-207-ci-secret-key-at-least-32-characters
-      BOOTSTRAP_ADMIN_EMAIL: build208@ironhousecivil.com
-      BOOTSTRAP_ADMIN_PASSWORD: build-208-ci-login-password
-      BOOTSTRAP_ADMIN_NAME: Build 208 Release User
+      BOOTSTRAP_ADMIN_EMAIL: build209@ironhousecivil.com
+      BOOTSTRAP_ADMIN_PASSWORD: build-209-ci-login-password
+      BOOTSTRAP_ADMIN_NAME: Build 209 Release User
       SESSION_COOKIE_SECURE: "false"
       IHOS_PORT: "8080"
     steps:
@@ -45,6 +45,22 @@ jobs:
         run: docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet
       - name: Start production stack
         run: docker compose --env-file .env.production.example -f docker-compose.production.yml up -d --build --wait
+      - name: Prove Build 208 PostgreSQL upgrade
+        run: |
+          database_url="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ihos_build_208_upgrade"
+          docker compose --env-file .env.production.example -f docker-compose.production.yml \
+            exec -T postgres createdb -U "$POSTGRES_USER" ihos_build_208_upgrade
+          docker compose --env-file .env.production.example -f docker-compose.production.yml \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
+            -v "$PWD/scripts:/recovery-scripts:ro" \
+            backend python /recovery-scripts/build_208_upgrade_probe.py create
+          docker compose --env-file .env.production.example -f docker-compose.production.yml \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
+            backend alembic upgrade head
+          docker compose --env-file .env.production.example -f docker-compose.production.yml \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
+            -v "$PWD/scripts:/recovery-scripts:ro" \
+            backend python /recovery-scripts/build_208_upgrade_probe.py verify
       - name: Run full release smoke path
         run: >-
           python scripts/release_smoke.py
@@ -52,6 +68,35 @@ jobs:
           --email "$BOOTSTRAP_ADMIN_EMAIL"
           --password "$BOOTSTRAP_ADMIN_PASSWORD"
           --full
+      - name: Create recovery sentinel
+        run: >-
+          python scripts/recovery_probe.py create
+          --base-url http://127.0.0.1:8080
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
+          --output /tmp/ihos-recovery-probe.json
+      - name: Back up production data
+        env:
+          IHOS_COMPOSE_FILE: docker-compose.production.yml
+          IHOS_COMPOSE_ENV_FILE: .env.production.example
+        run: scripts/backup.sh --output /tmp/ihos-recovery-backup
+      - name: Restore production data into the disposable stack
+        env:
+          IHOS_COMPOSE_FILE: docker-compose.production.yml
+          IHOS_COMPOSE_ENV_FILE: .env.production.example
+          IHOS_BASE_URL: http://127.0.0.1:8080
+        run: >-
+          scripts/restore.sh
+          --backup /tmp/ihos-recovery-backup
+          --confirm-restore
+          --skip-safety-backup
+      - name: Verify restored database and upload
+        run: >-
+          python scripts/recovery_probe.py verify
+          --base-url http://127.0.0.1:8080
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
+          --input /tmp/ihos-recovery-probe.json
       - name: Show production logs on failure
         if: failure()
         run: docker compose --env-file .env.production.example -f docker-compose.production.yml logs --no-color

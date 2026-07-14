@@ -143,7 +143,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "/api/v1/projects",
         method="POST",
         payload={
-            "name": f"Build 208 release smoke {stamp}",
+            "name": f"Release smoke {stamp}",
             "municipality": "Surrey",
             "project_number": f"SMOKE-{stamp}",
         },
@@ -194,7 +194,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "/api/v1/rfqs",
         method="POST",
         payload={
-            "title": f"Build 208 release RFQ {stamp}",
+            "title": f"Release smoke RFQ {stamp}",
             "project_id": project["id"],
             "project_name": project["name"],
             "scope_summary": "Automated release validation only.",
@@ -208,10 +208,10 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
     multipart, content_type = _multipart(
         {
             "project_id": project["id"],
-            "title": "Build 208 release drawing",
+            "title": "Release smoke drawing",
             "municipality": "Surrey",
         },
-        "build-208-release.pdf",
+        "release-smoke.pdf",
         pdf,
     )
     drawing = _json_request(

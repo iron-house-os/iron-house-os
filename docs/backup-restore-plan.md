@@ -3,9 +3,8 @@
 ## Backup targets
 
 - PostgreSQL database.
-- Uploaded project files.
-- Environment configuration.
-- Generated estimate workbooks and bid packages, if stored.
+- Uploaded project files, audit records, and generated artifacts in `/app/data`.
+- Environment configuration is deliberately excluded and must be protected separately.
 
 ## Backup frequency
 
@@ -15,12 +14,12 @@
 
 ## Restore test
 
-1. Restore database to a clean environment.
-2. Restore file storage.
-3. Start backend and frontend.
-4. Run smoke check.
-5. Open a known project.
-6. Confirm takeoffs, estimates, RFQs, and documents are present.
+1. Create a bundle with `scripts/backup.sh --output DIRECTORY`.
+2. Verify and restore it with `scripts/restore.sh --backup DIRECTORY --confirm-restore`.
+3. Confirm the authenticated smoke check passes.
+4. Open a known project and verify a stored document checksum.
+
+The release-readiness workflow performs this drill against a disposable production stack on every recovery-path change.
 
 ## Rule
 

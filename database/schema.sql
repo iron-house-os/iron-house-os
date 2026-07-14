@@ -1,3 +1,6 @@
+-- Legacy reference only. Build 209 makes Alembic the authoritative schema path.
+-- Do not mount this file into a new database or use it for production upgrades.
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS municipalities (

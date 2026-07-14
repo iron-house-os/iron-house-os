@@ -53,18 +53,20 @@ npm run dev
 
 ## Production Release
 
-Build 207 added the production Compose stack. Build 208 replaces the shared browser password with database-backed user accounts, signed HTTP-only sessions, role-aware administration, authenticated audit identity, and an in-app login/logout flow.
+Build 207 added the production Compose stack. Build 208 replaces the shared browser password with database-backed user accounts, signed HTTP-only sessions, role-aware administration, authenticated audit identity, and an in-app login/logout flow. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles.
 
 ```bash
 cp .env.production.example .env.production
 # Replace every placeholder secret in .env.production before continuing.
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
+set -a && source .env.production && set +a
 python scripts/release_smoke.py --base-url http://127.0.0.1:8080 --full
+scripts/backup.sh --output "/secure/off-host/ihos-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
 The smoke test expects `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`. It signs in through the application before testing protected APIs. Full mode creates clearly named validation records; omit `--full` for a read-only health, login, and application-shell check.
 
-See [the release runbook](docs/deployment.md) before exposing IHOS outside a trusted network. A public deployment must terminate HTTPS upstream and back up both persistent volumes.
+See [the release runbook](docs/deployment.md) before exposing IHOS outside a trusted network. A public deployment must terminate HTTPS upstream, schedule off-host recovery bundles, and regularly confirm the automated restore drill remains green.
 
 ## Core Application Areas
 
