@@ -43,7 +43,9 @@ def test_every_supported_role_can_read_business_modules(role: str) -> None:
 
 def test_role_matrix_separates_administration_and_mutation() -> None:
     assert can_access_module("admin", "users", ModulePermission.ADMINISTER)
+    assert can_access_module("admin", "operations", ModulePermission.ADMINISTER)
     assert not can_access_module("operations_manager", "users", ModulePermission.ADMINISTER)
+    assert not can_access_module("operations_manager", "operations", ModulePermission.ADMINISTER)
     assert can_access_module("operations_manager", "equipment", ModulePermission.WRITE)
     assert not can_access_module("estimator", "equipment", ModulePermission.WRITE)
     assert can_access_module("estimator", "estimates", ModulePermission.WRITE)

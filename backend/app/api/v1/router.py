@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     equipment,
     estimates,
     municipality,
+    operations,
     projects,
     quotes,
     rfq_automation,
@@ -50,4 +51,5 @@ protected_router.include_router(municipality.router, prefix="/municipality", tag
 protected_router.include_router(tenders.router, prefix="/tenders", tags=["tenders"])
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
+protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)
