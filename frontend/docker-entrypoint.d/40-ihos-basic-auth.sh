@@ -6,4 +6,5 @@ set -eu
 
 printf '%s\n' "$IHOS_ADMIN_PASSWORD" | \
   htpasswd -ciB /etc/nginx/.htpasswd "$IHOS_ADMIN_USERNAME"
-chmod 600 /etc/nginx/.htpasswd
+chown root:nginx /etc/nginx/.htpasswd
+chmod 640 /etc/nginx/.htpasswd
