@@ -3,6 +3,7 @@ from tempfile import NamedTemporaryFile
 from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
+from app.db.schema_version import CURRENT_SCHEMA_REVISION
 from app.db.session import engine
 from app.services import file_storage
 from app.services.file_storage import LocalFileStorageProvider
@@ -13,9 +14,18 @@ def _database_readiness() -> tuple[bool, str]:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
             inspector = inspect(connection)
-            required_tables = ("projects", "documents", "rfq_packages")
+            required_tables = (
+                "projects",
+                "documents",
+                "rfq_packages",
+                "user_accounts",
+                "alembic_version",
+            )
             if any(not inspector.has_table(table) for table in required_tables):
                 return False, "schema_incomplete"
+            revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+            if revision != CURRENT_SCHEMA_REVISION:
+                return False, "migration_required"
     except Exception:
         return False, "unavailable"
     return True, "ready"

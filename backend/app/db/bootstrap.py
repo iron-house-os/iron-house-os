@@ -5,7 +5,7 @@ from app.db.session import engine
 
 
 def bootstrap_schema() -> None:
-    """Create model-backed tables when a deployment has no Alembic baseline yet."""
+    """Compatibility helper for local callers; deployed runtimes use Alembic."""
 
     Base.metadata.create_all(bind=engine)
 

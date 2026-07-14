@@ -22,7 +22,7 @@ npm run build
 
 ## Migrations
 
-The SQL files in `database/` provide a clear starting schema. Alembic is included for application-managed migrations as models evolve.
+Alembic is the schema authority. Apply the current schema with `cd backend && alembic upgrade head`, and create reviewed Alembic revisions for model changes. Files in `database/` are legacy references and must not be used to initialize a runtime database.
 
 ## Phase 2 Guidance
 
