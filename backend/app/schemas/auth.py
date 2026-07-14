@@ -68,3 +68,8 @@ class PasswordResetRequest(BaseModel):
 class AuthStatus(BaseModel):
     authentication: str
     user: UserAccountRead
+
+
+class RoleAccessRead(BaseModel):
+    role: UserRole
+    modules: dict[str, list[str]]

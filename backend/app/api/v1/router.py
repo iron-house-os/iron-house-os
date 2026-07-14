@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.dependencies.auth import require_authenticated_user
+from app.api.dependencies.auth import require_authenticated_user, require_module_access
 
 from app.api.v1.routes import (
     auth,
@@ -26,7 +26,9 @@ from app.api.v1.routes import (
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 
-protected_router = APIRouter(dependencies=[Depends(require_authenticated_user)])
+protected_router = APIRouter(
+    dependencies=[Depends(require_authenticated_user), Depends(require_module_access)]
+)
 protected_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 protected_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
 protected_router.include_router(rfqs.router, prefix="/rfqs", tags=["rfqs"])

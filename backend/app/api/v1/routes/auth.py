@@ -8,7 +8,8 @@ from app.api.dependencies.auth import CurrentUser
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.user import UserAccount
-from app.schemas.auth import AuthStatus, LoginRequest, UserAccountRead
+from app.schemas.auth import AuthStatus, LoginRequest, RoleAccessRead, UserAccountRead
+from app.services.access_control import describe_role_access
 from app.services.auth import authenticate, create_session_token
 
 router = APIRouter()
@@ -67,3 +68,8 @@ def current_account(user: CurrentUser, db: DBSession) -> AuthStatus:
     if account is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found.")
     return AuthStatus(authentication="authenticated", user=UserAccountRead.model_validate(account))
+
+
+@router.get("/me/permissions", response_model=RoleAccessRead)
+def current_permissions(user: CurrentUser) -> RoleAccessRead:
+    return RoleAccessRead(role=user.role, modules=describe_role_access(user.role))
