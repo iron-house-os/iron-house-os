@@ -50,11 +50,13 @@ Frontend without Docker:
 cd frontend
 npm install
 npm run dev
+# After installing Chromium with Playwright:
+npm run build && npm run test:e2e
 ```
 
 ## Production Release
 
-Build 207 added the production Compose stack. Builds 208–211 add database-backed sessions, role permissions, login abuse safeguards, and administrator-assisted recovery. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles. Build 212 adds private S3-compatible storage and verified scheduled-backup retention while preserving the controlled local-volume option.
+Build 207 added the production Compose stack. Builds 208–211 add database-backed sessions, role permissions, login abuse safeguards, and administrator-assisted recovery. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles. Build 212 adds private S3-compatible storage and verified scheduled-backup retention while preserving the controlled local-volume option. Builds 213–214 add operational diagnostics, incident runbooks, and a desktop/mobile/accessibility browser release gate.
 
 ```bash
 cp .env.production.example .env.production
