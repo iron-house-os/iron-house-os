@@ -53,7 +53,7 @@ npm run dev
 
 ## Production Release
 
-Build 207 adds a production Compose stack with a compiled Nginx frontend, same-origin API proxying, startup migrations, PostgreSQL persistence, document and audit persistence, runtime readiness probes, temporary browser login protection, and a full release smoke test.
+Build 207 adds a production Compose stack with a compiled Nginx frontend, same-origin API proxying, startup migrations and schema bootstrap, PostgreSQL persistence, document and audit persistence, runtime readiness probes, temporary browser login protection, and a full release smoke test.
 
 ```bash
 cp .env.production.example .env.production
