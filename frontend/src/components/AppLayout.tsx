@@ -70,7 +70,7 @@ export function AppLayout({ children }: PropsWithChildren) {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-xs font-medium text-iron-500 sm:block">{accessLabel}</div>
-            <div className="rounded-md bg-signal-green px-3 py-1 text-xs font-semibold capitalize text-white">
+            <div className="rounded-md bg-iron-950 px-3 py-1 text-xs font-semibold capitalize text-white">
               {user?.role.replace("_", " ")}
             </div>
             <button
