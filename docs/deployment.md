@@ -1,6 +1,6 @@
 # Iron House OS release runbook
 
-Build 207 packages IHOS as a single-node production stack. Nginx serves the compiled responsive web app, protects it with a temporary browser login, and proxies `/api/v1` to FastAPI. FastAPI runs migrations before accepting traffic and stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
+Build 207 packages IHOS as a single-node production stack. Nginx serves the compiled responsive web app, protects it with a temporary browser login, and proxies `/api/v1` to FastAPI. FastAPI runs Alembic and an idempotent model-schema bootstrap before accepting traffic, then stores uploads and audit events on a persistent volume. PostgreSQL uses a separate persistent volume.
 
 ## Host requirements
 
@@ -28,7 +28,7 @@ Use generated values for the database password, application secret, and browser 
 docker compose --env-file .env.production -f docker-compose.production.yml config --quiet
 ```
 
-3. Build and start the stack. The backend applies Alembic migrations before Uvicorn starts.
+3. Build and start the stack. The backend applies Alembic, creates any model-backed tables missing from a clean database, and then starts Uvicorn.
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
@@ -83,6 +83,7 @@ Never add `--volumes` to the production shutdown command unless a verified resto
 ## Known limitations
 
 - Build 207 does not provision a cloud account, domain, certificate, or paid infrastructure.
+- The repository does not yet have an Alembic baseline; clean deployments use an idempotent SQLAlchemy model-schema bootstrap after Alembic.
 - The temporary Nginx browser login is one shared credential, not per-user authorization or an audit identity.
 - Local Docker volumes are single-node storage; object storage, replication, and automated restore drills remain future release work.
 - Gmail and Drive remain preview-only and perform no external actions.
