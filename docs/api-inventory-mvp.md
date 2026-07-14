@@ -4,6 +4,8 @@
 
 - `GET /health`
 - `GET /readiness`
+- `GET /api/v1/operations/diagnostics` (administrator only)
+- `GET /api/v1/operations/security-events` (administrator only)
 
 ## Projects
 

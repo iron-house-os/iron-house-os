@@ -27,7 +27,7 @@ BUSINESS_MODULES = (
     "tenders",
     "equipment",
 )
-ALL_MODULES = (*BUSINESS_MODULES, "users")
+ALL_MODULES = (*BUSINESS_MODULES, "users", "operations")
 
 ESTIMATOR_WRITE_MODULES = frozenset(
     {
@@ -56,10 +56,10 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
         return frozenset()
     if normalized_role == "admin":
         permissions = {ModulePermission.READ, ModulePermission.WRITE}
-        if module == "users":
+        if module in {"users", "operations"}:
             permissions.add(ModulePermission.ADMINISTER)
         return frozenset(permissions)
-    if module == "users":
+    if module in {"users", "operations"}:
         return frozenset()
     if normalized_role == "operations_manager":
         return frozenset({ModulePermission.READ, ModulePermission.WRITE})
@@ -74,7 +74,7 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
 
 
 def required_permission(module: str, method: str) -> ModulePermission:
-    if module == "users":
+    if module in {"users", "operations"}:
         return ModulePermission.ADMINISTER
     if method.upper() in {"GET", "HEAD", "OPTIONS"}:
         return ModulePermission.READ

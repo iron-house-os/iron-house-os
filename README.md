@@ -32,6 +32,7 @@ docker compose up --build
 - API docs: http://localhost:8000/docs
 - Health: http://localhost:8000/health
 - Readiness: http://localhost:8000/readiness
+- Administrator diagnostics: http://localhost:8000/api/v1/operations/diagnostics
 
 Backend without Docker:
 

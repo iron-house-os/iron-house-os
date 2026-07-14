@@ -5,6 +5,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.middleware.observability import RequestObservabilityMiddleware
 from app.services.document_audit import configure_document_audit_store
 from app.services.document_audit_store import create_document_audit_store_from_environment
 from app.services.system_readiness import get_system_readiness
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestObservabilityMiddleware)
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
