@@ -16,8 +16,8 @@ Allow estimators to upload drawings, specifications, addenda, RFQ attachments, q
 
 ## Storage options
 
-1. Local filesystem for development only.
-2. Private object storage for hosted use.
+1. Controlled local filesystem volume for development or single-node use.
+2. Private S3-compatible object storage for hosted use, with generated keys and local processing cache.
 3. Google Drive integration later if approved.
 
 ## Controls
@@ -27,3 +27,5 @@ Allow estimators to upload drawings, specifications, addenda, RFQ attachments, q
 - Avoid public URLs.
 - Store original filename and safe storage key separately.
 - Add upload audit event.
+- Reject object URIs outside the configured private bucket and prefix.
+- Verify object SHA-256 metadata after downloading a cache miss.

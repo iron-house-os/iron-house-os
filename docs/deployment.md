@@ -8,6 +8,7 @@ Build 207 packages IHOS as a single-node production stack. Build 208 adds databa
 - A DNS name pointed at the host
 - An HTTPS reverse proxy or managed load balancer in front of port 8080
 - Scheduled, off-host storage for recovery bundles created by `scripts/backup.sh`
+- For object storage: an existing private S3-compatible bucket with versioning and protected runtime credentials
 
 Do not expose the Compose port directly to the public internet. HTTPS must be terminated upstream so credentials, session cookies, and project data are encrypted in transit.
 
@@ -93,6 +94,21 @@ docker compose --env-file .env.production -f docker-compose.production.yml down
 
 Never add `--volumes` to the production shutdown command unless a verified restore is available and data deletion is intentional.
 
+## Durable document storage
+
+Local volume storage remains available for a controlled single-node deployment. For durable object storage, set these protected environment values before starting the stack:
+
+```bash
+IHOS_STORAGE_BACKEND=s3
+IHOS_STORAGE_S3_BUCKET=your-private-bucket
+IHOS_STORAGE_S3_PREFIX=iron-house-os/production
+AWS_REGION=ca-central-1
+AWS_ACCESS_KEY_ID=replace-from-secret-store
+AWS_SECRET_ACCESS_KEY=replace-from-secret-store
+```
+
+Set `IHOS_STORAGE_S3_ENDPOINT_URL` only for an S3-compatible private endpoint. Do not make the bucket public. Grant the runtime identity only bucket discovery plus object read/write access under the configured prefix. Enable bucket versioning and a separately reviewed retention or replication policy before entrusting production documents to it.
+
 ## Backup
 
 Create a consistent recovery bundle during a short maintenance window. The script pauses the application services, dumps PostgreSQL, archives `/app/data`, writes SHA-256 checksums and the Alembic revision, then restarts the stack. It refuses to overwrite an existing destination and never copies the environment file.
@@ -105,6 +121,17 @@ scripts/backup.sh --output "/secure/off-host/ihos-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
 Copy completed bundles off the Docker host. Keep `.env.production` and its secret-key recovery procedure in a separate protected secret store; neither belongs in the data bundle.
+
+For daily host scheduling, review and install the templates in `ops/systemd/`, adjust their working directory, service user, backup destination, and environment-file path, then enable the timer. The service invokes `scripts/scheduled_backup.sh`, which refuses overlapping runs and prunes only checksum-verified bundles.
+
+```bash
+sudo cp ops/systemd/ihos-backup.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ihos-backup.timer
+systemctl list-timers ihos-backup.timer
+```
+
+Do not install these example units unchanged if `/opt/iron-house-os`, `/var/backups/iron-house-os`, or the `iron-house-os` service account do not match the host.
 
 ## Restore
 
@@ -133,4 +160,5 @@ The release-readiness workflow performs the same backup and restore against a di
 - User roles currently control account administration and document-audit access; fine-grained permissions for every business module remain future work.
 - Login throttling, password recovery email, and multi-factor authentication are not yet implemented.
 - Local Docker volumes remain single-node storage; scheduling and off-host retention of recovery bundles are operator responsibilities.
+- S3 bucket creation, versioning, replication, lifecycle policy, encryption-key policy, and spend approval remain infrastructure responsibilities.
 - Gmail and Drive remain preview-only and perform no external actions.

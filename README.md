@@ -53,7 +53,7 @@ npm run dev
 
 ## Production Release
 
-Build 207 added the production Compose stack. Build 208 replaces the shared browser password with database-backed user accounts, signed HTTP-only sessions, role-aware administration, authenticated audit identity, and an in-app login/logout flow. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles.
+Build 207 added the production Compose stack. Builds 208–211 add database-backed sessions, role permissions, login abuse safeguards, and administrator-assisted recovery. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles. Build 212 adds private S3-compatible storage and verified scheduled-backup retention while preserving the controlled local-volume option.
 
 ```bash
 cp .env.production.example .env.production

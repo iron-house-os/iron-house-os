@@ -12,6 +12,10 @@
 - Internal production: daily minimum.
 - Active bid week: before and after each major estimate revision.
 
+`scripts/scheduled_backup.sh` is the supported non-overlapping host entrypoint. Defaults retain at least seven verified bundles, keep 30 days, and cap the set at 60. Operators must size and approve values for the actual bid cadence.
+
+When S3-compatible storage is active, the private bucket is backed up independently with versioning and retention/replication. Recovery bundles protect PostgreSQL and the application cache; they do not export the authoritative bucket.
+
 ## Restore test
 
 1. Create a bundle with `scripts/backup.sh --output DIRECTORY`.
