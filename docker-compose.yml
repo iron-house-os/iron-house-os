@@ -25,6 +25,17 @@ services:
       - backend/.env.example
     environment:
       DATABASE_URL: postgresql+psycopg://iron_house:iron_house_dev@postgres:5432/iron_house_os
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Iron House Administrator}
+      SESSION_COOKIE_SECURE: "false"
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        python -m app.db.bootstrap &&
+        python -m app.db.bootstrap_admin &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     depends_on:

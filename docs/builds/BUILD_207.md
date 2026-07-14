@@ -1,5 +1,7 @@
 # Build 207 — working web-app release
 
+> Build 208 supersedes the shared browser-credential limitation with individual user sessions.
+
 ## Outcome
 
 IHOS can now run as a production-shaped single-node web application behind one URL. The release stack compiles the frontend, proxies browser API traffic through the same origin, migrates the database before startup, persists uploads and audit events, and blocks access with a browser login.

@@ -24,6 +24,11 @@ services:
       LOG_LEVEL: INFO
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Iron House Administrator}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
       BACKEND_CORS_ORIGINS: '[]'
       IHOS_STORAGE_BACKEND: local
       IHOS_STORAGE_ROOT: /app/data/uploads
@@ -35,6 +40,7 @@ services:
       - >-
         alembic upgrade head &&
         python -m app.db.bootstrap &&
+        python -m app.db.bootstrap_admin &&
         exec uvicorn app.main:app --host 0.0.0.0 --port 8000
         --proxy-headers --forwarded-allow-ips="*"
     depends_on:
@@ -62,9 +68,6 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
     restart: unless-stopped
-    environment:
-      IHOS_ADMIN_USERNAME: ${IHOS_ADMIN_USERNAME:?IHOS_ADMIN_USERNAME is required}
-      IHOS_ADMIN_PASSWORD: ${IHOS_ADMIN_PASSWORD:?IHOS_ADMIN_PASSWORD is required}
     depends_on:
       backend:
         condition: service_healthy
