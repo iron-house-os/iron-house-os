@@ -8,6 +8,14 @@ import { useAuth } from "../contexts/AuthContext";
 export function AppLayout({ children }: PropsWithChildren) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
+  const accessLabel =
+    user?.role === "viewer"
+      ? "Read-only access"
+      : user?.role === "estimator"
+        ? "Estimating access"
+        : user?.role === "operations_manager"
+          ? "Operations access"
+          : "Administrator access";
 
   return (
     <div className="min-h-screen bg-iron-50 text-iron-950">
@@ -61,6 +69,7 @@ export function AppLayout({ children }: PropsWithChildren) {
             Signed in as {user?.display_name}
           </div>
           <div className="flex items-center gap-3">
+            <div className="hidden text-xs font-medium text-iron-500 sm:block">{accessLabel}</div>
             <div className="rounded-md bg-signal-green px-3 py-1 text-xs font-semibold capitalize text-white">
               {user?.role.replace("_", " ")}
             </div>

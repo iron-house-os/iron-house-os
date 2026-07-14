@@ -62,6 +62,8 @@ The public URL can then be shared from a phone or desktop browser as a QR code. 
 - Sign in with the bootstrap administrator email and password from `.env.production`.
 - Administrators can create, update, deactivate, and reset accounts through `/api/v1/users`.
 - Roles are `admin`, `operations_manager`, `estimator`, and `viewer`.
+- Viewers are read-only. Estimators can mutate estimating, procurement, project, document, tender, and bid workflows but not fleet data or users. Operations managers can mutate all business modules. Only administrators can manage user accounts.
+- Denied module actions are written to the durable audit stream without request bodies, credentials, or session tokens.
 - Role changes, deactivation, and password resets invalidate that user's existing sessions.
 - Remove `BOOTSTRAP_ADMIN_PASSWORD` from routine operator notes after the first successful start. The startup task never overwrites an existing account password.
 
