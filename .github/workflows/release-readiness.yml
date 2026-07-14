@@ -1,0 +1,58 @@
+name: Release readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.production.yml"
+      - ".env.production.example"
+      - "scripts/release_smoke.py"
+      - ".github/workflows/release-readiness.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.production.yml"
+      - ".env.production.example"
+      - "scripts/release_smoke.py"
+      - ".github/workflows/release-readiness.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  production-stack:
+    name: Production stack smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      POSTGRES_DB: iron_house_os
+      POSTGRES_USER: iron_house
+      POSTGRES_PASSWORD: build-207-ci-database-password
+      SECRET_KEY: build-207-ci-secret-key-at-least-32-characters
+      IHOS_ADMIN_USERNAME: build207
+      IHOS_ADMIN_PASSWORD: build-207-ci-login-password
+      IHOS_PORT: "8080"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production configuration
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml config --quiet
+      - name: Start production stack
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml up -d --build --wait
+      - name: Run full release smoke path
+        run: >-
+          python scripts/release_smoke.py
+          --base-url http://127.0.0.1:8080
+          --username "$IHOS_ADMIN_USERNAME"
+          --password "$IHOS_ADMIN_PASSWORD"
+          --full
+      - name: Show production logs on failure
+        if: failure()
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml logs --no-color
+      - name: Stop production stack
+        if: always()
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml down --volumes
