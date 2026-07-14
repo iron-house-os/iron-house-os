@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
@@ -18,7 +18,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        description="Phase 1 API scaffold for Iron House OS.",
+        description="Iron House OS API.",
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
@@ -40,8 +40,11 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": settings.app_name}
 
     @app.get("/readiness", tags=["system"])
-    def readiness() -> dict[str, object]:
-        return get_system_readiness()
+    def readiness(response: Response) -> dict[str, object]:
+        report = get_system_readiness(probe_runtime=True)
+        if report["status"] != "ready":
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return report
 
     return app
 
