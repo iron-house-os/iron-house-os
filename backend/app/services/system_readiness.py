@@ -1,12 +1,9 @@
-from tempfile import NamedTemporaryFile
-
 from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
 from app.db.schema_version import CURRENT_SCHEMA_REVISION
 from app.db.session import engine
 from app.services import file_storage
-from app.services.file_storage import LocalFileStorageProvider
 
 
 def _database_readiness() -> tuple[bool, str]:
@@ -34,13 +31,9 @@ def _database_readiness() -> tuple[bool, str]:
 
 def _storage_readiness() -> tuple[bool, str]:
     provider = file_storage.storage_provider
-    if not isinstance(provider, LocalFileStorageProvider):
-        return False, "unsupported"
     try:
-        provider.root.mkdir(parents=True, exist_ok=True)
-        with NamedTemporaryFile(prefix=".readiness-", dir=provider.root):
-            pass
-    except OSError:
+        provider.readiness_check()
+    except (OSError, RuntimeError):
         return False, "unavailable"
     return True, "ready"
 

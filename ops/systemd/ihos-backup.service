@@ -1,0 +1,12 @@
+[Unit]
+Description=Iron House OS verified recovery backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=iron-house-os
+WorkingDirectory=/opt/iron-house-os
+EnvironmentFile=/opt/iron-house-os/.env.production
+Environment=IHOS_BACKUP_ROOT=/var/backups/iron-house-os
+ExecStart=/opt/iron-house-os/scripts/scheduled_backup.sh

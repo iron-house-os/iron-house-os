@@ -79,7 +79,12 @@ jobs:
         env:
           IHOS_COMPOSE_FILE: docker-compose.production.yml
           IHOS_COMPOSE_ENV_FILE: .env.production.example
-        run: scripts/backup.sh --output /tmp/ihos-recovery-backup
+          IHOS_BACKUP_ROOT: /tmp/ihos-scheduled-backups
+          IHOS_BACKUP_NAME: release-readiness
+          IHOS_BACKUP_RETENTION_DAYS: "30"
+          IHOS_BACKUP_KEEP_MINIMUM: "1"
+          IHOS_BACKUP_MAXIMUM_BUNDLES: "3"
+        run: scripts/scheduled_backup.sh
       - name: Restore production data into the disposable stack
         env:
           IHOS_COMPOSE_FILE: docker-compose.production.yml
@@ -87,7 +92,7 @@ jobs:
           IHOS_BASE_URL: http://127.0.0.1:8080
         run: >-
           scripts/restore.sh
-          --backup /tmp/ihos-recovery-backup
+          --backup /tmp/ihos-scheduled-backups/release-readiness
           --confirm-restore
           --skip-safety-backup
       - name: Verify restored database and upload
