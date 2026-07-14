@@ -51,14 +51,14 @@ jobs:
           docker compose --env-file .env.production.example -f docker-compose.production.yml \
             exec -T postgres createdb -U "$POSTGRES_USER" ihos_build_208_upgrade
           docker compose --env-file .env.production.example -f docker-compose.production.yml \
-            run --rm --no-deps -T -e DATABASE_URL="$database_url" \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
             -v "$PWD/scripts:/recovery-scripts:ro" \
             backend python /recovery-scripts/build_208_upgrade_probe.py create
           docker compose --env-file .env.production.example -f docker-compose.production.yml \
-            run --rm --no-deps -T -e DATABASE_URL="$database_url" \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
             backend alembic upgrade head
           docker compose --env-file .env.production.example -f docker-compose.production.yml \
-            run --rm --no-deps -T -e DATABASE_URL="$database_url" \
+            run --rm --no-deps -T -e DATABASE_URL="$database_url" -e PYTHONPATH=/app \
             -v "$PWD/scripts:/recovery-scripts:ro" \
             backend python /recovery-scripts/build_208_upgrade_probe.py verify
       - name: Run full release smoke path
