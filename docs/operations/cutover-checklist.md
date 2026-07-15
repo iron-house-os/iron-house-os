@@ -14,7 +14,7 @@ Jeremie approved Build 216 on 2026-07-15 with these limits:
 - Recovery: daily Droplet backup plus verified off-host recovery bundles
 - Monitoring: five-minute external checks for `/healthz` and `/readiness`
 - Window: 2026-07-19 13:00–15:00 UTC
-- Operator/approver: Jeremie Peters; rollback owner: Mac
+- Operator/approver: Jeremie Peters (`jeremie@ironhousecontracting.com`); rollback owner: Mac
 
 This approval permits the listed hosting spend, DNS record, TLS issuance, monitoring, and live deployment. It does not permit exceeding the budget, substituting a provider/region, disabling recovery controls, or sharing secrets in source control or chat.
 

@@ -19,7 +19,7 @@ def authenticated_context(request: Request) -> dict[str, str | None]:
 
     request.state.authenticated_user = AuthenticatedUser(
         id=UUID("00000000-0000-0000-0000-000000000001"),
-        email="jeremie@ironhousecivil.com",
+        email="jeremie@ironhousecontracting.com",
         display_name="Jeremie Peters",
         role="admin",
         session_version=1,
@@ -39,7 +39,7 @@ def test_request_context_uses_authenticated_identity() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "actor": "jeremie@ironhousecivil.com",
+        "actor": "jeremie@ironhousecontracting.com",
         "request_id": "req-fixed",
     }
 

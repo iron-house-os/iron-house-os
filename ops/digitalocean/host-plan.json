@@ -2,6 +2,7 @@
   "schema_version": 1,
   "approval": {
     "approved_by": "Jeremie Peters",
+    "approved_by_email": "jeremie@ironhousecontracting.com",
     "approved_on": "2026-07-15",
     "authorization": "Approve Build 216"
   },
@@ -38,7 +39,9 @@
     "window_start_utc": "2026-07-19T13:00:00Z",
     "window_end_utc": "2026-07-19T15:00:00Z",
     "operator": "Jeremie Peters",
+    "operator_email": "jeremie@ironhousecontracting.com",
     "approver": "Jeremie Peters",
+    "approver_email": "jeremie@ironhousecontracting.com",
     "rollback_owner": "Mac",
     "release_sha": null,
     "decision": "PENDING"

@@ -12,6 +12,7 @@ Jeremie approved Build 216 on 2026-07-15 with a CAD 60 monthly ceiling:
 - five-minute external health and readiness monitoring
 - 2026-07-19 13:00–15:00 UTC maintenance window
 - Jeremie as operator/approver and Mac as rollback owner
+- Jeremie email: `jeremie@ironhousecontracting.com`
 
 ## Delivered controls
 

@@ -159,6 +159,7 @@ cat >"$acceptance" <<EOF
 - Environment/host: DigitalOcean tor1 / $domain / $public_ipv4
 - Cutover window (UTC): $stamp
 - Operator: Jeremie Peters
+- Operator email: $BOOTSTRAP_ADMIN_EMAIL
 - Approver: Jeremie Peters
 - Rollback owner: Mac
 - Pre-cutover recovery point: s3://$IHOS_BACKUP_S3_BUCKET/${IHOS_BACKUP_S3_PREFIX:-recovery-bundles}/pre-cutover-$stamp.tar.gz

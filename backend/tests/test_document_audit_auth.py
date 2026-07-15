@@ -23,7 +23,7 @@ def setup_function() -> None:
 def test_principal_uses_authenticated_role_and_email() -> None:
     user = AuthenticatedUser(
         id=UUID("00000000-0000-0000-0000-000000000001"),
-        email="jeremie@ironhousecivil.com",
+        email="jeremie@ironhousecontracting.com",
         display_name="Jeremie Peters",
         role="operations_manager",
         session_version=1,
@@ -31,7 +31,7 @@ def test_principal_uses_authenticated_role_and_email() -> None:
     principal = get_document_audit_principal(user)
     assert principal == DocumentAuditPrincipal(
         role="operations_manager",
-        actor="jeremie@ironhousecivil.com",
+        actor="jeremie@ironhousecontracting.com",
     )
 
 

@@ -234,6 +234,20 @@ def update_account(
     acting_user: AuthenticatedUser,
 ) -> UserAccount:
     changes = payload.model_dump(exclude_unset=True)
+    previous_email = account.email
+    if "email" in changes:
+        if changes["email"] is None:
+            raise ValueError("Email cannot be blank.")
+        email = normalize_email(str(changes["email"]))
+        duplicate = db.scalar(
+            select(UserAccount.id).where(
+                func.lower(UserAccount.email) == email,
+                UserAccount.id != account.id,
+            )
+        )
+        if duplicate is not None:
+            raise ValueError("A user with that email already exists.")
+        changes["email"] = email
     if account.id == acting_user.id and changes.get("is_active") is False:
         raise ValueError("You cannot deactivate your own account.")
     if account.id == acting_user.id and changes.get("role") not in (None, "admin"):
@@ -257,8 +271,14 @@ def update_account(
         setattr(account, field, value)
     if account.role not in ALLOWED_ROLES:
         raise ValueError("Unsupported user role.")
-    if account.role != previous_role or account.is_active != previous_active:
+    if (
+        account.email != previous_email
+        or account.role != previous_role
+        or account.is_active != previous_active
+    ):
         account.session_version += 1
+    if account.email != previous_email:
+        clear_login_throttle(db, previous_email)
     db.add(account)
     db.commit()
     db.refresh(account)
