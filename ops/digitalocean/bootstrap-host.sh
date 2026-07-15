@@ -11,7 +11,6 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get upgrade -y
 apt-get install -y \
-  awscli \
   ca-certificates \
   certbot \
   curl \
@@ -21,7 +20,20 @@ apt-get install -y \
   jq \
   nginx \
   python3-certbot-nginx \
+  unzip \
   ufw
+
+if ! command -v aws >/dev/null; then
+  aws_installer=$(mktemp -d)
+  curl -fsSLo "${aws_installer}/awscliv2.zip" \
+    https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+  unzip -q "${aws_installer}/awscliv2.zip" -d "${aws_installer}"
+  "${aws_installer}/aws/install" \
+    --install-dir /usr/local/aws-cli \
+    --bin-dir /usr/local/bin
+  rm -rf "${aws_installer}"
+fi
+aws --version
 
 install -d -m 0700 /etc/iron-house-os
 install -d -m 0755 \
