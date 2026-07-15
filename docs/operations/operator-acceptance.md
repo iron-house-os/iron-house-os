@@ -9,8 +9,10 @@ This record is intentionally **pending** in source control. Copy it into the app
 - Cutover window (UTC):
 - Operator:
 - Approver:
+- Rollback owner:
 - Pre-cutover recovery point:
 - Evidence bundle location and SHA-256:
+- Release evidence verification result:
 - Observed `/health` result/time:
 - Observed `/readiness` result/time:
 - Authenticated smoke result:

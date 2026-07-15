@@ -2,6 +2,22 @@
 
 No step in this checklist authorizes infrastructure spend, DNS changes, credential sharing, or external communication. Those actions require Jeremie’s explicit approval.
 
+## Build 216 approved plan
+
+Jeremie approved Build 216 on 2026-07-15 with these limits:
+
+- Host: DigitalOcean Basic Droplet, Toronto (`tor1`), 2 vCPU / 4 GiB
+- Budget: maximum CAD 60 per month; no automatic paid upgrade
+- Domain: `os.ironhousecivil.com`
+- TLS: Let's Encrypt terminated by host Nginx
+- Storage: private, versioned, encrypted AWS S3 in `ca-central-1`
+- Recovery: daily Droplet backup plus verified off-host recovery bundles
+- Monitoring: five-minute external checks for `/healthz` and `/readiness`
+- Window: 2026-07-19 13:00–15:00 UTC
+- Operator/approver: Jeremie Peters; rollback owner: Mac
+
+This approval permits the listed hosting spend, DNS record, TLS issuance, monitoring, and live deployment. It does not permit exceeding the budget, substituting a provider/region, disabling recovery controls, or sharing secrets in source control or chat.
+
 ## Go/no-go prerequisites
 
 - [ ] Approved host, region, budget, domain, TLS termination, backup destination, and monitoring destination are recorded.

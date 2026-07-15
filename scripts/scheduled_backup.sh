@@ -22,7 +22,14 @@ if ! flock -n 9; then
 fi
 
 cd "$repo_root"
-scripts/backup.sh --output "$backup_root/$backup_name"
+backup_path="$backup_root/$backup_name"
+scripts/backup.sh --output "$backup_path"
+if [[ -n "${IHOS_BACKUP_S3_BUCKET:-}" ]]; then
+  scripts/upload_backup_s3.sh \
+    --backup "$backup_path" \
+    --bucket "$IHOS_BACKUP_S3_BUCKET" \
+    --prefix "${IHOS_BACKUP_S3_PREFIX:-recovery-bundles}"
+fi
 python scripts/backup_retention.py \
   --root "$backup_root" \
   --retention-days "$retention_days" \

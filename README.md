@@ -56,7 +56,7 @@ npm run build && npm run test:e2e
 
 ## Production Release
 
-Build 207 added the production Compose stack. Builds 208–211 add database-backed sessions, role permissions, login abuse safeguards, and administrator-assisted recovery. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles. Build 212 adds private S3-compatible storage and verified scheduled-backup retention while preserving the controlled local-volume option. Builds 213–214 add operational diagnostics, incident runbooks, and a desktop/mobile/accessibility browser release gate.
+Build 207 added the production Compose stack. Builds 208–211 add database-backed sessions, role permissions, login abuse safeguards, and administrator-assisted recovery. Build 209 adds the complete Alembic baseline and verified database-plus-upload recovery bundles. Build 212 adds private S3-compatible storage and verified scheduled-backup retention while preserving the controlled local-volume option. Builds 213–215 add operational diagnostics, browser/mobile/accessibility gates, and an integrity-bound production-candidate package. Build 216 adds the approved, fail-closed Toronto live-cutover configuration and verified off-host recovery workflow.
 
 ```bash
 cp .env.production.example .env.production
@@ -70,6 +70,8 @@ scripts/backup.sh --output "/secure/off-host/ihos-$(date -u +%Y%m%dT%H%M%SZ)"
 The smoke test expects `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`. It signs in through the application before testing protected APIs. Full mode creates clearly named validation records; omit `--full` for a read-only health, login, and application-shell check.
 
 See [the release runbook](docs/deployment.md) before exposing IHOS outside a trusted network. A public deployment must terminate HTTPS upstream, schedule off-host recovery bundles, and regularly confirm the automated restore drill remains green.
+
+The approved Build 216 DigitalOcean configuration and operator procedure are documented in [Build 216](docs/builds/BUILD_216.md). The live script requires the exact merged commit, the matching GitHub release-evidence artifact, protected provider credentials, matching DNS, and an explicit go flag.
 
 ## Core Application Areas
 
