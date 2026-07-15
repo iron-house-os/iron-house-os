@@ -1,0 +1,40 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+packages:
+  - awscli
+  - ca-certificates
+  - certbot
+  - curl
+  - docker-compose-v2
+  - docker.io
+  - git
+  - jq
+  - nginx
+  - python3-certbot-nginx
+  - ufw
+write_files:
+  - path: /etc/iron-house-os/README
+    permissions: "0644"
+    content: |
+      Production secrets belong in /etc/iron-house-os/production.env with mode 0600.
+      Do not place credentials in cloud-init, Git, shell history, or support messages.
+runcmd:
+  - [mkdir, -p, /etc/iron-house-os, /opt/iron-house-os, /var/backups/iron-house-os, /var/lib/iron-house-os, /var/www/letsencrypt]
+  - [chmod, "0700", /etc/iron-house-os]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, enable, --now, nginx]
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, OpenSSH]
+  - [ufw, allow, "Nginx Full"]
+  - [ufw, --force, enable]
+  - [git, clone, --branch, main, --single-branch, https://github.com/iron-house-os/iron-house-os.git, /opt/iron-house-os/source]
+  - [cp, /opt/iron-house-os/source/ops/digitalocean/nginx-maintenance.conf, /etc/nginx/sites-available/iron-house-os]
+  - [ln, -sfn, /etc/nginx/sites-available/iron-house-os, /etc/nginx/sites-enabled/iron-house-os]
+  - [rm, -f, /etc/nginx/sites-enabled/default]
+  - [nginx, -t]
+  - [systemctl, reload, nginx]
+  - [touch, /var/lib/iron-house-os/cloud-init-complete]
+final_message: "Iron House OS host bootstrap completed; production secrets and cutover are still pending."

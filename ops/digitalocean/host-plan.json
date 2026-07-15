@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "approval": {
+    "approved_by": "Jeremie Peters",
+    "approved_on": "2026-07-15",
+    "authorization": "Approve Build 216"
+  },
+  "host": {
+    "provider": "DigitalOcean",
+    "region": "tor1",
+    "plan": "Basic Droplet, 2 vCPU, 4 GiB RAM",
+    "monthly_usd": 24.0,
+    "daily_backup_percent": 30
+  },
+  "budget": {
+    "currency": "CAD",
+    "monthly_cap": 60.0,
+    "automatic_upgrade_allowed": false
+  },
+  "network": {
+    "domain": "os.ironhousecivil.com",
+    "tls": "Let's Encrypt via Certbot",
+    "application_bind": "127.0.0.1:8080"
+  },
+  "storage": {
+    "provider": "AWS S3",
+    "region": "ca-central-1",
+    "public_access": false,
+    "versioning_required": true,
+    "encryption_required": true
+  },
+  "monitoring": {
+    "provider": "UptimeRobot",
+    "interval_minutes": 5,
+    "paths": ["/healthz", "/readiness"]
+  },
+  "cutover": {
+    "window_start_utc": "2026-07-19T13:00:00Z",
+    "window_end_utc": "2026-07-19T15:00:00Z",
+    "operator": "Jeremie Peters",
+    "approver": "Jeremie Peters",
+    "rollback_owner": "Mac",
+    "release_sha": null,
+    "decision": "PENDING"
+  }
+}

@@ -25,6 +25,8 @@ def test_release_candidate_evidence_is_bound_to_commit_and_files() -> None:
     assert evidence["generated_at"] == "2026-07-14T12:00:00+00:00"
     assert evidence["operator_acceptance"] == "pending"
     assert len(evidence["files"]["docker-compose.production.yml"]) == 64
+    assert len(evidence["files"]["ops/digitalocean/cutover.sh"]) == 64
+    assert len(evidence["files"]["ops/digitalocean/host-plan.json"]) == 64
     markdown = render_markdown(evidence)
     assert "Operator acceptance: **pending**" in markdown
     assert "backup_restore: **passed**" in markdown

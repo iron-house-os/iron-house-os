@@ -16,9 +16,18 @@ REQUIRED_FILES = (
     "docs/operations/incident-response.md",
     "docs/operations/rollback.md",
     "docs/operations/recovery.md",
+    "ops/digitalocean/host-plan.json",
+    "ops/digitalocean/cloud-init.yaml",
+    "ops/digitalocean/nginx-maintenance.conf",
+    "ops/digitalocean/nginx-live.conf",
+    "ops/digitalocean/cutover.sh",
     "scripts/backup.sh",
     "scripts/restore.sh",
     "scripts/release_smoke.py",
+    "scripts/release_candidate_evidence.py",
+    "scripts/verify_release_candidate_evidence.py",
+    "scripts/verify_s3_targets.sh",
+    "scripts/upload_backup_s3.sh",
 )
 ALLOWED_GATE_OUTCOMES = {"passed", "failed", "not_run"}
 
