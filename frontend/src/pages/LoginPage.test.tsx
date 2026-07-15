@@ -7,7 +7,7 @@ import { App } from "../App";
 
 const userAccount = {
   id: "00000000-0000-0000-0000-000000000001",
-  email: "jeremie@ironhousecivil.com",
+  email: "jeremie@ironhousecontracting.com",
   display_name: "Jeremie Peters",
   role: "admin",
   is_active: true,
@@ -52,7 +52,7 @@ describe("LoginPage", () => {
       </MemoryRouter>,
     );
 
-    await user.type(await screen.findByLabelText("Email"), "jeremie@ironhousecivil.com");
+    await user.type(await screen.findByLabelText("Email"), "jeremie@ironhousecontracting.com");
     await user.type(screen.getByLabelText("Password"), "correct-horse-battery-staple");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
@@ -80,7 +80,7 @@ describe("LoginPage", () => {
       </MemoryRouter>,
     );
 
-    await user.type(await screen.findByLabelText("Email"), "jeremie@ironhousecivil.com");
+    await user.type(await screen.findByLabelText("Email"), "jeremie@ironhousecontracting.com");
     await user.type(screen.getByLabelText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 

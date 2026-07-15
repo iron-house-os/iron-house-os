@@ -8,6 +8,7 @@ def test_approved_host_plan_is_fail_closed_and_within_budget() -> None:
     plan = json.loads((ROOT / "ops/digitalocean/host-plan.json").read_text())
 
     assert plan["approval"]["authorization"] == "Approve Build 216"
+    assert plan["approval"]["approved_by_email"] == "jeremie@ironhousecontracting.com"
     assert plan["host"]["provider"] == "DigitalOcean"
     assert plan["host"]["region"] == "tor1"
     assert plan["budget"] == {
@@ -23,6 +24,8 @@ def test_approved_host_plan_is_fail_closed_and_within_budget() -> None:
     assert plan["storage"]["encryption_required"] is True
     assert plan["cutover"]["decision"] == "PENDING"
     assert plan["cutover"]["release_sha"] is None
+    assert plan["cutover"]["operator_email"] == "jeremie@ironhousecontracting.com"
+    assert plan["cutover"]["approver_email"] == "jeremie@ironhousecontracting.com"
 
 
 def test_production_compose_does_not_expose_application_port_publicly() -> None:

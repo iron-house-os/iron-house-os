@@ -23,7 +23,7 @@ def _client() -> tuple[TestClient, sessionmaker[Session]]:
     with testing_session() as db:
         db.add(
             UserAccount(
-                email="jeremie@ironhousecivil.com",
+                email="jeremie@ironhousecontracting.com",
                 display_name="Jeremie Peters",
                 role="admin",
                 password_hash=hash_password("correct-horse-battery-staple"),
@@ -61,13 +61,13 @@ def test_login_sets_http_only_cookie_and_returns_current_user() -> None:
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "JEREMIE@IRONHOUSECIVIL.COM",
+            "email": "JEREMIE@IRONHOUSECONTRACTING.COM",
             "password": "correct-horse-battery-staple",
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["user"]["email"] == "jeremie@ironhousecivil.com"
+    assert response.json()["user"]["email"] == "jeremie@ironhousecontracting.com"
     assert "HttpOnly" in response.headers["set-cookie"]
     assert "SameSite=lax" in response.headers["set-cookie"]
     assert client.get("/api/v1/auth/me").status_code == 200
@@ -82,7 +82,7 @@ def test_login_rejects_wrong_credentials_without_account_disclosure() -> None:
 
     wrong_password = client.post(
         "/api/v1/auth/login",
-        json={"email": "jeremie@ironhousecivil.com", "password": "wrong-password"},
+        json={"email": "jeremie@ironhousecontracting.com", "password": "wrong-password"},
     )
     unknown_email = client.post(
         "/api/v1/auth/login",
@@ -99,7 +99,7 @@ def test_admin_can_create_users_and_new_user_cannot_administer_accounts() -> Non
     client.post(
         "/api/v1/auth/login",
         json={
-            "email": "jeremie@ironhousecivil.com",
+            "email": "jeremie@ironhousecontracting.com",
             "password": "correct-horse-battery-staple",
         },
     )
@@ -129,19 +129,78 @@ def test_admin_can_create_users_and_new_user_cannot_administer_accounts() -> Non
     assert client.get("/api/v1/users").status_code == 403
 
 
+def test_admin_can_change_user_email_and_existing_session_is_invalidated() -> None:
+    client, _ = _client()
+    client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "jeremie@ironhousecontracting.com",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    account = client.get("/api/v1/users").json()["items"][0]
+
+    updated = client.patch(
+        f"/api/v1/users/{account['id']}",
+        json={"email": "JEREMIE.UPDATED@IRONHOUSECONTRACTING.COM"},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["email"] == "jeremie.updated@ironhousecontracting.com"
+    assert client.get("/api/v1/auth/me").status_code == 401
+    assert client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "jeremie.updated@ironhousecontracting.com",
+            "password": "correct-horse-battery-staple",
+        },
+    ).status_code == 200
+
+
+def test_admin_cannot_change_user_email_to_an_existing_account() -> None:
+    client, _ = _client()
+    client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "jeremie@ironhousecontracting.com",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    created = client.post(
+        "/api/v1/users",
+        json={
+            "email": "estimator@ironhousecivil.com",
+            "display_name": "Iron House Estimator",
+            "role": "estimator",
+            "password": "estimate-password-2026",
+        },
+    )
+    admin = next(
+        item for item in client.get("/api/v1/users").json()["items"] if item["role"] == "admin"
+    )
+
+    response = client.patch(
+        f"/api/v1/users/{admin['id']}",
+        json={"email": created.json()["email"]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "A user with that email already exists."
+
+
 def test_password_reset_invalidates_existing_session() -> None:
     client, testing_session = _client()
     client.post(
         "/api/v1/auth/login",
         json={
-            "email": "jeremie@ironhousecivil.com",
+            "email": "jeremie@ironhousecontracting.com",
             "password": "correct-horse-battery-staple",
         },
     )
     assert client.get("/api/v1/auth/me").status_code == 200
 
     with testing_session() as db:
-        account = db.query(UserAccount).filter_by(email="jeremie@ironhousecivil.com").one()
+        account = db.query(UserAccount).filter_by(email="jeremie@ironhousecontracting.com").one()
         account.session_version += 1
         db.commit()
 
