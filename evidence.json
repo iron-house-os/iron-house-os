@@ -1,0 +1,40 @@
+{
+  "commit_sha": "e4d9c2afb20fd6d423d091304059c80e9b33b206",
+  "commit_tree": "429a132e87ec2398744d1f44040c73353bc1447b",
+  "files": {
+    ".env.production.example": "fd4cbb7a66d384f0b33819833a71c4db24c7c5122d7280d1140472f04e0d3dac",
+    "docker-compose.production.yml": "1de9b054ca33e0135cd2a679179dcbb2989108ba522e24210046a8bcda524d9d",
+    "docs/operations/cutover-checklist.md": "f37f6be12eea09d92122593e50a4d9725cbf0297fbaf24e16451629bdecbbe22",
+    "docs/operations/incident-response.md": "1ff84223585848fa7caf2cd6289ec1d51593c0614f93b36a782dd79ef6267edb",
+    "docs/operations/operator-acceptance.md": "c42a68a0e6c1bbe98b5829814dded5d89ec11f68cc123b2535b9bba9eaabdb2f",
+    "docs/operations/recovery.md": "a56b33eb2958bd3e3c4a23dac20bde248f1b9357763ae63d33a4627a29aaa933",
+    "docs/operations/rollback.md": "065b3f903738d3f8bc2769096cc48344a15188d2b8109d081c8578bb900db150",
+    "ops/digitalocean/cloud-init.yaml": "521cc1836519e268d7a8ea1d2455266ba89893ed121c18cfd55f2e96b35d2678",
+    "ops/digitalocean/cutover.sh": "eeea906f130be15706d249e54a8fcb633fab47502a62103ab3a7f7f14d4abac5",
+    "ops/digitalocean/host-plan.json": "924f09b0e825d7f00583682bd6a9a5c6984eff015b99b4a3a628262a0aa3ffef",
+    "ops/digitalocean/nginx-live.conf": "e71fabee83ab550c93a0b74d005de5db82eadb2c2a6da2050c2fdd43d6317508",
+    "ops/digitalocean/nginx-maintenance.conf": "4e478f8f438d1897982885a276991164f6406149246635c1df5b1f1e6f340fe0",
+    "scripts/backup.sh": "d7a4e46aceeea4330339957995e36ae457e18311c6647158b050e0cce94a8a46",
+    "scripts/release_candidate_evidence.py": "19569ba300b727951a0a50f96a98e437b7b14fb4dbc3873c42c0440537a4f8e6",
+    "scripts/release_smoke.py": "f035647080f6beac1cb968effd6b2420da37a7be2ea13e5d6141ee830a21ecf5",
+    "scripts/restore.sh": "92833c05ce033555ef1264b5bc6faaf8c1cc5a08b2fbb18caae3960c5895eda5",
+    "scripts/upload_backup_s3.sh": "133f13a815a805776e6ca00f131db291f97bc5d46c6cff778d6ba9d32378956f",
+    "scripts/verify_release_candidate_evidence.py": "a87e07a2c90f42852bc0923f29467e69269032f0f160a2c897a03fb1e86f97d9",
+    "scripts/verify_s3_targets.sh": "28b7d1d1bda55906cc54fc222a5b22037b34cb0ef2bd5868858bd8b9e460de4f"
+  },
+  "gates": {
+    "backup_restore": "passed",
+    "browser_mobile_accessibility": "passed",
+    "ci": "passed",
+    "production_stack_smoke": "passed"
+  },
+  "generated_at": "2026-07-15T18:21:23.023436+00:00",
+  "limitations": [
+    "No live host, DNS, TLS, monitoring destination, or paid service was provisioned.",
+    "Operator acceptance must be completed at the approved cutover window."
+  ],
+  "operator_acceptance": "pending",
+  "release_id": "e4d9c2afb20fd6d423d091304059c80e9b33b206",
+  "schema_version": 1,
+  "working_tree_clean": true
+}
