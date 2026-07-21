@@ -15,8 +15,11 @@ REQUIRED_RUNTIME_TABLES = (
     "login_throttles",
     "municipalities",
     "projects",
+    "project_suppliers",
     "quotes",
     "rfq_packages",
+    "rfq_package_documents",
+    "rfq_package_supplier_recipients",
     "rfqs",
     "suppliers",
     "takeoffs",
@@ -32,6 +35,70 @@ VALID_TENDER_STATUSES = (
     "lost",
     "no_bid",
 )
+WORKFLOW_VALUE_CHECKS = (
+    (
+        "project_status",
+        "projects",
+        "status",
+        ("opportunity", "tendering", "awarded", "construction", "completed", "archived"),
+    ),
+    (
+        "document_category",
+        "documents",
+        "category",
+        (
+            "drawing",
+            "specification",
+            "addendum",
+            "geotechnical",
+            "permit",
+            "traffic_control",
+            "environmental",
+            "quote_request",
+            "quote",
+            "photo",
+            "testing",
+            "other",
+        ),
+    ),
+    (
+        "document_status",
+        "documents",
+        "status",
+        ("registered", "active", "current", "superseded", "archived"),
+    ),
+    (
+        "rfq_package_status",
+        "rfq_packages",
+        "status",
+        ("draft", "assembling", "ready", "issued", "closed"),
+    ),
+    (
+        "rfq_recipient_status",
+        "rfq_package_supplier_recipients",
+        "status",
+        ("pending", "sent", "replied", "bounced"),
+    ),
+    (
+        "rfq_document_status",
+        "rfq_package_documents",
+        "status",
+        ("pending", "attached", "not_applicable"),
+    ),
+    (
+        "equipment_status",
+        "equipment",
+        "status",
+        ("available", "reserved", "in_use", "maintenance", "retired"),
+    ),
+    (
+        "user_role",
+        "user_accounts",
+        "role",
+        ("admin", "operations_manager", "estimator", "viewer"),
+    ),
+    ("tender_status", "tenders", "status", VALID_TENDER_STATUSES),
+)
 
 
 def _database_readiness() -> tuple[bool, str]:
@@ -44,17 +111,15 @@ def _database_readiness() -> tuple[bool, str]:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
             if revision != CURRENT_SCHEMA_REVISION:
                 return False, "migration_required"
-            invalid_tender_status = connection.execute(
-                text(
-                    "SELECT status FROM tenders "
-                    "WHERE status IS NULL OR status NOT IN "
-                    "(:new, :reviewing, :bidding, :submitted, :awarded, :lost, :no_bid) "
-                    "LIMIT 1"
-                ),
-                dict(zip(VALID_TENDER_STATUSES, VALID_TENDER_STATUSES, strict=True)),
-            ).scalar()
-            if invalid_tender_status is not None:
-                return False, "invalid_tender_status"
+            for check_name, table, column, valid_values in WORKFLOW_VALUE_CHECKS:
+                parameters = {f"value_{index}": value for index, value in enumerate(valid_values)}
+                placeholders = ", ".join(f":value_{index}" for index in range(len(valid_values)))
+                invalid_value = connection.execute(
+                    text(f"SELECT 1 FROM {table} WHERE {column} IS NULL OR {column} NOT IN ({placeholders}) LIMIT 1"),
+                    parameters,
+                ).scalar()
+                if invalid_value is not None:
+                    return False, f"invalid_{check_name}"
     except Exception:
         return False, "unavailable"
     return True, "ready"

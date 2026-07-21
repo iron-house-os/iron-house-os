@@ -37,22 +37,19 @@ docker compose --env-file .env.production -f docker-compose.production.yml confi
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --wait
 ```
 
-4. Run the read-only release check first. An HTTP loopback check requires `SESSION_COOKIE_SECURE=false` and must only be used while port 8080 is firewalled or bound to localhost. Restore `SESSION_COOKIE_SECURE=true` before public HTTPS access.
+4. Before enabling the HTTPS gateway, use loopback only for the unauthenticated readiness check. Production session cookies are intentionally HTTPS-only, so an authenticated HTTP loopback smoke test will return 401 even when login succeeds.
 
 ```bash
-set -a
-source .env.production
-set +a
-python scripts/release_smoke.py --base-url http://127.0.0.1:8080
+curl -fsS http://127.0.0.1:8080/readiness
 ```
 
-5. Run the full project-to-drawing smoke path. This creates a project, calculates a one-line estimate, creates an RFQ package, and uploads a small civil PDF.
+5. Enable the HTTPS gateway, then run the full authenticated tab and project-to-drawing smoke path. This checks every navigation module's read dependency, creates a project, calculates a one-line estimate, creates an RFQ package, and uploads a small civil PDF.
 
 ```bash
-python scripts/release_smoke.py --base-url http://127.0.0.1:8080 --full
+python scripts/release_smoke.py --base-url https://your-staging-host.example --full
 ```
 
-6. Point the HTTPS proxy at the host and repeat the read-only check against the public staging URL.
+6. Repeat the read-only check against the public staging URL after any proxy or certificate change.
 
 ```bash
 python scripts/release_smoke.py --base-url https://your-staging-host.example

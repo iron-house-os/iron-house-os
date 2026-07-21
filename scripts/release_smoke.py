@@ -53,6 +53,13 @@ def _json_request(*args, **kwargs) -> dict:
     return json.loads(body)
 
 
+def _list_request(base_url: str, path: str, *, opener: OpenerDirector) -> dict:
+    payload = _json_request(base_url, path, opener=opener)
+    if not isinstance(payload.get("items"), list) or payload.get("total") != len(payload["items"]):
+        raise RuntimeError(f"{path} returned an invalid list payload: {payload}")
+    return payload
+
+
 def _minimal_pdf(text: str) -> bytes:
     escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode()
@@ -98,10 +105,7 @@ def _multipart(fields: dict[str, str], filename: str, file_bytes: bytes) -> tupl
     chunks.extend(
         [
             f"--{boundary}\r\n".encode(),
-            (
-                'Content-Disposition: form-data; name="file"; '
-                f'filename="{filename}"\r\n'
-            ).encode(),
+            (f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n').encode(),
             b"Content-Type: application/pdf\r\n\r\n",
             file_bytes,
             b"\r\n",
@@ -114,7 +118,9 @@ def _multipart(fields: dict[str, str], filename: str, file_bytes: bytes) -> tupl
 def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: bool) -> dict:
     _, homepage = _request(base_url, "/", opener=opener)
     if b"Iron House" not in homepage:
-        raise RuntimeError("The frontend response did not contain the Iron House application shell.")
+        raise RuntimeError(
+            "The frontend response did not contain the Iron House application shell."
+        )
     readiness = _json_request(base_url, "/readiness", opener=opener)
     if readiness.get("status") != "ready":
         raise RuntimeError(f"Release is not ready: {readiness}")
@@ -130,19 +136,52 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
     current_user = _json_request(base_url, "/api/v1/auth/me", opener=opener)
     if current_user.get("user", {}).get("email") != email.lower():
         raise RuntimeError(f"Release session identity mismatch: {current_user}")
-    tenders = _json_request(base_url, "/api/v1/tenders", opener=opener)
-    if not isinstance(tenders.get("items"), list) or tenders.get("total") != len(tenders["items"]):
-        raise RuntimeError(f"Tender Tracker read path returned an invalid payload: {tenders}")
-    equipment = _json_request(base_url, "/api/v1/equipment", opener=opener)
-    if not isinstance(equipment.get("items"), list) or equipment.get("total") != len(equipment["items"]):
-        raise RuntimeError(f"Equipment read path returned an invalid payload: {equipment}")
+    list_paths = {
+        "projects": "/api/v1/projects",
+        "suppliers": "/api/v1/suppliers",
+        "rfq_packages": "/api/v1/rfqs",
+        "tenders": "/api/v1/tenders",
+        "documents": "/api/v1/documents",
+        "equipment": "/api/v1/equipment",
+        "users": "/api/v1/users",
+    }
+    records = {
+        name: _list_request(base_url, path, opener=opener) for name, path in list_paths.items()
+    }
+    _json_request(base_url, "/api/v1/auth/me/permissions", opener=opener)
+    _json_request(base_url, "/api/v1/estimates/rate-library", opener=opener)
+
+    for project in records["projects"]["items"]:
+        project_id = project["id"]
+        _json_request(base_url, f"/api/v1/projects/{project_id}", opener=opener)
+        _json_request(base_url, f"/api/v1/projects/{project_id}/dashboard", opener=opener)
+        _json_request(base_url, f"/api/v1/projects/{project_id}/readiness", opener=opener)
+        _list_request(base_url, f"/api/v1/estimates/workspace/project/{project_id}", opener=opener)
+        _list_request(base_url, f"/api/v1/takeoff/project/{project_id}", opener=opener)
+        _list_request(
+            base_url,
+            f"/api/v1/drawing-intelligence/project/{project_id}",
+            opener=opener,
+        )
+
+    for rfq_package in records["rfq_packages"]["items"]:
+        rfq_id = rfq_package["id"]
+        _json_request(base_url, f"/api/v1/rfqs/{rfq_id}", opener=opener)
+        _json_request(base_url, f"/api/v1/rfqs/{rfq_id}/readiness", opener=opener)
+
+    for resource in ("tenders", "documents", "suppliers"):
+        resource_path = list_paths[resource]
+        for item in records[resource]["items"]:
+            _json_request(base_url, f"{resource_path}/{item['id']}", opener=opener)
+
+    record_counts = {name: payload["total"] for name, payload in records.items()}
     if not full:
         return {
             "mode": "read-only",
             "status": "passed",
             "authenticated_user": current_user["user"]["email"],
-            "tender_records": tenders["total"],
-            "equipment_records": equipment["total"],
+            "tab_paths_checked": 16,
+            "record_counts": record_counts,
         }
 
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -240,8 +279,8 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "project_id": project["id"],
         "rfq_package_id": rfq["id"],
         "drawing_document_id": drawing["source"]["document_id"],
-        "tender_records": tenders["total"],
-        "equipment_records": equipment["total"],
+        "tab_paths_checked": 16,
+        "record_counts": record_counts,
     }
 
 
@@ -250,7 +289,9 @@ def main() -> None:
     parser.add_argument("--base-url", default=os.getenv("IHOS_BASE_URL", "http://127.0.0.1:8080"))
     parser.add_argument("--email", default=os.getenv("BOOTSTRAP_ADMIN_EMAIL"))
     parser.add_argument("--password", default=os.getenv("BOOTSTRAP_ADMIN_PASSWORD"))
-    parser.add_argument("--full", action="store_true", help="Create release-smoke records and upload a PDF.")
+    parser.add_argument(
+        "--full", action="store_true", help="Create release-smoke records and upload a PDF."
+    )
     args = parser.parse_args()
     if not args.email or not args.password:
         raise SystemExit("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required.")
