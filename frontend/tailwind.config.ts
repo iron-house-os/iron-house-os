@@ -12,12 +12,21 @@ export default {
           800: "#253033",
           950: "#111719",
         },
+        brand: {
+          gold: "#DDAE58",
+          charcoal: "#34373A",
+          black: "#0B0D11",
+          silver: "#D9DCE0",
+        },
         signal: {
           blue: "#2563eb",
           green: "#0f8b62",
           amber: "#b7791f",
           red: "#c2410c",
         },
+      },
+      boxShadow: {
+        brand: "0 18px 50px rgba(11, 13, 17, 0.22)",
       },
     },
   },

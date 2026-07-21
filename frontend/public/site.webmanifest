@@ -1,7 +1,7 @@
 {
   "name": "Iron House OS",
   "short_name": "Iron House",
-  "description": "Iron House Civil Constructors operating system",
+  "description": "Iron House Contracting operating system",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

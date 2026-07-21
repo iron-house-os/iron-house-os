@@ -23,14 +23,17 @@ export function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-iron-950 px-4 py-10 text-iron-950">
-      <section className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl">
-        <div className="border-b border-iron-100 bg-gradient-to-br from-iron-950 to-iron-800 px-8 py-8 text-white">
-          <div className="text-xs font-semibold uppercase tracking-[0.24em] text-signal-green">
-            Civil construction
+    <main className="ihos-brand-surface ihos-steel-grid grid min-h-screen place-items-center px-4 py-10 text-iron-950">
+      <section className="w-full max-w-md overflow-hidden rounded-2xl border border-brand-gold/30 bg-white shadow-brand">
+        <div className="relative border-b border-brand-gold/20 bg-brand-black px-8 py-8 text-white">
+          <div className="flex items-center gap-4">
+            <img src="/os-logo-256.png" alt="Iron House Contracting" className="h-20 w-20 rounded-2xl border border-brand-gold/30 object-cover shadow-lg" />
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-brand-gold">Iron House Contracting</div>
+              <h1 className="mt-2 text-3xl font-semibold text-brand-silver">Iron House OS</h1>
+            </div>
           </div>
-          <h1 className="mt-2 text-3xl font-semibold">Iron House OS</h1>
-          <p className="mt-2 text-sm text-iron-100">Sign in to your protected company workspace.</p>
+          <p className="mt-5 text-sm text-iron-100">Secure access to estimating, tenders, projects, RFQs, suppliers, and operations.</p>
         </div>
         <form className="space-y-5 px-8 py-8" onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-iron-800">
@@ -41,7 +44,7 @@ export function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-iron-200 px-3 py-3 outline-none transition focus:border-iron-700 focus:ring-2 focus:ring-iron-200"
+              className="mt-2 w-full rounded-lg border border-iron-200 px-3 py-3 outline-none transition focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/25"
             />
           </label>
           <label className="block text-sm font-medium text-iron-800">
@@ -52,7 +55,7 @@ export function LoginPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-iron-200 px-3 py-3 outline-none transition focus:border-iron-700 focus:ring-2 focus:ring-iron-200"
+              className="mt-2 w-full rounded-lg border border-iron-200 px-3 py-3 outline-none transition focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/25"
             />
           </label>
           {error ? (
@@ -63,7 +66,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-iron-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-iron-800 disabled:cursor-wait disabled:opacity-60"
+            className="w-full rounded-lg bg-brand-gold px-4 py-3 text-sm font-semibold text-brand-black shadow-md transition hover:bg-[#c99b47] disabled:cursor-wait disabled:opacity-60"
           >
             {isSubmitting ? "Signing in…" : "Sign in"}
           </button>
