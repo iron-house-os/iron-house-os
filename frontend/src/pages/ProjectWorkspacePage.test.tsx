@@ -82,6 +82,20 @@ describe("ProjectWorkspacePage", () => {
     expect(within(detailPanel as HTMLElement).getAllByText("80%").length).toBeGreaterThan(0);
     expect(screen.getByText("Draft")).toBeInTheDocument();
   });
+
+  it("keeps project context on estimating links", async () => {
+    mockProjectApi();
+
+    renderWorkspace(`/projects/${project.id}`);
+
+    await screen.findByRole("heading", { name: project.name });
+    const estimatingLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/estimating?"));
+    expect(estimatingLinks.length).toBeGreaterThan(0);
+    for (const link of estimatingLinks) {
+      expect(link).toHaveAttribute("href", expect.stringContaining(`projectId=${project.id}`));
+      expect(link).toHaveAttribute("href", expect.stringContaining("projectName=King+George+Utility+Upgrade"));
+    }
+  });
 });
 
 function renderWorkspace(path: string) {
