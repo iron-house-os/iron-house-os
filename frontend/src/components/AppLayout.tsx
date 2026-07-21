@@ -81,8 +81,8 @@ export function AppLayout({ children }: PropsWithChildren) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="hidden text-sm text-iron-500 lg:block">
-            Signed in as <span className="font-semibold text-iron-800">{user?.display_name}</span>
+          <div className="hidden text-sm font-medium text-iron-700 lg:block">
+            {user ? `Signed in as ${user.display_name}` : "Signed out"}
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-xs font-medium text-iron-500 sm:block">{accessLabel}</div>
