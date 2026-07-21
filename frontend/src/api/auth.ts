@@ -17,6 +17,11 @@ type AuthStatus = {
   user: AuthUser;
 };
 
+export type RoleAccess = {
+  role: AuthUser["role"];
+  modules: Record<string, string[]>;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function readAuthResponse(response: Response): Promise<AuthStatus> {
@@ -54,5 +59,10 @@ export const authApi = {
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     });
     return (await readAuthResponse(response)).user;
+  },
+  permissions: async (): Promise<RoleAccess> => {
+    const response = await apiFetch(`${API_BASE_URL}/auth/me/permissions`);
+    if (!response.ok) throw new Error(`Unable to load permissions (${response.status})`);
+    return response.json() as Promise<RoleAccess>;
   },
 };

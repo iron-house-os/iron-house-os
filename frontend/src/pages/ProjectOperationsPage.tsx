@@ -1,11 +1,16 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
+import { ActiveProjectSelector } from "../components/ActiveProjectSelector";
 import { ProjectReadinessPanel } from "../components/ProjectReadinessPanel";
 import { SavedEstimateWorkspacesPanel } from "../components/SavedEstimateWorkspacesPanel";
 import { SavedTakeoffsPanel } from "../components/SavedTakeoffsPanel";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 export function ProjectOperationsPage() {
-  const [projectId, setProjectId] = useState("");
+  const location = useLocation();
+  const context = readEffectiveProjectContext(location.search);
+  const [projectId, setProjectId] = useState(context.projectId ?? "");
 
   return (
     <section className="space-y-6">
@@ -16,12 +21,7 @@ export function ProjectOperationsPage() {
         </p>
       </div>
 
-      <div className="rounded-md border border-iron-100 bg-white p-5">
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-iron-700">Project ID</span>
-          <input value={projectId} onChange={(event) => setProjectId(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2" placeholder="Paste project UUID" />
-        </label>
-      </div>
+      <ActiveProjectSelector value={projectId} onChange={(project) => setProjectId(project?.id ?? "")} />
 
       <ProjectReadinessPanel projectId={projectId || null} />
       <SavedTakeoffsPanel projectId={projectId || null} />

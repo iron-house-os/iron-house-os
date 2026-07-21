@@ -96,6 +96,26 @@ describe("ProjectWorkspacePage", () => {
       expect(link).toHaveAttribute("href", expect.stringContaining("projectName=King+George+Utility+Upgrade"));
     }
   });
+
+  it("routes command-center actions to the correct project tools", async () => {
+    mockProjectApi();
+
+    renderWorkspace(`/projects/${project.id}`);
+    await screen.findByRole("heading", { name: project.name });
+
+    expect(screen.getByRole("link", { name: /Municipality/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining(`/municipality-intelligence?projectId=${project.id}`),
+    );
+    expect(screen.getByRole("link", { name: /Bid Package/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining(`/bid-package?projectId=${project.id}`),
+    );
+    expect(screen.getByRole("link", { name: /Schedule/ })).toHaveAttribute(
+      "href",
+      `/projects/${project.id}`,
+    );
+  });
 });
 
 function renderWorkspace(path: string) {

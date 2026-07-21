@@ -1,4 +1,7 @@
 import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+
+import { modulePathWithProjectContext, readEffectiveProjectContext } from "../utils/projectContext";
 
 const steps = [
   { label: "1. Create project", path: "/projects", detail: "Open the project workspace and create or select a bid project." },
@@ -10,6 +13,8 @@ const steps = [
 ];
 
 export function MVPWorkflowPage() {
+  const location = useLocation();
+  const activeProject = readEffectiveProjectContext(location.search);
   return (
     <section className="space-y-6">
       <div className="border-b border-iron-100 pb-6">
@@ -20,7 +25,7 @@ export function MVPWorkflowPage() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {steps.map((step) => (
-          <Link key={step.label} to={step.path} className="rounded-md border border-iron-100 bg-white p-5 transition hover:border-iron-300">
+          <Link key={step.label} to={modulePathWithProjectContext(step.path, activeProject)} className="rounded-md border border-iron-100 bg-white p-5 transition hover:border-iron-300">
             <div className="text-base font-semibold text-iron-950">{step.label}</div>
             <p className="mt-2 text-sm leading-6 text-iron-500">{step.detail}</p>
             <div className="mt-4 text-sm font-semibold text-iron-800">Open module</div>

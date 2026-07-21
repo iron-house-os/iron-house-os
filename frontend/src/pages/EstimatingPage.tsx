@@ -19,7 +19,7 @@ import {
 import { EstimateWorkspaceRead, estimateWorkspaceApi } from "../api/estimateWorkspace";
 import { Project, projectsApi } from "../api/projects";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { buildProjectContextParams, readProjectContext } from "../utils/projectContext";
+import { buildProjectContextParams, readEffectiveProjectContext, storeActiveProject } from "../utils/projectContext";
 
 const blankLineItem: EstimateLineItem = {
   code: "",
@@ -64,7 +64,7 @@ type EstimatingLocationState = {
 export function EstimatingPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const locationState = location.state as EstimatingLocationState | null;
   const importedQuoteLineItems = useMemo(() => locationState?.quoteLineItems ?? [], [locationState?.quoteLineItems]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -162,6 +162,7 @@ export function EstimatingPage() {
         }
 
         setSelectedProjectId(selected.id);
+        storeActiveProject(selected);
         setProjectName(selected.name);
         setProjectCode(selected.project_number ?? selected.tender_number ?? "");
 

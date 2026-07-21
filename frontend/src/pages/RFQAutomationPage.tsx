@@ -9,7 +9,7 @@ import {
   rfqAutomationApi,
 } from "../api/rfqAutomation";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const signals: SourceSignal[] = ["quantity", "municipality", "estimate", "manual"];
 
@@ -25,7 +25,7 @@ function blankItem(): RFQAutomationInputItem {
 
 export function RFQAutomationPage() {
   const location = useLocation();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [projectName, setProjectName] = useState(projectContext.projectName ?? "Iron House Tender Review");
   const [municipality, setMunicipality] = useState("Surrey");
   const [includeDefaults, setIncludeDefaults] = useState(true);

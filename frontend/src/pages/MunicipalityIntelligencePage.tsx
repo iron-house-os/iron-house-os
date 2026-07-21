@@ -4,14 +4,14 @@ import { useLocation } from "react-router-dom";
 
 import { MunicipalityCheckResponse, ProjectScope, municipalityApi } from "../api/municipality";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const municipalities = ["Surrey", "Vancouver", "Burnaby", "Richmond", "Delta", "Langley", "Abbotsford", "Chilliwack", "Sechelt"];
 const scopes: ProjectScope[] = ["water", "sanitary", "storm", "roadworks", "asphalt", "concrete", "traffic", "landscape", "earthworks"];
 
 export function MunicipalityIntelligencePage() {
   const location = useLocation();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [municipality, setMunicipality] = useState("Surrey");
   const [selectedScopes, setSelectedScopes] = useState<ProjectScope[]>(["storm", "roadworks", "asphalt", "traffic"]);
   const [result, setResult] = useState<MunicipalityCheckResponse | null>(null);

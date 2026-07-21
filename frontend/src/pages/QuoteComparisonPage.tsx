@@ -9,7 +9,7 @@ import {
   SupplierQuoteCreate,
 } from "../api/quotes";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const moneyFormatter = new Intl.NumberFormat("en-CA", {
   style: "currency",
@@ -38,7 +38,7 @@ function blankQuote(): SupplierQuoteCreate {
 export function QuoteComparisonPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [quotes, setQuotes] = useState<SupplierQuoteCreate[]>([blankQuote(), blankQuote()]);
   const [result, setResult] = useState<QuoteComparisonResponse | null>(null);
   const [selection, setSelection] = useState<QuoteEstimateSelectionResponse | null>(null);

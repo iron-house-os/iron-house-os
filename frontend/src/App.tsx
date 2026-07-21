@@ -2,18 +2,17 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { modules } from "./modules";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DocumentOperationsPage } from "./pages/DocumentOperationsPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
+import { EquipmentPage } from "./pages/EquipmentPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
@@ -21,6 +20,8 @@ import { QuantityTakeoffPage } from "./pages/QuantityTakeoffPage";
 import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQAutomationPage } from "./pages/RFQAutomationPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
+import { ReportingPage } from "./pages/ReportingPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
 
@@ -35,28 +36,6 @@ function AuthenticatedApp() {
   }
   if (!user) return <LoginPage />;
   if (user.password_reset_required) return <PasswordRecoveryPage />;
-
-  const placeholderModules = modules.filter(
-    (module) =>
-      ![
-        "/dashboard",
-        "/mvp-workflow",
-        "/project-operations",
-        "/document-operations",
-        "/rfq-builder",
-        "/rfq-automation",
-        "/bid-package",
-        "/suppliers",
-        "/documents",
-        "/projects",
-        "/tenders",
-        "/estimating",
-        "/quotes",
-        "/drawing-intelligence",
-        "/quantity-takeoff",
-        "/municipality-intelligence",
-      ].includes(module.path),
-  );
 
   return (
     <AppLayout>
@@ -84,9 +63,10 @@ function AuthenticatedApp() {
         <Route path="/drawing-intelligence" element={<DrawingIntelligencePage />} />
         <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />
         <Route path="/municipality-intelligence" element={<MunicipalityIntelligencePage />} />
-        {placeholderModules.map((module) => (
-          <Route key={module.path} path={module.path} element={<PlaceholderPage module={module} />} />
-        ))}
+        <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/reporting" element={<ReportingPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AppLayout>
   );
