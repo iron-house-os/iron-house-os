@@ -22,3 +22,21 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+::selection {
+  background: #ddae58;
+  color: #0b0d11;
+}
+
+.ihos-brand-surface {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(221, 174, 88, 0.14), transparent 34%),
+    linear-gradient(135deg, #111719 0%, #0b0d11 58%, #20262a 100%);
+}
+
+.ihos-steel-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

@@ -60,21 +60,27 @@ export function DashboardPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-iron-950">Iron House Dashboard</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Operating snapshot for tenders, projects, RFQs, suppliers, and estimating.
-          </p>
+      <div className="ihos-brand-surface relative overflow-hidden rounded-xl border border-brand-gold/30 px-6 py-6 text-white shadow-brand">
+        <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/os-logo-256.png" alt="" className="h-20 w-20 rounded-2xl border border-brand-gold/30 object-cover shadow-lg" />
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-gold">Iron House Contracting</div>
+              <h1 className="mt-2 text-3xl font-semibold text-brand-silver">Iron House Dashboard</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-100">
+                Operating snapshot for tenders, projects, RFQs, suppliers, and estimating.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-brand-gold/40 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-black"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-medium text-iron-800"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
       </div>
 
       {error ? (
@@ -175,7 +181,7 @@ function DashboardCard({
     <Link to={href} className="rounded-md border border-iron-100 bg-white p-5">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium text-iron-500">{label}</div>
-        <Icon className="h-5 w-5 text-signal-blue" />
+        <Icon className="h-5 w-5 text-brand-gold" />
       </div>
       <div className="mt-4 text-3xl font-semibold text-iron-950">{value}</div>
     </Link>
@@ -193,8 +199,9 @@ function HealthRow({ label, value }: { label: string; value: number | string }) 
 
 function QuickLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link className="rounded-md border border-iron-100 px-3 py-2 font-medium text-iron-800" to={href}>
+    <Link className="rounded-md border border-iron-100 px-3 py-2 font-medium text-iron-800 transition hover:border-brand-gold hover:bg-brand-gold/10" to={href}>
       {label}
     </Link>
   );
 }
+
