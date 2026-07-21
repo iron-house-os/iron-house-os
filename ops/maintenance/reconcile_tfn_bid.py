@@ -376,7 +376,7 @@ def reconcile_database() -> dict:
                 rfq = RFQ(project_id=project.id, title=scope["title"])
                 db.add(rfq)
                 rfq_created += 1
-            rfq.status = "draft_locked"
+            rfq.status = "draft"
             rfq.due_at = due_at
             rfq.scope_summary = "; ".join(f"{i['code']} {i['description']} - {i['quantity']} {i['unit']}" for i in scoped_items) or "Quote testing, survey and environmental support required by the tender documents."
             rfq.package_json = {"scope_key": scope["key"], "items": scoped_items, "supplier_category_targets": scope["categories"], "source_document": DRIVE_URL, "quote_due": "2026-07-30", "send_enabled": False, "attachments_required": ["Appendix C drawings", "applicable specifications", "Appendix H scope extract"]}
@@ -389,7 +389,7 @@ def reconcile_database() -> dict:
             package.project_name = project.name
             package.scope_summary = rfq.scope_summary
             package.due_at = due_at
-            package.status = "draft_locked"
+            package.status = "draft"
             package.supplier_category_targets = scope["categories"]
             package.metadata_json = {"scope_key": scope["key"], "line_item_codes": scope["codes"], "send_enabled": False, "source_drive_file_id": DRIVE_FILE_ID}
             db.flush()
@@ -414,7 +414,7 @@ def reconcile_database() -> dict:
                     db.add(recipient)
                     recipients_created += 1
                 recipient.category = supplier.category
-                recipient.status = "selected_draft"
+                recipient.status = "pending"
 
         db.commit()
         result = validate()
