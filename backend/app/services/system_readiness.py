@@ -6,24 +6,55 @@ from app.db.session import engine
 from app.services import file_storage
 
 
+REQUIRED_RUNTIME_TABLES = (
+    "alembic_version",
+    "bids",
+    "contacts",
+    "documents",
+    "equipment",
+    "login_throttles",
+    "municipalities",
+    "projects",
+    "quotes",
+    "rfq_packages",
+    "rfqs",
+    "suppliers",
+    "takeoffs",
+    "tenders",
+    "user_accounts",
+)
+VALID_TENDER_STATUSES = (
+    "new",
+    "reviewing",
+    "bidding",
+    "submitted",
+    "awarded",
+    "lost",
+    "no_bid",
+)
+
+
 def _database_readiness() -> tuple[bool, str]:
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
             inspector = inspect(connection)
-            required_tables = (
-                "projects",
-                "documents",
-                "rfq_packages",
-                "user_accounts",
-                "login_throttles",
-                "alembic_version",
-            )
-            if any(not inspector.has_table(table) for table in required_tables):
+            if any(not inspector.has_table(table) for table in REQUIRED_RUNTIME_TABLES):
                 return False, "schema_incomplete"
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
             if revision != CURRENT_SCHEMA_REVISION:
                 return False, "migration_required"
+            invalid_tender_status = connection.execute(
+                text(
+                    "SELECT status FROM tenders "
+                    "WHERE status IS NULL OR status NOT IN "
+                    "(:new, :reviewing, :bidding, :submitted, :awarded, :lost, :no_bid) "
+                    "LIMIT 1"
+                ),
+                dict(zip(VALID_TENDER_STATUSES, VALID_TENDER_STATUSES, strict=True)),
+            ).scalar()
+            if invalid_tender_status is not None:
+                return False, "invalid_tender_status"
     except Exception:
         return False, "unavailable"
     return True, "ready"
@@ -57,6 +88,7 @@ def get_system_readiness(*, probe_runtime: bool = False) -> dict[str, object]:
         "project_readiness": "enabled",
         "user_session_authentication": "enabled",
         "deployment_environment": settings.environment,
+        "release_id": settings.release_id,
     }
     ready = True
     if probe_runtime:

@@ -45,6 +45,23 @@ DOCUMENT_CATEGORY_RULES: dict[str, str] = {
     "quote_request": "supplier quotes",
 }
 
+LEGACY_TENDER_STATUS_MAP: dict[str, TenderStatus] = {
+    "watching": TenderStatus.new,
+    "watchlist": TenderStatus.new,
+    "draft": TenderStatus.new,
+    "open": TenderStatus.new,
+    "shortlisted": TenderStatus.reviewing,
+    "qualified": TenderStatus.reviewing,
+    "review": TenderStatus.reviewing,
+    "bid": TenderStatus.bidding,
+    "pricing": TenderStatus.bidding,
+    "active": TenderStatus.bidding,
+    "won": TenderStatus.awarded,
+    "declined": TenderStatus.no_bid,
+    "no bid": TenderStatus.no_bid,
+    "closed": TenderStatus.no_bid,
+}
+
 
 def create_tender(db: Session, payload: TenderCreate) -> TenderRead:
     tender = Tender(**_tender_values(payload))
@@ -222,7 +239,7 @@ def _to_schema(tender: Tender) -> TenderRead:
         question_deadline=tender.question_deadline,
         project_address=tender.project_address,
         description=tender.description,
-        status=TenderStatus(tender.status),
+        status=_read_tender_status(tender.status),
         estimated_value=(
             float(tender.estimated_value) if tender.estimated_value is not None else None
         ),
@@ -238,3 +255,11 @@ def _to_schema(tender: Tender) -> TenderRead:
 
 def tender_document_ids(tender: Tender) -> list[UUID]:
     return [document.id for document in getattr(tender, "documents", [])]
+
+
+def _read_tender_status(value: str | None) -> TenderStatus:
+    normalized = (value or "").strip().lower()
+    try:
+        return TenderStatus(normalized)
+    except ValueError:
+        return LEGACY_TENDER_STATUS_MAP.get(normalized, TenderStatus.new)

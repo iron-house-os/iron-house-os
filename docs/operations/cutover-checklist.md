@@ -20,6 +20,7 @@ This approval permits the listed hosting spend, DNS record, TLS issuance, monito
 
 ## Go/no-go prerequisites
 
+- [ ] The target is the single canonical production host `iron-house-os-prod-1`; no repair workspace is tagged or routed as production.
 - [ ] Approved host, region, budget, domain, TLS termination, backup destination, and monitoring destination are recorded.
 - [ ] Named cutover operator, approver, rollback owner, and maintenance window are recorded in UTC.
 - [ ] Immutable application image digests and the release-candidate commit match the evidence bundle.
@@ -36,7 +37,7 @@ Any unchecked prerequisite is a no-go.
 2. Freeze writes, record UTC time, and create/verify the final pre-cutover backup.
 3. Deploy the exact approved image/configuration and apply migrations once.
 4. Require green `/health` and `/readiness` before routing user traffic.
-5. Run authenticated smoke, representative read/write, document upload/download, diagnostics, and desktop/mobile browser checks.
+5. Run authenticated smoke, including real Tender Tracker and Equipment reads, representative read/write, document upload/download, diagnostics, and desktop/mobile browser checks.
 6. Complete the operator acceptance record. Route traffic only after explicit go approval.
 7. Create a verified post-cutover backup and begin the observation window.
 

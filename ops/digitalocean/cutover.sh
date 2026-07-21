@@ -73,6 +73,7 @@ set -a
 # shellcheck disable=SC1090
 source "$environment_file"
 set +a
+export IHOS_RELEASE_ID="$release_sha"
 : "${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}"
 : "${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}"
 : "${IHOS_STORAGE_BACKEND:?IHOS_STORAGE_BACKEND is required}"

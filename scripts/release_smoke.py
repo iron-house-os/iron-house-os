@@ -130,11 +130,19 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
     current_user = _json_request(base_url, "/api/v1/auth/me", opener=opener)
     if current_user.get("user", {}).get("email") != email.lower():
         raise RuntimeError(f"Release session identity mismatch: {current_user}")
+    tenders = _json_request(base_url, "/api/v1/tenders", opener=opener)
+    if not isinstance(tenders.get("items"), list) or tenders.get("total") != len(tenders["items"]):
+        raise RuntimeError(f"Tender Tracker read path returned an invalid payload: {tenders}")
+    equipment = _json_request(base_url, "/api/v1/equipment", opener=opener)
+    if not isinstance(equipment.get("items"), list) or equipment.get("total") != len(equipment["items"]):
+        raise RuntimeError(f"Equipment read path returned an invalid payload: {equipment}")
     if not full:
         return {
             "mode": "read-only",
             "status": "passed",
             "authenticated_user": current_user["user"]["email"],
+            "tender_records": tenders["total"],
+            "equipment_records": equipment["total"],
         }
 
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -232,6 +240,8 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "project_id": project["id"],
         "rfq_package_id": rfq["id"],
         "drawing_document_id": drawing["source"]["document_id"],
+        "tender_records": tenders["total"],
+        "equipment_records": equipment["total"],
     }
 
 

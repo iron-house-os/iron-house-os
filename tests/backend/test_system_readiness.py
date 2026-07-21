@@ -9,3 +9,4 @@ def test_system_readiness_reports_enabled_mvp_services():
     assert readiness["checks"]["estimate_workspace"] == "enabled"
     assert readiness["checks"]["rfq_linkage"] == "enabled"
     assert readiness["checks"]["project_readiness"] == "enabled"
+    assert readiness["checks"]["release_id"]
