@@ -8,11 +8,11 @@ import {
   drawingIntelligenceApi,
 } from "../api/drawingIntelligence";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 export function DrawingIntelligencePage() {
   const location = useLocation();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [projectId, setProjectId] = useState(projectContext.projectId ?? "");
   const [title, setTitle] = useState("");
   const [municipality, setMunicipality] = useState("");

@@ -10,7 +10,7 @@ import {
   projectStatuses,
   projectsApi,
 } from "../api/projects";
-import { withProjectContext } from "../utils/projectContext";
+import { modulePathWithProjectContext, storeActiveProject, withProjectContext } from "../utils/projectContext";
 
 const tabs = [
   "Overview",
@@ -73,6 +73,10 @@ export function ProjectWorkspacePage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (selectedProject) storeActiveProject(selectedProject);
+  }, [selectedProject]);
+
   async function createProject(payload: ProjectCreatePayload) {
     const created = await projectsApi.create(payload);
     navigate(`/projects/${created.id}`);
@@ -113,7 +117,7 @@ export function ProjectWorkspacePage() {
       {isLoading ? <Notice tone="neutral" message="Loading projects..." /> : null}
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <ProjectFilters status={statusFilter} onStatusChange={setStatusFilter} />
           <CreateProjectForm onSubmit={(payload) => void createProject(payload)} />
           <ProjectList projects={projects} selectedId={projectId} dashboards={dashboardByProjectId} />
@@ -145,6 +149,7 @@ function ProjectFilters({ status, onStatusChange }: { status: string; onStatusCh
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Project Filters</h2>
       <select
+        aria-label="Project status filter"
         value={status}
         onChange={(event) => onStatusChange(event.target.value)}
         className="mt-4 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -234,7 +239,7 @@ function ProjectList({
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Projects</h2>
-      <div className="mt-4 overflow-x-auto">
+      <div aria-label="Projects table" role="region" tabIndex={0} className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
@@ -388,9 +393,9 @@ function CommandCenter({ project, dashboard }: { project: Project; dashboard: Pr
         <ActionCard icon={<Users className="h-4 w-4" />} label="Suppliers" description="Find or add suppliers for the project scope." href={withProjectContext("/suppliers", project)} />
         <ActionCard icon={<Table2 className="h-4 w-4" />} label="Quotes" description="Compare supplier pricing and selection reasons." href={withProjectContext("/quotes", project)} />
         <ActionCard icon={<Calculator className="h-4 w-4" />} label="Estimate" description="Build price, markups, risk, and workbook export." href={withProjectContext("/estimating", project)} />
-        <ActionCard icon={<ShieldCheck className="h-4 w-4" />} label="Municipality" description="Track standards, permits, inspections, and risks." href={withProjectContext("/documents", project)} />
-        <ActionCard icon={<CalendarDays className="h-4 w-4" />} label="Schedule" description="Track bid due date, quote deadlines, and work windows." href={withProjectContext("/projects", project)} />
-        <ActionCard icon={<FolderKanban className="h-4 w-4" />} label="Bid Package" description="Assemble final scope, estimate, assumptions, and exclusions." href={withProjectContext("/estimating", project)} />
+        <ActionCard icon={<ShieldCheck className="h-4 w-4" />} label="Municipality" description="Track standards, permits, inspections, and risks." href={withProjectContext("/municipality-intelligence", project)} />
+        <ActionCard icon={<CalendarDays className="h-4 w-4" />} label="Schedule" description="Track bid due date, quote deadlines, and work windows." href={`/projects/${project.id}`} />
+        <ActionCard icon={<FolderKanban className="h-4 w-4" />} label="Bid Package" description="Assemble final scope, estimate, assumptions, and exclusions." href={withProjectContext("/bid-package", project)} />
       </div>
     </div>
   );
@@ -439,7 +444,7 @@ function TabBody({ tab, project, dashboard }: { tab: string; project: Project; d
     },
     Drawings: {
       summary: `${dashboard.drawing_count} drawings linked to this project. Future drawing intelligence will extract quantities and conflicts from here.`,
-      actions: [{ label: "Open document library", href: "/documents" }],
+      actions: [{ label: "Open drawing intelligence", href: "/drawing-intelligence" }],
     },
     RFQs: {
       summary: `${dashboard.rfq_count} RFQ packages linked to this project. Build package scopes and track supplier readiness here.`,
@@ -463,13 +468,13 @@ function TabBody({ tab, project, dashboard }: { tab: string; project: Project; d
     },
     Municipality: {
       summary: `Municipality: ${project.municipality ?? "Not set"}. Track supplementary standards, permit requirements, inspections, approved materials, restoration, and testing requirements here.`,
-      actions: [{ label: "Open documents", href: "/documents" }],
+      actions: [{ label: "Open municipality intelligence", href: "/municipality-intelligence" }],
     },
     "Bid Package": {
       summary: "Final package should include scope, price, schedule, assumptions, exclusions, addenda review, bonds/insurance, and RFQ quote backup.",
       actions: [
+        { label: "Generate bid package", href: "/bid-package" },
         { label: "Open estimating", href: "/estimating" },
-        { label: "Open documents", href: "/documents" },
       ],
     },
     Activity: {
@@ -484,7 +489,7 @@ function TabBody({ tab, project, dashboard }: { tab: string; project: Project; d
       {content.actions.length ? (
         <div className="flex flex-wrap gap-2">
           {content.actions.map((action) => (
-            <Link key={action.label} to={withProjectContext(action.href, project)} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
+            <Link key={action.label} to={modulePathWithProjectContext(action.href, { projectId: project.id, projectName: project.name })} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
               {action.label}
             </Link>
           ))}

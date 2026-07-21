@@ -71,12 +71,12 @@ export function DocumentAuditPanel() {
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <input value={action} onChange={(event) => setAction(event.target.value)} placeholder="Action" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
-        <select value={outcome} onChange={(event) => setOutcome(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
+        <input aria-label="Document action" value={action} onChange={(event) => setAction(event.target.value)} placeholder="Action" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
+        <select aria-label="Audit outcome" value={outcome} onChange={(event) => setOutcome(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
           <option value="">All outcomes</option><option value="success">Success</option><option value="denied">Denied</option>
         </select>
-        <input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Actor" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
-        <input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Project UUID" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
+        <input aria-label="Document activity actor" value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Actor" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
+        <input aria-label="Document activity project UUID" value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Project UUID" className="rounded-md border border-iron-100 px-3 py-2 text-sm" />
       </div>
 
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}

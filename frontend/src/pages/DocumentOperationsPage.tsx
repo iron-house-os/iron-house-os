@@ -1,12 +1,17 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
+import { ActiveProjectSelector } from "../components/ActiveProjectSelector";
 import { DocumentAuditPanel } from "../components/DocumentAuditPanel";
 import { DocumentUploadPanel } from "../components/DocumentUploadPanel";
 import { ProjectDocumentBrowser } from "../components/ProjectDocumentBrowser";
 import { RFQAttachmentManifestPanel } from "../components/RFQAttachmentManifestPanel";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 export function DocumentOperationsPage() {
-  const [projectId, setProjectId] = useState("");
+  const location = useLocation();
+  const context = readEffectiveProjectContext(location.search);
+  const [projectId, setProjectId] = useState(context.projectId ?? "");
 
   return (
     <section className="space-y-6">
@@ -17,12 +22,7 @@ export function DocumentOperationsPage() {
         </p>
       </div>
 
-      <div className="rounded-md border border-iron-100 bg-white p-5">
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium text-iron-700">Project ID</span>
-          <input value={projectId} onChange={(event) => setProjectId(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2" placeholder="Paste project UUID" />
-        </label>
-      </div>
+      <ActiveProjectSelector value={projectId} onChange={(project) => setProjectId(project?.id ?? "")} />
 
       <DocumentUploadPanel projectId={projectId || null} />
       <ProjectDocumentBrowser projectId={projectId || null} />

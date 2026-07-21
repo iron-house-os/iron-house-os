@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { takeoffPersistenceApi, TakeoffList } from "../api/takeoffPersistence";
 
@@ -26,6 +26,11 @@ export function SavedTakeoffsPanel({ projectId }: Props) {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    setTakeoffs(null);
+    if (projectId) void loadTakeoffs();
+  }, [projectId]);
 
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">

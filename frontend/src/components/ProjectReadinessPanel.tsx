@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { projectReadinessApi, ProjectReadinessResponse } from "../api/projectReadiness";
 
@@ -26,6 +26,11 @@ export function ProjectReadinessPanel({ projectId }: Props) {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    setReadiness(null);
+    if (projectId) void loadReadiness();
+  }, [projectId]);
 
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">

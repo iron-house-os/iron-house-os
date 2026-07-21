@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { estimateWorkspaceApi, EstimateWorkspaceList } from "../api/estimateWorkspace";
 
@@ -26,6 +26,11 @@ export function SavedEstimateWorkspacesPanel({ projectId }: Props) {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    setWorkspaces(null);
+    if (projectId) void loadWorkspaces();
+  }, [projectId]);
 
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">

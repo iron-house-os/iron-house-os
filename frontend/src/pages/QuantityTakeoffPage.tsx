@@ -13,7 +13,7 @@ import {
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
 import { TakeoffEnginePanel } from "../components/TakeoffEnginePanel";
 import { TakeoffSavePanel } from "../components/TakeoffSavePanel";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const categories: QuantityCategory[] = ["pipe", "structures", "asphalt", "concrete", "earthworks", "landscape", "traffic", "misc"];
 const units: QuantityUnit[] = ["LS", "EA", "m", "m2", "m3", "t", "hr", "day"];
@@ -36,7 +36,7 @@ function blankItem(): QuantityItem {
 
 export function QuantityTakeoffPage() {
   const location = useLocation();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [projectName, setProjectName] = useState(projectContext.projectName ?? "Iron House Tender Review");
   const [items, setItems] = useState<QuantityItem[]>([
     blankItem(),

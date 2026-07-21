@@ -1,6 +1,6 @@
 import { BookOpen, FilePlus2, RefreshCw, Save } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import {
   DocumentCategory,
@@ -11,10 +11,13 @@ import {
   documentStatuses,
   documentsApi,
 } from "../api/documents";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 export function DocumentLibraryPage() {
   const { documentId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const projectContext = readEffectiveProjectContext(location.search);
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<LibraryDocument | null>(null);
   const [category, setCategory] = useState("");
@@ -26,7 +29,7 @@ export function DocumentLibraryPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const list = await documentsApi.list({ category, status });
+      const list = await documentsApi.list({ category, status, project_id: projectContext.projectId ?? undefined });
       setDocuments(list.items);
       if (documentId) {
         setSelectedDocument(await documentsApi.detail(documentId));
@@ -40,7 +43,7 @@ export function DocumentLibraryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [category, documentId, status]);
+  }, [category, documentId, projectContext.projectId, status]);
 
   useEffect(() => {
     // This effect keeps the library aligned with route selection and active filters.
@@ -90,7 +93,7 @@ export function DocumentLibraryPage() {
             onCategoryChange={setCategory}
             onStatusChange={setStatus}
           />
-          <CreateDocumentForm onSubmit={(payload) => void createDocument(payload)} />
+          <CreateDocumentForm activeProjectId={projectContext.projectId} onSubmit={(payload) => void createDocument(payload)} />
           <DocumentTable documents={documents} selectedId={documentId} />
         </div>
 
@@ -125,6 +128,7 @@ function DocumentFilters({
       <h2 className="text-base font-semibold text-iron-950">Filters</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <select
+          aria-label="Document category filter"
           value={category}
           onChange={(event) => onCategoryChange(event.target.value)}
           className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -137,6 +141,7 @@ function DocumentFilters({
           ))}
         </select>
         <select
+          aria-label="Document status filter"
           value={status}
           onChange={(event) => onStatusChange(event.target.value)}
           className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -153,12 +158,12 @@ function DocumentFilters({
   );
 }
 
-function CreateDocumentForm({ onSubmit }: { onSubmit: (payload: DocumentCreatePayload) => void }) {
+function CreateDocumentForm({ activeProjectId, onSubmit }: { activeProjectId: string | null; onSubmit: (payload: DocumentCreatePayload) => void }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<DocumentCategory>("drawing");
   const [storageUri, setStorageUri] = useState("");
   const [rfqPackageId, setRfqPackageId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(activeProjectId ?? "");
   const [sheetNumber, setSheetNumber] = useState("");
   const [drawingTitle, setDrawingTitle] = useState("");
   const [discipline, setDiscipline] = useState("civil");
@@ -190,7 +195,7 @@ function CreateDocumentForm({ onSubmit }: { onSubmit: (payload: DocumentCreatePa
     setTitle("");
     setStorageUri("");
     setRfqPackageId("");
-    setProjectId("");
+    setProjectId(activeProjectId ?? "");
     setSheetNumber("");
     setDrawingTitle("");
     setRevision("");
@@ -240,6 +245,7 @@ function CreateDocumentForm({ onSubmit }: { onSubmit: (payload: DocumentCreatePa
             <input
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
+              readOnly={Boolean(activeProjectId)}
               className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
             />
           </Field>
@@ -280,6 +286,7 @@ function CreateDocumentForm({ onSubmit }: { onSubmit: (payload: DocumentCreatePa
                 placeholder="Revision"
               />
               <input
+                aria-label="Drawing issue date"
                 type="date"
                 value={issueDate}
                 onChange={(event) => setIssueDate(event.target.value)}
@@ -310,7 +317,7 @@ function DocumentTable({
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Documents</h2>
-      <div className="mt-4 overflow-x-auto">
+      <div aria-label="Documents table" role="region" tabIndex={0} className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
@@ -373,6 +380,7 @@ function DocumentDetail({
             </p>
           </div>
           <select
+            aria-label={`Status for ${document.title}`}
             value={document.status}
             onChange={(event) => onStatusChange(event.target.value as DocumentStatus)}
             className="rounded-md border border-iron-100 bg-white px-3 py-2 text-sm"

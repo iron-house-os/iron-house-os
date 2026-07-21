@@ -151,6 +151,7 @@ function SupplierFilters({
           placeholder="Name, category, service area"
         />
         <select
+          aria-label="Supplier category filter"
           value={category}
           onChange={(event) => onCategoryChange(event.target.value)}
           className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"

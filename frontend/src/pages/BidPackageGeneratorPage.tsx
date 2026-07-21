@@ -10,7 +10,7 @@ import {
   bidPackageApi,
 } from "../api/bidPackage";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const sections: BidPackageSection[] = [
   "executive_summary",
@@ -38,7 +38,7 @@ function defaultItems(): BidPackageInputItem[] {
 
 export function BidPackageGeneratorPage() {
   const location = useLocation();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [projectName, setProjectName] = useState(projectContext.projectName ?? "Iron House Tender Review");
   const [municipality, setMunicipality] = useState("Surrey");
   const [bidDueDate, setBidDueDate] = useState("");

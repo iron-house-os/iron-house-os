@@ -27,7 +27,7 @@ import {
   rfqPackagesApi,
 } from "../api/rfqPackages";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const recipientStatuses: RFQRecipientStatus[] = ["pending", "sent", "replied", "bounced"];
 const documentStatuses: RFQPackageDocumentStatus[] = ["pending", "attached", "not_applicable"];
@@ -75,7 +75,7 @@ export function RFQBuilderPage() {
   const { rfqPackageId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const projectContext = readProjectContext(location.search);
+  const projectContext = readEffectiveProjectContext(location.search);
   const [packages, setPackages] = useState<RFQPackage[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<RFQPackage | null>(null);
   const [readiness, setReadiness] = useState<RFQReadiness | null>(null);

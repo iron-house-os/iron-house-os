@@ -31,8 +31,24 @@ async function mockApi(page: Page) {
       await route.fulfill({ status: 200, json: { authentication: "authenticated", user } });
       return;
     }
+    if (path.endsWith("/auth/me/permissions")) {
+      await route.fulfill({ status: 200, json: { role: "admin", modules: { projects: ["read", "write"], suppliers: ["read", "write"], equipment: ["read", "write"] } } });
+      return;
+    }
+    if (path.endsWith("/estimates/rate-library")) {
+      await route.fulfill({ status: 200, json: { production_rates: [] } });
+      return;
+    }
     await route.fulfill({ status: 200, json: { items: [], total: 0 } });
   });
+}
+
+async function signIn(page: Page) {
+  await page.goto("/");
+  await page.getByLabel("Email").fill("release-gate@ironhousecivil.com");
+  await page.getByLabel("Password").fill("Local-release-gate-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Iron House Dashboard" })).toBeVisible();
 }
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {
@@ -47,14 +63,7 @@ async function expectNoSeriousAccessibilityViolations(page: Page) {
 
 test("authenticated core shell is responsive and accessible", async ({ page }, testInfo) => {
   await mockApi(page);
-  await page.goto("/");
-
-  await expect(page.getByRole("heading", { name: "Iron House OS" })).toBeVisible();
-  await page.getByLabel("Email").fill("release-gate@ironhousecivil.com");
-  await page.getByLabel("Password").fill("Local-release-gate-only");
-  await page.getByRole("button", { name: "Sign in" }).click();
-
-  await expect(page.getByRole("heading", { name: "Iron House Dashboard" })).toBeVisible();
+  await signIn(page);
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 
   const hasHorizontalOverflow = await page.evaluate(
@@ -72,4 +81,54 @@ test("authenticated core shell is responsive and accessible", async ({ page }, t
   }
 
   await expectNoSeriousAccessibilityViolations(page);
+});
+
+const tabs = [
+  ["Dashboard", "Iron House Dashboard"],
+  ["MVP Workflow", "IHOS MVP Workflow"],
+  ["Project Operations", "Project Operations"],
+  ["Document Operations", "Document Operations"],
+  ["Projects", "Project Workspace"],
+  ["RFQ Builder", "RFQ Package Builder"],
+  ["Supplier Database", "Supplier Database"],
+  ["Estimating", "Estimating"],
+  ["Drawing Intelligence", "Drawing Intelligence"],
+  ["Quantity Takeoff Engine", "Quantity Takeoff Engine"],
+  ["Municipality Intelligence", "Municipality Intelligence"],
+  ["Quote Comparison", "Quote Comparison"],
+  ["Tender Tracker", "Tender Intake"],
+  ["Document Library", "Document Library"],
+  ["Equipment", "Equipment"],
+  ["Reporting", "Reporting"],
+  ["Settings", "Settings"],
+] as const;
+
+test("every navigation tab opens a real responsive screen", async ({ page }, testInfo) => {
+  await mockApi(page);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await signIn(page);
+
+  for (const [label, heading] of tabs) {
+    if (testInfo.project.name === "mobile-chromium") {
+      const menu = page.getByRole("button", { name: "Open navigation" });
+      if (await menu.isVisible()) await menu.click();
+    }
+    await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: label, exact: true }).click();
+    await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(350);
+    await expect(page.getByText("Phase 2 expansion point")).toHaveCount(0);
+    await expect(page.getByText(/Request failed with 5\d\d|Unable to load .*\(5\d\d\)/)).toHaveCount(0);
+    const overflow = await page.evaluate(() => ({
+      page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+      elements: Array.from(document.querySelectorAll("body *"))
+        .filter((element) => element.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
+        .slice(0, 8)
+        .map((element) => ({ tag: element.tagName, className: element.className, right: Math.round(element.getBoundingClientRect().right) })),
+    }));
+    expect(overflow.page[0], `${label} overflow: ${JSON.stringify(overflow.elements)}`).toBe(overflow.page[1]);
+    await expectNoSeriousAccessibilityViolations(page);
+  }
+
+  expect(pageErrors).toEqual([]);
 });

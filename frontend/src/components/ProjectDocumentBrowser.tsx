@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DocumentList, DocumentStatus, documentsApi, LibraryDocument } from "../api/documents";
 
@@ -23,6 +23,11 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    setDocuments(null);
+    if (projectId) void loadDocuments();
+  }, [projectId]);
 
   async function setStatus(document: LibraryDocument, status: DocumentStatus) {
     await documentsApi.updateStatus(document.id, status);

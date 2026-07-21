@@ -138,6 +138,7 @@ function TenderFilters({
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Tender Filters</h2>
       <select
+        aria-label="Tender status filter"
         value={status}
         onChange={(event) => onStatusChange(event.target.value)}
         className="mt-4 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -273,6 +274,7 @@ function TenderIntakeForm({ onSubmit }: { onSubmit: (payload: TenderIntakePayloa
               placeholder="C-101 Utility Plan"
             />
             <select
+              aria-label="Initial tender document category"
               value={documentCategory}
               onChange={(event) => setDocumentCategory(event.target.value)}
               className="rounded-md border border-iron-100 px-3 py-2 text-sm"
@@ -307,7 +309,7 @@ function TenderList({
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Tenders</h2>
-      <div className="mt-4 overflow-x-auto">
+      <div aria-label="Tenders table" role="region" tabIndex={0} className="mt-4 overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
@@ -446,7 +448,7 @@ function LinkedRecords({
       </div>
       <div className="rounded-md border border-iron-100 bg-white p-5 xl:col-span-2">
         <h2 className="text-base font-semibold text-iron-950">Tender Documents</h2>
-        <div className="mt-4 overflow-x-auto">
+        <div aria-label="Tender documents table" role="region" tabIndex={0} className="mt-4 overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
