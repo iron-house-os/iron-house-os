@@ -82,6 +82,22 @@ RFQ_SCOPES = [
 ]
 
 
+RFQ_NAME_HINTS = {
+    "aggregate_trucking": ["amrize", "lafarge", "lehigh", "heidelberg", "universal trucking", "aggregate", "gravel"],
+    "asphalt": ["superior paving", "winvan", "ba blacktop", "lafarge", "asphalt", "paving"],
+    "concrete": ["jws concrete", "amrize", "concrete"],
+    "traffic_control": ["traffic"],
+    "markings_signage": ["marking", "line painting", "sign"],
+    "road_safety": ["traffic", "barrier", "delineator", "sign"],
+    "retaining_wall_handrail": ["lock block", "retaining", "concrete", "fabrication", "rail"],
+    "pipe_structures": ["emco", "sheret", "iconix", "wolseley", "delta irrigation", "southern irrigation", "pipe", "waterworks"],
+    "translink_bus_shelter": ["transit", "bus shelter", "concrete"],
+    "landscaping": ["landscape", "topsoil", "sod", "nursery", "tree"],
+    "electrical_utility": ["electrical", "hydro", "utility"],
+    "testing_survey_environmental": ["advanced testing", "geopacific", "testing", "survey", "environmental", "geotechnical"],
+}
+
+
 RISKS = [
     {"rating": "critical", "risk": "Surety letter and 50% performance/payment bonds are mandatory", "action": "Confirm bonding capacity before bid commitment."},
     {"rating": "critical", "risk": "Corporate experience, three comparable references and full-time superintendent are evaluated", "action": "Complete readiness review before submission."},
@@ -168,7 +184,7 @@ def build_payload() -> dict:
         "estimator": "Iron House Civil Constructors",
         "line_items": line_items,
         "indirects": [{"description": "Two-pickup fleet recovery - 5.5 active months", "amount": 59180, "category": "fleet"}],
-        "risks": RISKS,
+        "risks": [],
         "markup": {"contingency_percent": 3.0, "bonding_percent": 1.5, "insurance_percent": 0.75, "overhead_percent": 10.0, "profit_percent": 14.285714},
         "assumptions": ASSUMPTIONS,
         "exclusions": EXCLUSIONS,
@@ -224,7 +240,8 @@ def reconcile_database() -> dict:
     from app.models.bid import Bid
     from app.models.document import Document, Drawing, Takeoff
     from app.models.project import Project
-    from app.models.rfq import RFQ, RFQPackage
+    from app.models.rfq import RFQ, RFQPackage, RFQPackageSupplierRecipient
+    from app.models.supplier import Supplier
     from app.models.tender import Tender
 
     payload = build_payload()
@@ -348,8 +365,10 @@ def reconcile_database() -> dict:
 
         rfq_created = 0
         package_created = 0
+        recipients_created = 0
         due_at = datetime(2026, 7, 30, 17, 0, tzinfo=timezone.utc)
         item_by_code = {row["code"]: row for row in QUANTITIES}
+        suppliers = db.scalars(select(Supplier)).all()
         for scope in RFQ_SCOPES:
             scoped_items = [{k: item_by_code[code][k] for k in ("code", "description", "unit", "quantity")} for code in scope["codes"]]
             rfq = db.scalar(select(RFQ).where(RFQ.project_id == project.id, RFQ.title == scope["title"]))
@@ -373,10 +392,33 @@ def reconcile_database() -> dict:
             package.status = "draft_locked"
             package.supplier_category_targets = scope["categories"]
             package.metadata_json = {"scope_key": scope["key"], "line_item_codes": scope["codes"], "send_enabled": False, "source_drive_file_id": DRIVE_FILE_ID}
+            db.flush()
+
+            hints = RFQ_NAME_HINTS[scope["key"]]
+            ranked = []
+            for supplier in suppliers:
+                metadata = supplier.metadata_json or {}
+                if str(metadata.get("status") or "").lower() in {"bounced", "do_not_use"}:
+                    continue
+                haystack = " ".join([supplier.name or "", supplier.category or "", supplier.notes or ""]).casefold()
+                score = sum(3 if hint in (supplier.name or "").casefold() else 1 for hint in hints if hint in haystack)
+                if metadata.get("preferred"):
+                    score += 2
+                if score:
+                    ranked.append((score, supplier.name.casefold(), supplier))
+            ranked.sort(key=lambda value: (-value[0], value[1]))
+            for _, _, supplier in ranked[:5]:
+                recipient = db.scalar(select(RFQPackageSupplierRecipient).where(RFQPackageSupplierRecipient.rfq_package_id == package.id, RFQPackageSupplierRecipient.supplier_id == str(supplier.id)))
+                if recipient is None:
+                    recipient = RFQPackageSupplierRecipient(rfq_package_id=package.id, supplier_id=str(supplier.id), supplier_name=supplier.name)
+                    db.add(recipient)
+                    recipients_created += 1
+                recipient.category = supplier.category
+                recipient.status = "selected_draft"
 
         db.commit()
         result = validate()
-        result.update({"status": "completed", "project_created": project_created, "project_id": str(project.id), "tender_id": str(tender.id), "bid_id": str(bid.id), "takeoff_id": str(takeoff.id), "rfqs_created": rfq_created, "rfq_packages_created": package_created})
+        result.update({"status": "completed", "project_created": project_created, "project_id": str(project.id), "tender_id": str(tender.id), "bid_id": str(bid.id), "takeoff_id": str(takeoff.id), "rfqs_created": rfq_created, "rfq_packages_created": package_created, "draft_recipients_created": recipients_created})
         return result
 
 
