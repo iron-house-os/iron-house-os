@@ -160,7 +160,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         _list_request(base_url, f"/api/v1/takeoff/project/{project_id}", opener=opener)
         _list_request(
             base_url,
-            f"/api/v1/drawing-intelligence/project/{project_id}",
+            f"/api/v1/drawing-intelligence/projects/{project_id}",
             opener=opener,
         )
 
