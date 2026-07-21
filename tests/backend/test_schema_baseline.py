@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.schema_version import CURRENT_SCHEMA_REVISION
 from app.models.project import Project
+from app.models.tender import Tender
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2] / "backend"
 
@@ -57,14 +58,24 @@ def test_baseline_adopts_complete_build_208_schema_without_losing_data(
         connection.execute(text("DROP TABLE login_throttles"))
         connection.execute(text("ALTER TABLE user_accounts DROP COLUMN password_reset_required"))
     project_id = uuid4()
+    tender_id = uuid4()
     with Session(engine) as session:
-        session.add(
-            Project(
-                id=project_id,
-                name="Build 208 preserved project",
-                project_number="BUILD-208-PRESERVED",
-                metadata_json={"source": "pre-migration"},
-            )
+        session.add_all(
+            [
+                Project(
+                    id=project_id,
+                    name="Build 208 preserved project",
+                    project_number="BUILD-208-PRESERVED",
+                    metadata_json={"source": "pre-migration"},
+                ),
+                Tender(
+                    id=tender_id,
+                    title="Phase 1 watching tender",
+                    tender_number="PHASE-1-WATCHING",
+                    status="watching",
+                    metadata_json={},
+                ),
+            ]
         )
         session.commit()
 
@@ -76,7 +87,12 @@ def test_baseline_adopts_complete_build_208_schema_without_losing_data(
             {"project_id": project_id.hex},
         ).scalar_one()
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        repaired_tender_status = connection.execute(
+            text("SELECT status FROM tenders WHERE id = :tender_id"),
+            {"tender_id": tender_id.hex},
+        ).scalar_one()
     assert stored_name == "Build 208 preserved project"
+    assert repaired_tender_status == "new"
     assert revision == CURRENT_SCHEMA_REVISION
 
 

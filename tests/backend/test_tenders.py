@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app.db.session import get_db
 from app.main import app
+from app.models.tender import Tender
 
 
 client = TestClient(app)
@@ -128,3 +130,22 @@ def test_missing_tender_returns_404() -> None:
     response = client.get("/api/v1/tenders/00000000-0000-0000-0000-000000000000")
 
     assert response.status_code == 404
+
+
+def test_legacy_watching_tender_does_not_crash_list() -> None:
+    db = next(app.dependency_overrides[get_db]())
+    db.add(
+        Tender(
+            title="Legacy Phase 1 Tender",
+            tender_number="LEGACY-WATCHING-1",
+            status="watching",
+            metadata_json={},
+        )
+    )
+    db.commit()
+    db.close()
+
+    response = client.get("/api/v1/tenders")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["status"] == "new"

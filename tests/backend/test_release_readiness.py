@@ -47,3 +47,23 @@ def test_database_readiness_requires_current_alembic_revision(monkeypatch) -> No
             {"revision": CURRENT_SCHEMA_REVISION},
         )
     assert system_readiness._database_readiness() == (True, "ready")
+
+
+def test_database_readiness_rejects_legacy_tender_status(monkeypatch) -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"),
+            {"revision": CURRENT_SCHEMA_REVISION},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO tenders (id, title, status, metadata_json, created_at, updated_at) "
+                "VALUES ('00000000000000000000000000000001', 'Legacy', 'watching', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+    monkeypatch.setattr(system_readiness, "engine", engine)
+
+    assert system_readiness._database_readiness() == (False, "invalid_tender_status")

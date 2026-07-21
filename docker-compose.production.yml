@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     environment:
       ENVIRONMENT: production
+      RELEASE_ID: ${IHOS_RELEASE_ID:-unknown}
       LOG_LEVEL: INFO
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
