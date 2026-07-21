@@ -4,6 +4,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import AppError
+from app.core.workflow_values import workflow_enum
 from app.models.bid import Bid
 from app.models.document import Document, Drawing
 from app.models.project import Project, ProjectSupplier
@@ -28,11 +29,7 @@ def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
 
 
 def list_projects(db: Session, status: str | None = None) -> ProjectList:
-    statement = (
-        select(Project)
-        .options(selectinload(Project.supplier_links))
-        .order_by(Project.created_at.desc())
-    )
+    statement = select(Project).options(selectinload(Project.supplier_links)).order_by(Project.created_at.desc())
     if status:
         statement = statement.where(Project.status == status)
     items = [_to_schema(project) for project in db.scalars(statement).all()]
@@ -46,9 +43,7 @@ def get_project(db: Session, project_id: UUID) -> ProjectRead:
 def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> ProjectRead:
     project = _load_project(db, project_id)
     update_data = _project_values(payload)
-    supplier_ids = (
-        payload.supplier_ids if "supplier_ids" in payload.model_fields_set else None
-    )
+    supplier_ids = payload.supplier_ids if "supplier_ids" in payload.model_fields_set else None
     for key, value in update_data.items():
         setattr(project, key, value)
     if supplier_ids is not None:
@@ -66,39 +61,24 @@ def archive_project(db: Session, project_id: UUID) -> ProjectRead:
 
 def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
     project = _load_project(db, project_id)
-    rfq_count = (
-        db.scalar(
-            select(func.count()).select_from(RFQPackage).where(RFQPackage.project_id == project_id)
-        )
-        or 0
-    )
+    rfq_count = db.scalar(select(func.count()).select_from(RFQPackage).where(RFQPackage.project_id == project_id)) or 0
     supplier_count = (
-        db.scalar(
-            select(func.count())
-            .select_from(ProjectSupplier)
-            .where(ProjectSupplier.project_id == project_id)
-        )
+        db.scalar(select(func.count()).select_from(ProjectSupplier).where(ProjectSupplier.project_id == project_id))
         or 0
     )
-    document_count = (
-        db.scalar(
-            select(func.count()).select_from(Document).where(Document.project_id == project_id)
-        )
-        or 0
-    )
+    document_count = db.scalar(select(func.count()).select_from(Document).where(Document.project_id == project_id)) or 0
     drawing_count = (
         db.scalar(
-            select(func.count()).select_from(Document).where(
+            select(func.count())
+            .select_from(Document)
+            .where(
                 Document.project_id == project_id,
                 Document.category == "drawing",
             )
         )
         or 0
     )
-    drawing_count += (
-        db.scalar(select(func.count()).select_from(Drawing).where(Drawing.project_id == project_id))
-        or 0
-    )
+    drawing_count += db.scalar(select(func.count()).select_from(Drawing).where(Drawing.project_id == project_id)) or 0
     bid_status = _bid_status(db, project_id)
     readiness_percentage = _readiness_percentage(
         rfq_count=rfq_count,
@@ -119,11 +99,7 @@ def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
 
 
 def _load_project(db: Session, project_id: UUID) -> Project:
-    project = db.scalar(
-        select(Project)
-        .where(Project.id == project_id)
-        .options(selectinload(Project.supplier_links))
-    )
+    project = db.scalar(select(Project).where(Project.id == project_id).options(selectinload(Project.supplier_links)))
     if project is None:
         raise AppError("Project not found", status_code=404)
     return project
@@ -145,16 +121,11 @@ def _project_values(payload: ProjectCreate | ProjectUpdate) -> dict:
 
 def _replace_suppliers(db: Session, project_id: UUID, supplier_ids: list[UUID]) -> None:
     db.execute(delete(ProjectSupplier).where(ProjectSupplier.project_id == project_id))
-    db.add_all(
-        ProjectSupplier(project_id=project_id, supplier_id=supplier_id)
-        for supplier_id in supplier_ids
-    )
+    db.add_all(ProjectSupplier(project_id=project_id, supplier_id=supplier_id) for supplier_id in supplier_ids)
 
 
 def _bid_status(db: Session, project_id: UUID) -> str:
-    bid = db.scalar(
-        select(Bid).where(Bid.project_id == project_id).order_by(Bid.created_at.desc())
-    )
+    bid = db.scalar(select(Bid).where(Bid.project_id == project_id).order_by(Bid.created_at.desc()))
     return bid.status if bid else "not_started"
 
 
@@ -191,10 +162,20 @@ def _to_schema(project: Project) -> ProjectRead:
         project_address=project.project_address,
         latitude=project.latitude,
         longitude=project.longitude,
-        contract_value=(
-            float(project.contract_value) if project.contract_value is not None else None
+        contract_value=(float(project.contract_value) if project.contract_value is not None else None),
+        status=workflow_enum(
+            ProjectStatus,
+            project.status,
+            fallback=ProjectStatus.opportunity,
+            aliases={
+                "planning": "opportunity",
+                "draft": "opportunity",
+                "open": "tendering",
+                "active": "construction",
+                "in_progress": "construction",
+                "closed": "completed",
+            },
         ),
-        status=ProjectStatus(project.status),
         notes=project.notes,
         metadata=project.metadata_json or {},
         supplier_ids=[link.supplier_id for link in project.supplier_links],

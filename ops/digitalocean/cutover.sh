@@ -110,11 +110,12 @@ install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-availab
 nginx -t
 systemctl reload nginx
 "${compose[@]}" up -d --build --wait
-python scripts/release_smoke.py \
-  --base-url "http://127.0.0.1:${IHOS_PORT:-8080}" \
-  --email "$BOOTSTRAP_ADMIN_EMAIL" \
-  --password "$BOOTSTRAP_ADMIN_PASSWORD" \
-  --full
+curl -fsS "http://127.0.0.1:${IHOS_PORT:-8080}/readiness" | python -c '
+import json, sys
+payload = json.load(sys.stdin)
+if payload.get("status") != "ready":
+    raise SystemExit(f"Loopback readiness failed: {payload}")
+'
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
@@ -146,7 +147,8 @@ live_enabled=1
 python scripts/release_smoke.py \
   --base-url "https://$domain" \
   --email "$BOOTSTRAP_ADMIN_EMAIL" \
-  --password "$BOOTSTRAP_ADMIN_PASSWORD"
+  --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+  --full
 IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="post-cutover-$stamp" \
 scripts/scheduled_backup.sh
@@ -155,7 +157,7 @@ acceptance=/var/lib/iron-house-os/operator-acceptance-$stamp.md
 cat >"$acceptance" <<EOF
 # Iron House OS production operator acceptance
 
-- Release ID: Build 216
+- Release ID: $release_sha
 - Commit SHA: $release_sha
 - Environment/host: DigitalOcean tor1 / $domain / $public_ipv4
 - Cutover window (UTC): $stamp
@@ -176,5 +178,5 @@ EOF
 chmod 0600 "$acceptance"
 live_enabled=0
 trap - EXIT
-echo "Build 216 live cutover passed: https://$domain"
+echo "Release $release_sha live cutover passed: https://$domain"
 echo "Operator acceptance: $acceptance"

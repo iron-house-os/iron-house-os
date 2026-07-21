@@ -61,3 +61,10 @@ def test_cloud_init_contains_no_production_credentials() -> None:
     assert "BOOTSTRAP_ADMIN_PASSWORD=" not in cloud_init
     assert "ssh_pwauth: false" in cloud_init
     assert "ufw, --force, enable" in cloud_init
+
+
+def test_release_smoke_uses_the_real_project_scoped_drawing_route() -> None:
+    smoke = (ROOT / "scripts/release_smoke.py").read_text()
+
+    assert "/api/v1/drawing-intelligence/projects/{project_id}" in smoke
+    assert "/api/v1/drawing-intelligence/project/{project_id}" not in smoke

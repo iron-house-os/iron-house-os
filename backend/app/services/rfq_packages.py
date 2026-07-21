@@ -4,6 +4,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import AppError
+from app.core.workflow_values import workflow_enum
 from app.models.rfq import RFQPackage, RFQPackageDocument, RFQPackageSupplierRecipient
 from app.schemas.rfq_draft import RFQDraftRequest
 from app.schemas.rfq_package import (
@@ -107,17 +108,10 @@ def select_rfq_package_suppliers(
 ) -> RFQPackageRead:
     rfq_package = _load_package(db, rfq_package_id)
     existing_statuses = {
-        recipient.supplier_id: _recipient_status(recipient.status).value
-        for recipient in rfq_package.recipients
+        recipient.supplier_id: _recipient_status(recipient.status).value for recipient in rfq_package.recipients
     }
-    existing_notes = dict(
-        _metadata(rfq_package).get("supplier_status_notes") or {}
-    )
-    db.execute(
-        delete(RFQPackageSupplierRecipient).where(
-            RFQPackageSupplierRecipient.rfq_package_id == rfq_package_id
-        )
-    )
+    existing_notes = dict(_metadata(rfq_package).get("supplier_status_notes") or {})
+    db.execute(delete(RFQPackageSupplierRecipient).where(RFQPackageSupplierRecipient.rfq_package_id == rfq_package_id))
 
     scopes: dict[str, dict[str, object]] = {}
     for item in payload:
@@ -145,14 +139,10 @@ def select_rfq_package_suppliers(
     metadata = _metadata(rfq_package)
     metadata["supplier_scopes"] = scopes
     metadata["supplier_contacts"] = {
-        item.supplier_id: {"recipient_email": str(item.recipient_email)}
-        for item in payload
-        if item.recipient_email
+        item.supplier_id: {"recipient_email": str(item.recipient_email)} for item in payload if item.recipient_email
     }
     metadata["supplier_status_notes"] = {
-        item.supplier_id: existing_notes[item.supplier_id]
-        for item in payload
-        if item.supplier_id in existing_notes
+        item.supplier_id: existing_notes[item.supplier_id] for item in payload if item.supplier_id in existing_notes
     }
     rfq_package.metadata_json = metadata
     db.commit()
@@ -170,11 +160,7 @@ def generate_rfq_supplier_scopes(
 
     for recipient in rfq_package.recipients:
         existing = scopes.get(recipient.supplier_id)
-        existing_items = (
-            _clean_scope_items(existing.get("items", []))
-            if isinstance(existing, dict)
-            else []
-        )
+        existing_items = _clean_scope_items(existing.get("items", [])) if isinstance(existing, dict) else []
         if payload.force or not existing_items:
             items = _default_scope_items(recipient.category, rfq_package.scope_summary)
             scopes[recipient.supplier_id] = {
@@ -219,9 +205,7 @@ def register_rfq_package_documents(
     payload: list[RFQPackageDocumentCreate],
 ) -> RFQPackageRead:
     _load_package(db, rfq_package_id)
-    db.execute(
-        delete(RFQPackageDocument).where(RFQPackageDocument.rfq_package_id == rfq_package_id)
-    )
+    db.execute(delete(RFQPackageDocument).where(RFQPackageDocument.rfq_package_id == rfq_package_id))
     documents: list[RFQPackageDocument] = []
     for item in payload:
         document_status = item.status
@@ -343,9 +327,7 @@ def build_rfq_supplier_packages(
     rfq_package = _to_schema(_load_package(db, rfq_package_id))
     readiness = get_rfq_package_readiness(db, rfq_package_id)
     attachment_names = [
-        document.title
-        for document in rfq_package.documents
-        if document.status == RFQPackageDocumentStatus.attached
+        document.title for document in rfq_package.documents if document.status == RFQPackageDocumentStatus.attached
     ]
     packages: list[SupplierRFQPackageDraft] = []
 
@@ -441,11 +423,7 @@ def _clean_scope_items(items: object) -> list[str]:
 def _default_scope_items(category: str | None, package_scope: str | None) -> list[str]:
     normalized = (category or "").strip().casefold()
     template = next(
-        (
-            items
-            for keyword, items in CATEGORY_SCOPE_ITEMS.items()
-            if keyword in normalized
-        ),
+        (items for keyword, items in CATEGORY_SCOPE_ITEMS.items() if keyword in normalized),
         [
             "Price the complete applicable supplier or subcontractor scope.",
             "Separate labour, material, equipment, delivery, mobilization, and taxes where applicable.",
@@ -454,9 +432,7 @@ def _default_scope_items(category: str | None, package_scope: str | None) -> lis
     items = list(template)
     if package_scope:
         items.insert(0, f"Base pricing on this package scope: {package_scope.strip()}")
-    items.append(
-        "State exclusions, assumptions, lead time, quote validity, and proposed substitutions."
-    )
+    items.append("State exclusions, assumptions, lead time, quote validity, and proposed substitutions.")
     return items
 
 
@@ -465,19 +441,24 @@ def _scope_summary(items: list[str]) -> str | None:
 
 
 def _recipient_status(raw_status: str) -> RFQRecipientStatus:
-    if raw_status == "selected":
-        return RFQRecipientStatus.pending
-    return RFQRecipientStatus(raw_status)
+    return workflow_enum(
+        RFQRecipientStatus,
+        raw_status,
+        fallback=RFQRecipientStatus.pending,
+        aliases={"selected": "pending", "requested": "pending", "responded": "replied"},
+    )
 
 
 def _document_status(document: RFQPackageDocument) -> RFQPackageDocumentStatus:
-    if document.status == "registered":
-        return (
-            RFQPackageDocumentStatus.attached
-            if document.storage_uri
-            else RFQPackageDocumentStatus.pending
-        )
-    return RFQPackageDocumentStatus(document.status)
+    normalized = (document.status or "").strip().casefold().replace("-", "_").replace(" ", "_")
+    if normalized in {"registered", "uploaded", "ready", "current"}:
+        return RFQPackageDocumentStatus.attached if document.storage_uri else RFQPackageDocumentStatus.pending
+    return workflow_enum(
+        RFQPackageDocumentStatus,
+        normalized,
+        fallback=(RFQPackageDocumentStatus.attached if document.storage_uri else RFQPackageDocumentStatus.pending),
+        aliases={"excluded": "not_applicable", "n_a": "not_applicable"},
+    )
 
 
 def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
@@ -488,7 +469,20 @@ def _to_schema(rfq_package: RFQPackage) -> RFQPackageRead:
         project_name=rfq_package.project_name,
         scope_summary=rfq_package.scope_summary,
         due_at=rfq_package.due_at,
-        status=RFQPackageStatus(rfq_package.status),
+        status=workflow_enum(
+            RFQPackageStatus,
+            rfq_package.status,
+            fallback=RFQPackageStatus.draft,
+            aliases={
+                "planning": "draft",
+                "open": "assembling",
+                "in_progress": "assembling",
+                "complete": "ready",
+                "approved": "ready",
+                "sent": "issued",
+                "archived": "closed",
+            },
+        ),
         supplier_category_targets=rfq_package.supplier_category_targets or [],
         metadata=rfq_package.metadata_json or {},
         recipients=[

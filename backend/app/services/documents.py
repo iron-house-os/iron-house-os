@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.core.workflow_values import workflow_enum
 from app.models.document import Document
 from app.schemas.document import (
     DocumentCategory,
@@ -166,8 +167,8 @@ def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttac
             RFQAttachmentManifestItem(
                 document_id=document.id,
                 title=document.title,
-                category=document.category,
-                status=DocumentStatus(document.status),
+                category=_document_category(document.category),
+                status=_document_status(document.status),
                 storage_uri=document.storage_uri,
                 filename=metadata.get("original_filename"),
                 size_bytes=size if isinstance(size, int) else None,
@@ -277,8 +278,9 @@ def _drawing_values(drawing: DrawingMetadata) -> dict:
 
 
 def _to_schema(document: Document) -> DocumentRead:
+    category = _document_category(document.category)
     drawing = None
-    if document.category == "drawing":
+    if category == DocumentCategory.drawing:
         drawing = DrawingMetadata(
             sheet_number=document.sheet_number,
             title=document.drawing_title,
@@ -290,8 +292,8 @@ def _to_schema(document: Document) -> DocumentRead:
     return DocumentRead(
         id=document.id,
         title=document.title,
-        category=document.category,
-        status=DocumentStatus(document.status),
+        category=category,
+        status=_document_status(document.status),
         project_id=document.project_id,
         rfq_package_id=document.rfq_package_id,
         tender_id=document.tender_id,
@@ -302,4 +304,51 @@ def _to_schema(document: Document) -> DocumentRead:
         metadata=document.metadata_json or {},
         created_at=document.created_at,
         updated_at=document.updated_at,
+    )
+
+
+def _document_category(raw_category: str | None) -> DocumentCategory:
+    return workflow_enum(
+        DocumentCategory,
+        raw_category,
+        fallback=DocumentCategory.other,
+        aliases={
+            "drawings": "drawing",
+            "plan": "drawing",
+            "plans": "drawing",
+            "spec": "specification",
+            "specs": "specification",
+            "specifications": "specification",
+            "addenda": "addendum",
+            "geotech": "geotechnical",
+            "permits": "permit",
+            "traffic": "traffic_control",
+            "environment": "environmental",
+            "rfq": "quote_request",
+            "quote_requests": "quote_request",
+            "quotes": "quote",
+            "photos": "photo",
+            "images": "photo",
+            "test": "testing",
+            "tests": "testing",
+            "inspection": "testing",
+        },
+    )
+
+
+def _document_status(raw_status: str | None) -> DocumentStatus:
+    return workflow_enum(
+        DocumentStatus,
+        raw_status,
+        fallback=DocumentStatus.registered,
+        aliases={
+            "pending": "registered",
+            "draft": "registered",
+            "indexed": "registered",
+            "uploaded": "registered",
+            "approved": "current",
+            "live": "active",
+            "obsolete": "superseded",
+            "deleted": "archived",
+        },
     )
