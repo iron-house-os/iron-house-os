@@ -57,7 +57,7 @@ export function AppLayout({ children }: PropsWithChildren) {
             );
           })}
         </nav>
-        <div className="border-t border-white/10 px-5 py-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-iron-500">
+        <div className="border-t border-white/10 px-5 py-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-iron-300">
           Civil • Earthworks • Utilities
         </div>
       </aside>
