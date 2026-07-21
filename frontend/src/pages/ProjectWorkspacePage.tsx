@@ -10,6 +10,7 @@ import {
   projectStatuses,
   projectsApi,
 } from "../api/projects";
+import { withProjectContext } from "../utils/projectContext";
 
 const tabs = [
   "Overview",
@@ -382,14 +383,14 @@ function CommandCenter({ project, dashboard }: { project: Project; dashboard: Pr
         <div className="text-sm font-semibold text-iron-950">Readiness {dashboard.readiness_percentage}%</div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <ActionCard icon={<FileStack className="h-4 w-4" />} label="RFQs" description="Create packages and draft supplier requests." href="/rfq-builder" />
-        <ActionCard icon={<BookOpen className="h-4 w-4" />} label="Documents" description="Register drawings, specs, addenda, and RFQ files." href="/documents" />
-        <ActionCard icon={<Users className="h-4 w-4" />} label="Suppliers" description="Find or add suppliers for the project scope." href="/suppliers" />
-        <ActionCard icon={<Table2 className="h-4 w-4" />} label="Quotes" description="Compare supplier pricing and selection reasons." href="/quotes" />
-        <ActionCard icon={<Calculator className="h-4 w-4" />} label="Estimate" description="Build price, markups, risk, and workbook export." href="/estimating" />
-        <ActionCard icon={<ShieldCheck className="h-4 w-4" />} label="Municipality" description="Track standards, permits, inspections, and risks." href="/documents" />
-        <ActionCard icon={<CalendarDays className="h-4 w-4" />} label="Schedule" description="Track bid due date, quote deadlines, and work windows." href="/projects" />
-        <ActionCard icon={<FolderKanban className="h-4 w-4" />} label="Bid Package" description="Assemble final scope, estimate, assumptions, and exclusions." href="/estimating" />
+        <ActionCard icon={<FileStack className="h-4 w-4" />} label="RFQs" description="Create packages and draft supplier requests." href={withProjectContext("/rfq-builder", project)} />
+        <ActionCard icon={<BookOpen className="h-4 w-4" />} label="Documents" description="Register drawings, specs, addenda, and RFQ files." href={withProjectContext("/documents", project)} />
+        <ActionCard icon={<Users className="h-4 w-4" />} label="Suppliers" description="Find or add suppliers for the project scope." href={withProjectContext("/suppliers", project)} />
+        <ActionCard icon={<Table2 className="h-4 w-4" />} label="Quotes" description="Compare supplier pricing and selection reasons." href={withProjectContext("/quotes", project)} />
+        <ActionCard icon={<Calculator className="h-4 w-4" />} label="Estimate" description="Build price, markups, risk, and workbook export." href={withProjectContext("/estimating", project)} />
+        <ActionCard icon={<ShieldCheck className="h-4 w-4" />} label="Municipality" description="Track standards, permits, inspections, and risks." href={withProjectContext("/documents", project)} />
+        <ActionCard icon={<CalendarDays className="h-4 w-4" />} label="Schedule" description="Track bid due date, quote deadlines, and work windows." href={withProjectContext("/projects", project)} />
+        <ActionCard icon={<FolderKanban className="h-4 w-4" />} label="Bid Package" description="Assemble final scope, estimate, assumptions, and exclusions." href={withProjectContext("/estimating", project)} />
       </div>
     </div>
   );
@@ -483,7 +484,7 @@ function TabBody({ tab, project, dashboard }: { tab: string; project: Project; d
       {content.actions.length ? (
         <div className="flex flex-wrap gap-2">
           {content.actions.map((action) => (
-            <Link key={action.label} to={action.href} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
+            <Link key={action.label} to={withProjectContext(action.href, project)} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
               {action.label}
             </Link>
           ))}

@@ -1,6 +1,6 @@
 import { Calculator, Download, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { apiFetch } from "../api/client";
 
@@ -16,16 +16,18 @@ import {
   VendorQuoteInput,
   estimatesApi,
 } from "../api/estimates";
+import { EstimateWorkspaceRead, estimateWorkspaceApi } from "../api/estimateWorkspace";
+import { Project, projectsApi } from "../api/projects";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
-import { readProjectContext } from "../utils/projectContext";
+import { buildProjectContextParams, readProjectContext } from "../utils/projectContext";
 
-const defaultLineItem: EstimateLineItem = {
-  code: "31-001",
-  description: "Excavation",
+const blankLineItem: EstimateLineItem = {
+  code: "",
+  description: "",
   item_type: "self_perform",
-  quantity: 100,
-  unit: "m3",
-  default_activity: "excavation",
+  quantity: 0,
+  unit: "LS",
+  default_activity: null,
   labour: [],
   equipment: [],
   materials: [],
@@ -61,26 +63,32 @@ type EstimatingLocationState = {
 
 export function EstimatingPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const projectContext = readProjectContext(location.search);
   const locationState = location.state as EstimatingLocationState | null;
-  const importedQuoteLineItems = locationState?.quoteLineItems ?? [];
-  const [projectName, setProjectName] = useState(projectContext.projectName ?? "Marine Drive Parking Lot");
-  const [projectCode, setProjectCode] = useState(projectContext.projectId ?? "WR26-012");
+  const importedQuoteLineItems = useMemo(() => locationState?.quoteLineItems ?? [], [locationState?.quoteLineItems]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState(projectContext.projectId ?? "");
+  const [projectName, setProjectName] = useState(projectContext.projectName ?? "");
+  const [projectCode, setProjectCode] = useState("");
   const [lineItems, setLineItems] = useState<EstimateLineItem[]>(
-    () => importedQuoteLineItems.length ? importedQuoteLineItems : [defaultLineItem],
+    () => importedQuoteLineItems.length ? importedQuoteLineItems : [{ ...blankLineItem }],
   );
   const [contingency, setContingency] = useState(10);
   const [overhead, setOverhead] = useState(5);
   const [profit, setProfit] = useState(10);
   const [bonding, setBonding] = useState(0);
   const [insurance, setInsurance] = useState(0);
-  const [mobilization, setMobilization] = useState(1000);
+  const [mobilization, setMobilization] = useState(0);
   const [disposal, setDisposal] = useState(0);
-  const [riskAmount, setRiskAmount] = useState(500);
+  const [riskAmount, setRiskAmount] = useState(0);
   const [riskProbability, setRiskProbability] = useState(100);
+  const [assumptions, setAssumptions] = useState(["Normal working hours", "No contaminated soils unless noted"]);
+  const [exclusions, setExclusions] = useState(["Permits, bonds, and design fees unless listed"]);
   const [rateLibrary, setRateLibrary] = useState<ProductionRate[]>([]);
   const [summary, setSummary] = useState<EstimateSummary | null>(null);
   const [isLoadingRates, setIsLoadingRates] = useState(true);
+  const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,10 +115,10 @@ export function EstimatingPage() {
         bonding_percent: bonding,
         insurance_percent: insurance,
       },
-      assumptions: ["Normal working hours", "No contaminated soils unless noted"],
-      exclusions: ["Permits, bonds, and design fees unless listed"],
+      assumptions,
+      exclusions,
     }),
-    [bonding, contingency, disposal, insurance, lineItems, mobilization, overhead, profit, projectCode, projectName, riskAmount, riskProbability],
+    [assumptions, bonding, contingency, disposal, exclusions, insurance, lineItems, mobilization, overhead, profit, projectCode, projectName, riskAmount, riskProbability],
   );
 
   useEffect(() => {
@@ -128,6 +136,112 @@ export function EstimatingPage() {
     }
     void loadRates();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProject() {
+      setIsLoadingProject(true);
+      setError(null);
+      try {
+        const result = await projectsApi.list();
+        if (cancelled) return;
+
+        const ordered = [...result.items].sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+        const active = ordered.filter((project) => project.status !== "archived");
+        setProjects(active);
+
+        const requested = projectContext.projectId
+          ? ordered.find((project) => project.id === projectContext.projectId)
+          : null;
+        const selected = requested ?? active[0] ?? null;
+
+        if (!selected) {
+          resetEstimate();
+          return;
+        }
+
+        setSelectedProjectId(selected.id);
+        setProjectName(selected.name);
+        setProjectCode(selected.project_number ?? selected.tender_number ?? "");
+
+        if (importedQuoteLineItems.length) {
+          setLineItems(importedQuoteLineItems);
+          setSummary(null);
+          return;
+        }
+
+        const workspaces = await estimateWorkspaceApi.listForProject(selected.id);
+        if (cancelled) return;
+        const latest = workspaces.items[0];
+        if (latest) {
+          hydrateEstimate(latest, selected);
+        } else {
+          resetEstimate(selected);
+        }
+      } catch (currentError) {
+        if (!cancelled) {
+          setError(currentError instanceof Error ? currentError.message : "Unable to load the selected project estimate");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingProject(false);
+      }
+    }
+
+    function resetEstimate(project?: Project) {
+      setSelectedProjectId(project?.id ?? "");
+      setProjectName(project?.name ?? "");
+      setProjectCode(project?.project_number ?? project?.tender_number ?? "");
+      setLineItems(importedQuoteLineItems.length ? importedQuoteLineItems : [{ ...blankLineItem }]);
+      setContingency(10);
+      setOverhead(5);
+      setProfit(10);
+      setBonding(0);
+      setInsurance(0);
+      setMobilization(0);
+      setDisposal(0);
+      setRiskAmount(0);
+      setRiskProbability(100);
+      setAssumptions(["Normal working hours", "No contaminated soils unless noted"]);
+      setExclusions(["Permits, bonds, and design fees unless listed"]);
+      setSummary(null);
+    }
+
+    function hydrateEstimate(workspace: EstimateWorkspaceRead, project: Project) {
+      const estimate = readSavedEstimate(workspace);
+      if (!estimate) {
+        resetEstimate(project);
+        return;
+      }
+
+      setProjectName(estimate.project_name || project.name);
+      setProjectCode(estimate.project_code ?? project.project_number ?? project.tender_number ?? "");
+      setLineItems(estimate.line_items.length ? estimate.line_items : [{ ...blankLineItem }]);
+      setContingency(estimate.markup.contingency_percent);
+      setOverhead(estimate.markup.overhead_percent);
+      setProfit(estimate.markup.profit_percent);
+      setBonding(estimate.markup.bonding_percent);
+      setInsurance(estimate.markup.insurance_percent);
+      setMobilization(indirectAmount(estimate, "mobilization"));
+      setDisposal(indirectAmount(estimate, "disposal"));
+      setRiskAmount(estimate.risks[0]?.amount ?? 0);
+      setRiskProbability((estimate.risks[0]?.probability ?? 1) * 100);
+      setAssumptions(estimate.assumptions);
+      setExclusions(estimate.exclusions);
+      setSummary(readSavedSummary(workspace));
+    }
+
+    void loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [importedQuoteLineItems, location.search]);
+
+  function selectProject(projectId: string) {
+    const project = projects.find((candidate) => candidate.id === projectId);
+    if (!project) return;
+    navigate(`/estimating?${buildProjectContextParams(project)}`, { replace: true });
+  }
 
   function hasValidProjectName() {
     if (projectName.trim()) return true;
@@ -166,7 +280,7 @@ export function EstimatingPage() {
     setLineItems((items) => [
       ...items,
       {
-        ...defaultLineItem,
+        ...blankLineItem,
         code: `31-${String(items.length + 1).padStart(3, "0")}`,
         description: "New estimate item",
         quantity: 1,
@@ -212,16 +326,35 @@ export function EstimatingPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void calculateEstimate()} className="inline-flex items-center gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm font-medium text-white">
+          <button type="button" disabled={isLoadingProject} onClick={() => void calculateEstimate()} className="inline-flex items-center gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm font-medium text-white disabled:bg-iron-300">
             <Calculator className="h-4 w-4" /> Calculate
           </button>
-          <button type="button" onClick={() => void downloadWorkbook()} className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-medium text-iron-800">
+          <button type="button" disabled={isLoadingProject} onClick={() => void downloadWorkbook()} className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-medium text-iron-800 disabled:text-iron-300">
             <Download className="h-4 w-4" /> Workbook
           </button>
         </div>
       </div>
 
-      <ProjectScopeNotice name={projectContext.projectName} />
+      <ProjectScopeNotice name={projectName || null} />
+      <div className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+        <label className="block space-y-1 text-sm font-medium text-iron-700">
+          Active project
+          <select
+            aria-label="Active project"
+            value={selectedProjectId}
+            onChange={(event) => selectProject(event.target.value)}
+            disabled={isLoadingProject}
+            className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+          >
+            <option value="">{isLoadingProject ? "Loading projects..." : "Select a project"}</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}{project.project_number ? ` — ${project.project_number}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {importedQuoteLineItems.length ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
           Loaded {importedQuoteLineItems.length} estimate line item{importedQuoteLineItems.length === 1 ? "" : "s"} from qualified supplier selections.
@@ -474,4 +607,27 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
 
 function SummaryRow({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
   return <div className={`flex justify-between ${strong ? "text-base font-semibold text-iron-950" : "text-iron-700"}`}><dt>{label}</dt><dd>{moneyFormatter.format(value)}</dd></div>;
+}
+
+function readSavedEstimate(workspace: EstimateWorkspaceRead): EstimateCreate | null {
+  const wrapped = workspace.estimate.estimate;
+  const candidate = isRecord(wrapped) ? wrapped : workspace.estimate;
+  if (!Array.isArray(candidate.line_items) || !isRecord(candidate.markup)) return null;
+  return candidate as unknown as EstimateCreate;
+}
+
+function readSavedSummary(workspace: EstimateWorkspaceRead): EstimateSummary | null {
+  const candidate = workspace.estimate.summary;
+  if (!isRecord(candidate) || typeof candidate.final_price !== "number" || !Array.isArray(candidate.line_items)) return null;
+  return candidate as unknown as EstimateSummary;
+}
+
+function indirectAmount(estimate: EstimateCreate, category: string): number {
+  return estimate.indirects
+    .filter((item) => item.category === category)
+    .reduce((total, item) => total + item.amount, 0);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

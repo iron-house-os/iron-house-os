@@ -7,6 +7,14 @@ import { EstimatingPage } from "./EstimatingPage";
 
 const summaryPayloads: Record<string, unknown>[] = [];
 
+const testProject = {
+  id: "11111111-1111-4111-8111-111111111111",
+  name: "Test Project",
+  project_number: "TEST-001",
+  status: "tendering",
+  updated_at: "2026-07-21T12:00:00Z",
+};
+
 const rateLibrary = {
   production_rates: [
     {
@@ -81,6 +89,10 @@ describe("EstimatingPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        if (url.endsWith("/projects")) return jsonResponse({ items: [testProject], total: 1 });
+        if (url.endsWith(`/estimates/workspace/project/${testProject.id}`)) {
+          return jsonResponse({ items: [], total: 0 });
+        }
         if (url.endsWith("/estimates/rate-library")) return jsonResponse(rateLibrary);
         if (url.endsWith("/estimates/summary")) {
           summaryPayloads.push(JSON.parse(String(init?.body)));
@@ -165,7 +177,7 @@ describe("EstimatingPage", () => {
       }),
     );
     expect(submitted.risks).toEqual([
-      expect.objectContaining({ amount: 500, probability: 1 }),
+      expect.objectContaining({ amount: 0, probability: 1 }),
     ]);
   });
 
@@ -249,6 +261,81 @@ describe("EstimatingPage", () => {
         is_selected: false,
       }),
     ]);
+  });
+
+  it("loads the selected project's latest saved estimate instead of the Marine Drive sample", async () => {
+    const tfnProject = {
+      ...testProject,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "TFN Path",
+      project_number: "TFN-2026-003",
+    };
+    const savedEstimate = {
+      project_name: "TFN Path",
+      project_code: "TFN-2026-003",
+      line_items: [
+        {
+          code: "32-1216",
+          description: "Hot mix asphalt paving",
+          item_type: "subcontract",
+          quantity: 3235,
+          unit: "m2",
+          default_activity: null,
+          labour: [],
+          equipment: [],
+          materials: [],
+          disposal: [],
+          vendor_quotes: [],
+          direct_unit_cost: 75,
+        },
+      ],
+      indirects: [{ description: "Mobilization", amount: 75000, category: "mobilization" }],
+      risks: [{ description: "Schedule escalation", amount: 100000, probability: 0.5 }],
+      markup: {
+        contingency_percent: 3,
+        overhead_percent: 10,
+        profit_percent: 12.5,
+        bonding_percent: 1.5,
+        insurance_percent: 1,
+      },
+      assumptions: ["Firm pricing through May 2027"],
+      exclusions: ["Unidentified hazardous materials"],
+    };
+
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/projects")) return jsonResponse({ items: [tfnProject], total: 1 });
+      if (url.endsWith(`/estimates/workspace/project/${tfnProject.id}`)) {
+        return jsonResponse({
+          items: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              project_id: tfnProject.id,
+              status: "draft",
+              estimate: { source: "tfn_bid_loader_v1", estimate: savedEstimate, summary: null },
+              created_at: "2026-07-21T12:00:00Z",
+              updated_at: "2026-07-21T12:00:00Z",
+            },
+          ],
+          total: 1,
+        });
+      }
+      if (url.endsWith("/estimates/rate-library")) return jsonResponse(rateLibrary);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/estimating?projectId=${tfnProject.id}&projectName=TFN%20Path`]}>
+        <EstimatingPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByDisplayValue("TFN Path")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("TFN-2026-003")).toBeInTheDocument();
+    expect(screen.getByLabelText("Line item 1 description")).toHaveValue("Hot mix asphalt paving");
+    expect(screen.getByLabelText("Line item 1 quantity")).toHaveValue(3235);
+    expect(screen.getByLabelText("Profit %")).toHaveValue(12.5);
+    expect(screen.queryByDisplayValue("Marine Drive Parking Lot")).not.toBeInTheDocument();
   });
 
   it("blocks calculation and workbook export until a project name is entered", async () => {
