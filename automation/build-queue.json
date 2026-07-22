@@ -20,7 +20,7 @@
     {
       "id": "build-221-job-workbook-production",
       "priority": 221,
-      "status": "open",
+      "status": "done",
       "title": "Connect job workbook and production tracking",
       "summary": "Expose project materials, estimate quantities, installed-to-date quantities and remaining production inside the Foreman Portal.",
       "acceptance_criteria": ["Foreman selects a job workbook", "Estimated and installed quantities are compared", "Entries link to cost codes and project", "Tests pass"]
