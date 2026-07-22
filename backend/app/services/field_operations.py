@@ -20,6 +20,7 @@ from app.schemas.field_operations import (
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
+    MilestoneDecision,
     SignatureCreate,
     TimeEntryCreate,
     TimeEntryRead,
@@ -54,6 +55,37 @@ MATERIAL_TYPES = [
     {"code": "topsoil", "name": "Topsoil"},
     {"code": "other", "name": "Other material"},
 ]
+MILESTONE_CATALOG = [
+    {"id": "civil_green_hat_rookie", "track": "civil", "name": "Green Hat Rookie", "minimum_months": 0, "practical": ["Completes site orientation", "Identifies basic hazards and controls", "Uses PPE and follows supervisor direction"]},
+    {"id": "civil_probation_complete", "track": "civil", "name": "3-Month Probation Complete", "minimum_months": 3, "practical": ["Completes assigned work safely", "Uses tools correctly", "Communicates hazards and progress"]},
+    {"id": "civil_labourer", "track": "civil", "name": "Labourer — Green Hat Removed", "minimum_months": 8, "practical": ["Works independently on routine tasks", "Supports excavation and backfill", "Maintains housekeeping and paperwork"]},
+    {"id": "civil_skilled_labourer", "track": "civil", "name": "Skilled Labourer", "minimum_months": 8, "practical": ["Reads grades and measurements", "Supports compaction and utility installation", "Anticipates crew needs safely"]},
+    {"id": "civil_rookie_pipe", "track": "civil", "name": "Rookie Pipe Layer", "minimum_months": 8, "practical": ["Identifies pipe and fittings", "Prepares bedding and joints", "Checks line, grade and cleanliness"]},
+    {"id": "civil_senior_pipe", "track": "civil", "name": "Senior Pipe Layer / Ditch Boss", "minimum_months": 8, "practical": ["Directs safe trench workflow", "Verifies line, grade and connections", "Coordinates operator and top person"]},
+    {"id": "civil_topman_grademan", "track": "civil", "name": "Top Man / Grademan", "minimum_months": 8, "practical": ["Sets and checks grade controls", "Calculates cuts and fills", "Documents quantities and changes"]},
+    {"id": "civil_junior_foreman", "track": "civil", "name": "Junior Foreman", "minimum_months": 8, "practical": ["Plans daily work and crew assignments", "Leads hazard assessments", "Completes cost-coded paperwork on time"]},
+    {"id": "civil_foreman", "track": "civil", "name": "Foreman", "minimum_months": 8, "practical": ["Leads production, safety and quality", "Coordinates vendors and management", "Coaches and assesses crew competency"]},
+    {"id": "operator_green_hat", "track": "operator", "name": "Green Hat Operator", "minimum_months": 0, "practical": ["Completes pre-use inspection", "Demonstrates safe start, travel and shutdown", "Maintains exclusion zones"]},
+    {"id": "operator_service_hoe", "track": "operator", "name": "Service Hoe Operator", "minimum_months": 3, "practical": ["Excavates safely around services", "Uses spotter communication", "Maintains depth and trench control"]},
+    {"id": "operator_mainline", "track": "operator", "name": "Mainline Operator", "minimum_months": 8, "practical": ["Maintains production line and grade", "Loads trucks efficiently with minimal spillage", "Coordinates safely with pipe crew"]},
+    {"id": "operator_fine_finish", "track": "operator", "name": "Fine Finish Operator", "minimum_months": 8, "practical": ["Finishes to design tolerance", "Reads grade stakes and instruments", "Protects completed work and adjacent assets"]},
+]
+MILESTONE_QUESTIONS = {
+    "civil": [
+        {"id": "hazard", "prompt": "What should happen before a task starts when a hazard is not controlled?", "options": ["Continue carefully", "Stop and establish controls", "Wait until lunch"], "answer": 1},
+        {"id": "grade", "prompt": "What confirms pipe or excavation elevation is being built correctly?", "options": ["Line and grade checks", "Truck count", "Fuel usage"], "answer": 0},
+        {"id": "paperwork", "prompt": "When should daily field paperwork be complete?", "options": ["Before the next workday", "At month end", "Only when requested"], "answer": 0},
+        {"id": "utility", "prompt": "Before excavating near a known utility, the crew must first:", "options": ["Increase bucket speed", "Confirm location and controls", "Remove the spotter"], "answer": 1},
+        {"id": "compaction", "prompt": "Compaction quality depends on using the specified material, lift thickness and:", "options": ["Moisture and compaction effort", "Paint colour", "Truck model"], "answer": 0},
+    ],
+    "operator": [
+        {"id": "inspection", "prompt": "What is required before operating equipment?", "options": ["Pre-use inspection", "Production photo only", "Fuel receipt"], "answer": 0},
+        {"id": "stability", "prompt": "The operator must continually assess machine stability, excavation edges and:", "options": ["Soil conditions", "Radio volume", "Paint condition"], "answer": 0},
+        {"id": "signals", "prompt": "If the operator loses sight of the designated spotter, the operator should:", "options": ["Continue slowly", "Stop movement", "Sound the horn and continue"], "answer": 1},
+        {"id": "loading", "prompt": "Efficient truck loading should minimize spillage and maintain:", "options": ["A level clean floor", "Maximum swing speed", "An unmarked exclusion zone"], "answer": 0},
+        {"id": "shutdown", "prompt": "When work pauses, implements should be:", "options": ["Left raised", "Lowered safely", "Held over the trench"], "answer": 1},
+    ],
+}
 
 
 def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
@@ -68,6 +100,8 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
     certifications = list(db.scalars(select(EmployeeCertification).order_by(EmployeeCertification.expiry_date)))
     workbooks, production_items = build_job_workbooks(db)
     material_movement_summary = build_material_movement_summary(db)
+    milestone_recognitions = build_milestone_recognitions(db)
+    paperwork_recognitions = build_paperwork_recognitions(db, employees)
     alerts = build_alerts(vehicles, records, certifications)
     return FieldOperationsBootstrap(
         employees=[EmployeeRead.model_validate(item) for item in employees],
@@ -79,6 +113,9 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         production_items=production_items,
         material_types=MATERIAL_TYPES,
         material_movement_summary=material_movement_summary,
+        milestone_catalog=public_milestone_catalog(),
+        milestone_recognitions=milestone_recognitions,
+        paperwork_recognitions=paperwork_recognitions,
         vehicles=[vehicle_schema(item) for item in vehicles],
         vehicle_logs=[VehicleLogRead.model_validate(item) for item in vehicle_logs],
         time_entries=[TimeEntryRead.model_validate(item) for item in time_entries],
@@ -87,6 +124,41 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         alerts=alerts,
         toolbox_talk=current_toolbox_talk(),
     )
+
+
+def public_milestone_catalog() -> list[dict]:
+    return [
+        {**item, "written_questions": [{"id": q["id"], "prompt": q["prompt"], "options": q["options"]} for q in MILESTONE_QUESTIONS[item["track"]]]}
+        for item in MILESTONE_CATALOG
+    ]
+
+
+def build_milestone_recognitions(db: Session) -> list[dict]:
+    records = db.scalars(select(FieldRecord).where(
+        FieldRecord.record_type == "milestone_review", FieldRecord.status == "approved"
+    ).order_by(FieldRecord.updated_at.desc()))
+    return [{
+        "record_id": str(item.id), "employee_id": str(item.employee_id),
+        "employee_name": (item.details or {}).get("employee_name"),
+        "milestone_name": (item.details or {}).get("milestone_name"),
+        "approved_at": (item.details or {}).get("approved_at"),
+        "reward_type": (item.details or {}).get("reward_type", "none"),
+        "reward_description": (item.details or {}).get("reward_description"),
+    } for item in records]
+
+
+def build_paperwork_recognitions(db: Session, employees: list[Employee]) -> list[dict]:
+    names = {item.id: f"{item.first_name} {item.last_name}" for item in employees}
+    entries = db.scalars(select(TimeEntry).order_by(TimeEntry.work_date))
+    days: dict[UUID, set[date]] = {}
+    for item in entries:
+        if item.created_at.date() <= item.work_date:
+            days.setdefault(item.employee_id, set()).add(item.work_date)
+    records = db.scalars(select(FieldRecord).where(FieldRecord.employee_id.is_not(None)).order_by(FieldRecord.work_date))
+    for item in records:
+        if item.employee_id and item.created_at.date() <= item.work_date:
+            days.setdefault(item.employee_id, set()).add(item.work_date)
+    return [{"employee_id": str(employee_id), "employee_name": names.get(employee_id, "Employee"), "on_time_days": len(work_days)} for employee_id, work_days in days.items() if work_days]
 
 
 def build_material_movement_summary(db: Session) -> list[dict]:
@@ -236,9 +308,69 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     if payload.severity in {"medium", "high", "critical"} and not alerts:
         alerts = MANAGEMENT_ALERT_RECIPIENTS
     values = payload.model_dump()
+    if payload.record_type == "milestone_review":
+        employee = require_exists(db, Employee, payload.employee_id, "Employee") if payload.employee_id else db.scalar(
+            select(Employee).where(Employee.email.ilike(user.email))
+        )
+        if employee is None:
+            raise AppError("Your employee profile is not linked to this account.", status_code=400)
+        if user.role not in {"admin", "operations_manager"} and employee.email.lower() != user.email.lower():
+            raise AppError("You can only request your own milestone review.", status_code=403)
+        milestone_id = str(payload.details.get("milestone_id") or "")
+        milestone = next((item for item in MILESTONE_CATALOG if item["id"] == milestone_id), None)
+        if milestone is None:
+            raise AppError("Select a valid milestone.", status_code=400)
+        answers = payload.details.get("written_answers") or {}
+        questions = MILESTONE_QUESTIONS[milestone["track"]]
+        correct = sum(1 for question in questions if answers.get(question["id"]) == question["answer"])
+        score = round(correct / len(questions) * 100)
+        values["employee_id"] = employee.id
+        values["status"] = "practical_pending" if score >= 80 else "written_retry_required"
+        values["details"] = {
+            **payload.details,
+            "employee_name": f"{employee.first_name} {employee.last_name}",
+            "milestone_name": milestone["name"],
+            "track": milestone["track"],
+            "written_score": score,
+            "written_passed": score >= 80,
+            "practical_status": "pending",
+            "requested_at": datetime.now(UTC).isoformat(),
+        }
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def decide_milestone(
+    db: Session,
+    record_id: UUID,
+    payload: MilestoneDecision,
+    user: AuthenticatedUser,
+) -> FieldRecordRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError("Management access is required for milestone decisions.", status_code=403)
+    item = require_exists(db, FieldRecord, record_id, "Milestone review")
+    if item.record_type != "milestone_review":
+        raise AppError("That record is not a milestone review.", status_code=400)
+    details = dict(item.details or {})
+    if payload.decision == "approved" and (not details.get("written_passed") or not payload.practical_passed):
+        raise AppError("Written and practical assessments must both pass before approval.", status_code=400)
+    details.update({
+        "practical_status": "passed" if payload.practical_passed else "not_passed",
+        "practical_notes": payload.practical_notes,
+        "decision_by": user.display_name,
+        "decision_at": datetime.now(UTC).isoformat(),
+        "reward_type": payload.reward_type,
+        "reward_description": payload.reward_description,
+    })
+    if payload.decision == "approved":
+        details["approved_at"] = details["decision_at"]
+    item.details = details
+    item.status = payload.decision
     db.add(item)
     commit(db)
     db.refresh(item)
