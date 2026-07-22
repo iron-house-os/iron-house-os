@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowDownUp,
+  Award,
   BookOpenCheck,
   Camera,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { documentsApi } from "../api/documents";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Employee,
   FieldOperationsBootstrap,
@@ -139,6 +141,7 @@ export function ForemanPortalPage() {
           <AlertStrip alerts={state.data.alerts} />
           <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} />
           <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
+          <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} />
           <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} />
           <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
           <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
@@ -269,6 +272,7 @@ export function OperatorPortalPage() {
         <>
           <AlertStrip alerts={state.data.alerts} />
           <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
+          <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} />
           <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
           <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
           <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "job_photo", "time_off_request", "performance_review"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} />
@@ -288,6 +292,7 @@ export function EmployeePortalPage() {
         <>
           <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} />
           <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} />
+          <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} />
           <EmployeeDirectory data={state.data} />
           <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
           <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} />
@@ -295,6 +300,69 @@ export function EmployeePortalPage() {
       ) : null}
     </PortalShell>
   );
+}
+
+function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperationsBootstrap; track: "civil" | "operator"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const { user } = useAuth();
+  const employee = data.employees.find((item) => item.email.toLowerCase() === user?.email.toLowerCase());
+  const milestones = data.milestone_catalog.filter((item) => item.track === track);
+  const [milestoneId, setMilestoneId] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const selected = milestones.find((item) => item.id === milestoneId);
+  const requests = data.records.filter((item) => item.record_type === "milestone_review" && (!employee || item.employee_id === employee.id));
+  const pending = data.records.filter((item) => item.record_type === "milestone_review" && ["practical_pending", "written_retry_required"].includes(item.status));
+  const isManagement = ["admin", "operations_manager"].includes(user?.role ?? "");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !employee || selected.written_questions.some((question) => answers[question.id] === undefined)) return;
+    setSaving(true); onError(null);
+    try {
+      await fieldOperationsApi.createRecord({
+        record_type: "milestone_review", employee_id: employee.id, work_date: today(),
+        title: "Milestone review — " + selected.name,
+        details: { milestone_id: selected.id, written_answers: Object.fromEntries(Object.entries(answers).map(([key, value]) => [key, Number(value)])) },
+      });
+      setMilestoneId(""); setAnswers({}); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to request milestone review."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <section className="rounded-xl border border-brand-gold/40 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<Award />} title="Career milestones and recognition" subtitle="Request a written and practical review. Management approval is required before advancement or rewards are announced." />
+      {employee ? <form onSubmit={submit} className="mt-4 grid gap-4">
+        <Select label="Milestone I want to be reviewed for" value={milestoneId} onChange={(value) => { setMilestoneId(value); setAnswers({}); }} options={milestones.map((item) => [item.id, item.name + (item.minimum_months ? " — " + item.minimum_months + "+ months" : "")])} />
+        {selected ? <div className="grid gap-4 rounded-md bg-iron-50 p-4">
+          <div><div className="text-sm font-semibold text-iron-950">Written assessment</div><div className="mt-1 text-xs text-iron-500">80% is required before the practical assessment can be approved.</div></div>
+          {selected.written_questions.map((question, index) => <Select key={question.id} label={(index + 1) + ". " + question.prompt} value={answers[question.id] ?? ""} onChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))} options={question.options.map((option, optionIndex) => [String(optionIndex), option])} required />)}
+          <div><div className="text-sm font-semibold text-iron-950">Practical assessment checklist</div><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-iron-600">{selected.practical.map((item) => <li key={item}>{item}</li>)}</ul></div>
+          <PrimaryButton disabled={saving || selected.written_questions.some((question) => answers[question.id] === undefined)}>{saving ? "Submitting…" : "Submit written test and request practical review"}</PrimaryButton>
+        </div> : null}
+      </form> : <div className="mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-900">Your login must be linked to an employee profile before requesting a milestone review.</div>}
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {requests.slice(0, 6).map((item) => <div key={item.id} className="rounded-md border border-iron-100 p-3"><div className="font-semibold text-iron-950">{String(item.details.milestone_name ?? item.title)}</div><div className="mt-1 text-sm text-iron-500">Written: {String(item.details.written_score ?? 0)}% · Practical: {String(item.details.practical_status ?? "pending")} · {item.status.replaceAll("_", " ")}</div></div>)}
+      </div>
+      <div className="mt-5 rounded-md bg-brand-gold/10 p-4"><div className="font-semibold text-iron-950">Company recognition</div><div className="mt-2 grid gap-2">{data.milestone_recognitions.slice(0, 8).map((item) => <div key={item.record_id} className="text-sm text-iron-700">Achievement: {item.employee_name} earned <strong>{item.milestone_name}</strong>{item.reward_description ? " — " + item.reward_description : ""}</div>)}{data.paperwork_recognitions.slice(0, 8).map((item) => <div key={item.employee_id} className="text-sm text-iron-700">Paperwork recognition: {item.employee_name} completed {item.on_time_days} workday(s) before the next day</div>)}{!data.milestone_recognitions.length && !data.paperwork_recognitions.length ? <div className="text-sm text-iron-500">Approved milestones and on-time paperwork recognition will appear here.</div> : null}</div></div>
+      {isManagement && pending.length ? <div className="mt-5"><div className="font-semibold text-iron-950">Management milestone reviews</div><div className="mt-3 grid gap-3">{pending.map((item) => <MilestoneDecisionControls key={item.id} record={item} onSaved={onSaved} onError={onError} />)}</div></div> : null}
+    </section>
+  );
+}
+
+function MilestoneDecisionControls({ record, onSaved, onError }: { record: FieldRecord; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const [practicalPassed, setPracticalPassed] = useState(false);
+  const [practicalNotes, setPracticalNotes] = useState("");
+  const [rewardType, setRewardType] = useState("none");
+  const [rewardDescription, setRewardDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function decide(decision: "approved" | "declined") {
+    setSaving(true); onError(null);
+    try { await fieldOperationsApi.decideMilestone(record.id, { decision, practical_passed: practicalPassed, practical_notes: practicalNotes, reward_type: rewardType, reward_description: rewardDescription || null }); await onSaved(); }
+    catch (current) { onError(current instanceof Error ? current.message : "Unable to save milestone decision."); }
+    finally { setSaving(false); }
+  }
+  return <div className="rounded-md border border-iron-100 p-4"><div className="font-semibold text-iron-950">{String(record.details.employee_name)} — {String(record.details.milestone_name)}</div><div className="mt-1 text-sm text-iron-500">Written score: {String(record.details.written_score)}%</div><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={practicalPassed} onChange={(event) => setPracticalPassed(event.target.checked)} />Practical assessment observed and passed</label><div className="mt-3 grid gap-3 md:grid-cols-3"><Input label="Practical notes" value={practicalNotes} onChange={setPracticalNotes} /><Select label="Optional reward" value={rewardType} onChange={setRewardType} options={[["none", "No reward"], ["bonus", "Bonus"], ["gift", "Gift"], ["training", "Training opportunity"], ["paid_time", "Paid time"], ["other", "Other"]]} /><Input label="Reward description" value={rewardDescription} onChange={setRewardDescription} /></div><div className="mt-3 flex gap-2"><button type="button" disabled={saving || !practicalPassed || !record.details.written_passed} onClick={() => void decide("approved")} className="rounded-md bg-brand-gold px-3 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">Approve and recognize</button><button type="button" disabled={saving} onClick={() => void decide("declined")} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold">Decline</button></div></div>;
 }
 
 function TimeEntryForm({ data, mode, onSaved, onError }: { data: FieldOperationsBootstrap; mode: "employee" | "operator" | "foreman_crew"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
