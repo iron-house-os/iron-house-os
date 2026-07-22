@@ -18,6 +18,7 @@ from app.schemas.field_operations import (
     SignatureCreate,
     TimeEntryCreate,
     TimeEntryRead,
+    TimeOffDecision,
     VehicleCreate,
     VehicleLogCreate,
     VehicleLogRead,
@@ -88,3 +89,13 @@ def decide_milestone(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.decide_milestone(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/time-off-decision", response_model=FieldRecordRead)
+def decide_time_off(
+    record_id: UUID,
+    payload: TimeOffDecision,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.decide_time_off(db, record_id, payload, user)

@@ -137,7 +137,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
   return (
     <PortalShell title="Foreman Portal" eyebrow="Field command centre" description="Crew time, daily records, vendors, quantities, weather, safety and production evidence." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["time", "Crew timesheet"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["time", "Crew timesheet"], ["schedule", "Crew schedule"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
@@ -145,6 +145,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
@@ -271,13 +272,14 @@ export function OperatorPortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {["inspections", "photos"].includes(section) ? <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "records" ? <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "small_equipment_inspection", "job_photo", "time_off_request", "performance_review"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
@@ -297,7 +299,8 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
       {state.data ? (
         <>
           {section === "time" ? <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
-          {["journal", "schedule"].includes(section) ? <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "journal" ? <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "profile" ? <EmployeeDirectory data={state.data} /> : null}
           {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
@@ -307,6 +310,94 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
       ) : null}
     </PortalShell>
   );
+}
+
+function CrewScheduleCard({ data, canSchedule = false, onSaved, onError }: { data: FieldOperationsBootstrap; canSchedule?: boolean; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const { user } = useAuth();
+  const isManagement = ["admin", "operations_manager"].includes(user?.role ?? "");
+  const maySchedule = canSchedule || isManagement;
+  const employee = data.employees.find((item) => item.email.toLowerCase() === user?.email.toLowerCase()) ?? data.employees[0];
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [shiftDate, setShiftDate] = useState(today());
+  const [startTime, setStartTime] = useState("07:00");
+  const [endTime, setEndTime] = useState("15:30");
+  const [meetingPoint, setMeetingPoint] = useState("");
+  const [shiftNotes, setShiftNotes] = useState("");
+  const [timeOffStart, setTimeOffStart] = useState("");
+  const [timeOffEnd, setTimeOffEnd] = useState("");
+  const [timeOffReason, setTimeOffReason] = useState("");
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const shifts = data.records.filter((item) => item.record_type === "crew_shift").sort((a, b) => (a.work_date + String(a.details.start_time)).localeCompare(b.work_date + String(b.details.start_time)));
+  const requests = data.records.filter((item) => item.record_type === "time_off_request");
+
+  async function scheduleCrew(event: FormEvent) {
+    event.preventDefault();
+    if (!projectId || !selectedEmployees.length) return;
+    setSaving(true); onError(null);
+    try {
+      const project = data.projects.find((item) => item.id === projectId);
+      await Promise.all(selectedEmployees.map((employeeId) => fieldOperationsApi.createRecord({
+        record_type: "crew_shift", employee_id: employeeId, project_id: projectId, work_date: shiftDate,
+        title: "Scheduled shift — " + (project?.name ?? "Project"),
+        details: { start_time: startTime, end_time: endTime, meeting_point: meetingPoint, notes: shiftNotes },
+      })));
+      setSelectedEmployees([]); setMeetingPoint(""); setShiftNotes(""); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to schedule crew."); }
+    finally { setSaving(false); }
+  }
+
+  async function requestTimeOff(event: FormEvent) {
+    event.preventDefault();
+    if (!employee || !timeOffStart || !timeOffEnd) return;
+    setSaving(true); onError(null);
+    try {
+      await fieldOperationsApi.createRecord({
+        record_type: "time_off_request", employee_id: employee.id, work_date: today(), title: "Time off request",
+        details: { start_date: timeOffStart, end_date: timeOffEnd, reason: timeOffReason },
+      });
+      setTimeOffStart(""); setTimeOffEnd(""); setTimeOffReason(""); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to request time off."); }
+    finally { setSaving(false); }
+  }
+
+  async function decide(request: FieldRecord, decision: "approved" | "declined") {
+    setSaving(true); onError(null);
+    try {
+      await fieldOperationsApi.decideTimeOff(request.id, { decision, management_notes: decisionNotes[request.id] || null });
+      await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to decide time-off request."); }
+    finally { setSaving(false); }
+  }
+
+  return <div className="space-y-5">
+    {maySchedule ? <form onSubmit={scheduleCrew} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<Clock3 />} title="Crew schedule" subtitle="Assign one or more employees to a job, shift time and meeting point." />
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <Select label="Project / job" value={projectId} onChange={setProjectId} required options={data.projects.map((item) => [item.id, item.name])} />
+        <Input label="Shift date" value={shiftDate} onChange={setShiftDate} type="date" required />
+        <Input label="Start time" value={startTime} onChange={setStartTime} type="time" required />
+        <Input label="End time" value={endTime} onChange={setEndTime} type="time" required />
+        <Input label="Meeting point" value={meetingPoint} onChange={setMeetingPoint} />
+        <Input label="Shift instructions / comments" value={shiftNotes} onChange={setShiftNotes} />
+      </div>
+      <EmployeeChecklist employees={data.employees} selected={selectedEmployees} onChange={setSelectedEmployees} />
+      <PrimaryButton disabled={saving || !projectId || !selectedEmployees.length}>{saving ? "Scheduling…" : "Publish crew schedule"}</PrimaryButton>
+    </form> : <form onSubmit={requestTimeOff} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<Clock3 />} title="Request time off" subtitle="Submit dates and a comment for management review." />
+      <div className="mt-4 grid gap-3 md:grid-cols-3"><Input label="First day off" value={timeOffStart} onChange={setTimeOffStart} type="date" required /><Input label="Last day off" value={timeOffEnd} onChange={setTimeOffEnd} type="date" required /><Input label="Reason / comments" value={timeOffReason} onChange={setTimeOffReason} /></div>
+      <PrimaryButton disabled={saving || !timeOffStart || !timeOffEnd}>{saving ? "Submitting…" : "Submit request"}</PrimaryButton>
+    </form>}
+    <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<ClipboardCheck />} title="Upcoming shifts" subtitle="Your current job assignments, times, meeting points and instructions." />
+      <div className="mt-4 space-y-3">{shifts.map((shift) => { const worker = data.employees.find((item) => item.id === shift.employee_id); const project = data.projects.find((item) => item.id === shift.project_id); return <div key={shift.id} className="rounded-md border border-iron-100 p-4"><div className="font-semibold text-iron-950">{shift.work_date} · {String(shift.details.start_time)}–{String(shift.details.end_time)}</div><div className="mt-1 text-sm text-iron-600">{worker ? worker.first_name + " " + worker.last_name + " · " : ""}{project?.name ?? shift.title}</div><div className="mt-1 text-sm text-iron-500">{String(shift.details.meeting_point || "Meeting point not specified")}{shift.details.notes ? " · " + String(shift.details.notes) : ""}</div></div>; })}{!shifts.length ? <div className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">No shifts are scheduled yet.</div> : null}</div>
+    </section>
+    <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<FileText />} title={isManagement ? "Time-off approvals" : "My time-off requests"} subtitle={isManagement ? "Approve or decline pending employee requests with management comments." : "Track pending and decided requests."} />
+      <div className="mt-4 space-y-3">{requests.map((request) => { const worker = data.employees.find((item) => item.id === request.employee_id); return <div key={request.id} className="rounded-md border border-iron-100 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-iron-950">{worker ? worker.first_name + " " + worker.last_name : request.title} · {String(request.details.start_date)} to {String(request.details.end_date)}</div><StatusPill status={request.status} /></div><div className="mt-1 text-sm text-iron-500">{String(request.details.reason || "No comment provided")}</div>{isManagement && request.status === "pending" ? <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]"><Input label="Management comments" value={decisionNotes[request.id] ?? ""} onChange={(value) => setDecisionNotes((current) => ({ ...current, [request.id]: value }))} /><div className="flex items-end gap-2"><button type="button" disabled={saving} onClick={() => void decide(request, "approved")} className="rounded-md bg-brand-gold px-3 py-2 text-sm font-semibold text-brand-black">Approve</button><button type="button" disabled={saving} onClick={() => void decide(request, "declined")} className="rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold">Decline</button></div></div> : null}</div>; })}{!requests.length ? <div className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">No time-off requests.</div> : null}</div>
+    </section>
+  </div>;
 }
 
 function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperationsBootstrap; track: "civil" | "operator"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
@@ -440,8 +531,8 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
   const availableTypes = mode === "foreman"
     ? [["journal", "Daily journal"], ["daily_hazard_assessment", "Daily hazard assessment"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
     : mode === "operator"
-      ? [["equipment_inspection", "Machine inspection"], ["job_photo", "Job photos"], ["time_off_request", "Time-off request"], ["performance_review", "Performance review request"], ["journal", "Journal"]]
-      : [["journal", "Journal"], ["job_photo", "Job photos"], ["expense", "Expense"], ["missing_form", "Missing form"], ["time_off_request", "Time-off request"], ["performance_review", "Performance review request"]];
+      ? [["equipment_inspection", "Machine inspection"], ["job_photo", "Job photos"], ["performance_review", "Performance review request"], ["journal", "Journal"]]
+      : [["journal", "Journal"], ["job_photo", "Job photos"], ["expense", "Expense"], ["missing_form", "Missing form"], ["performance_review", "Performance review request"]];
   const [recordType, setRecordType] = useState(availableTypes[0][0]);
   const [employeeId, setEmployeeId] = useState("");
   const [projectId, setProjectId] = useState("");

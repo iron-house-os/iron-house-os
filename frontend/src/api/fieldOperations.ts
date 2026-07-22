@@ -137,6 +137,8 @@ export const fieldOperationsApi = {
     request<FieldRecord>("/field-operations/records/" + id + "/sign", { method: "POST", body: JSON.stringify(payload) }),
   decideMilestone: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/milestone-decision", { method: "POST", body: JSON.stringify(payload) }),
+  decideTimeOff: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/time-off-decision", { method: "POST", body: JSON.stringify(payload) }),
   createEmployee: (payload: Record<string, unknown>) =>
     request("/field-operations/employees", { method: "POST", body: JSON.stringify(payload) }),
   createCertification: (payload: Record<string, unknown>) =>

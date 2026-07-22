@@ -49,7 +49,7 @@ function AuthenticatedApp() {
 
   if (user.role === "viewer") {
     const root = `/${portalRole ?? "employee"}-portal`;
-    const sections = portalRole === "foreman" ? ["time", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
+    const sections = portalRole === "foreman" ? ["time", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
     return <AppLayout><Routes><Route path={root} element={<Page />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
