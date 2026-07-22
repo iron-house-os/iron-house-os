@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a gated Iron House OS production release
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+RandomizedDelaySec=15
+Persistent=true
+Unit=ihos-deploy-agent.service
+
+[Install]
+WantedBy=timers.target
