@@ -56,6 +56,22 @@ def test_quickbooks_export_contains_posted_cost_references() -> None:
     assert "1250.50" in response.text
 
 
+def test_startup_expenses_build_owner_loan_until_reimbursed() -> None:
+    created = client.post("/api/v1/finance/startup-expenses", json={"expense_date": str(date.today()), "vendor_name": "Apple", "description": "Business cloud storage", "amount": 12.99, "category": "software", "reference": "MN0HT72V12", "funding_source": "owner_loan", "owner_name": "Jeremie Peters", "tax_treatment": "needs_review", "status": "review", "receipt_metadata": {"source": "gmail"}})
+    assert created.status_code == 201
+    expense_id = created.json()["id"]
+    summary = client.get("/api/v1/finance/startup-expenses").json()
+    assert summary["owner_loan_payable"] >= 12.99
+    approved = client.patch(f"/api/v1/finance/startup-expenses/{expense_id}", json={"status": "approved"})
+    assert approved.status_code == 200
+    summary = client.get("/api/v1/finance/startup-expenses").json()
+    assert summary["approved_unreimbursed"] >= 12.99
+    reimbursed = client.patch(f"/api/v1/finance/startup-expenses/{expense_id}", json={"status": "reimbursed"})
+    assert reimbursed.status_code == 200
+    summary = client.get("/api/v1/finance/startup-expenses").json()
+    assert summary["reimbursed_to_owner"] >= 12.99
+
+
 def test_financial_data_is_denied_to_non_management_accounts() -> None:
     project = _project()
     def estimator_user(request: Request) -> AuthenticatedUser:
