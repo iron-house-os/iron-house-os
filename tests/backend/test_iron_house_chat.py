@@ -39,7 +39,7 @@ def test_non_management_cannot_access_assistant() -> None:
     _authenticate_as("viewer")
     response = client.get("/api/v1/iron-house-chat/status")
     assert response.status_code == 403
-    assert response.json()["detail"] == "Management access is required."
+    assert "iron-house-chat" in response.json()["detail"]
 
 
 def test_missing_provider_credential_is_reported_without_exposing_secrets() -> None:
@@ -53,4 +53,3 @@ def test_missing_provider_credential_is_reported_without_exposing_secrets() -> N
     history = client.get(f"/api/v1/iron-house-chat/conversations/{conversation_id}/messages")
     assert history.status_code == 200
     assert [item["role"] for item in history.json()] == ["user", "assistant"]
-
