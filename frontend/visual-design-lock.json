@@ -1,0 +1,22 @@
+{
+  "approved_by": "Jeremie Peters",
+  "baseline_commit": "3c6cbe89c205f6db164b05df59e4df9aa865101b",
+  "baseline_date": "2026-07-22",
+  "files": {
+    "frontend/public/apple-touch-icon.png": "61238cf4edb72a94ae0bdb0c762db8aaf5bf0e022fc521db8edea033080951de",
+    "frontend/public/favicon-32x32.png": "c7c83909f9026f4910f05406fe7d9404904b3dedb81f09aa836b4a909e938423",
+    "frontend/public/favicon.ico": "d775bd589ed230333aeeb0acc829b643ce51b1eb9c07f9c54d01cb4a163f32aa",
+    "frontend/public/icon-192.png": "43c6aee8efb6463bcaf95e240511c583d4438ba0ed85b77b89e69479cbeec877",
+    "frontend/public/icon-512-maskable.png": "373b0ad14eb30677cab2fc0bd18fcb81b9a190b01c8bdbd8d79684c10c4ebf58",
+    "frontend/public/icon-512.png": "410c16b7f12ce56ff98c4bce34dbe234c53bde79726c1498abceac68ac06fc82",
+    "frontend/public/os-logo-256.png": "ee3d1cc318206fcce1e038fc97631f1bf09f56d7162c47ea8bbb7917cf8a74e3",
+    "frontend/public/site.webmanifest": "1de7d6a57ba4976412f4f3923862c9d7e8037a10b0d3bba9a636395ef06bdce3",
+    "frontend/src/components/AppLayout.tsx": "45a72b9de0847dfbb7c56027ddce3037bd6724904866b49caf654b8a3229dde6",
+    "frontend/src/pages/DashboardPage.tsx": "c8fb703a5c2014231c7934205d18cce247a15a805b73624fa21463225dd5649a",
+    "frontend/src/pages/LoginPage.tsx": "8cc96693579ea7e18e3fa34b456f259ad47b8479230df8c04bf7de50e3b510fe",
+    "frontend/src/styles.css": "d0ed7ee59b1690db07d4d70193cfbf1f3f80d6a5084edfedad786817de4ce58d",
+    "frontend/tailwind.config.ts": "3c9eae349df550797ad4590c8cfc905e031639f3eadf883844d4386d037be7e2"
+  },
+  "policy": "docs/visual-design-lock.md",
+  "schema_version": 1
+}

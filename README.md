@@ -71,6 +71,8 @@ The smoke test expects `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD`. I
 
 See [the release runbook](docs/deployment.md) before exposing IHOS outside a trusted network. A public deployment must terminate HTTPS upstream, schedule off-host recovery bundles, and regularly confirm the automated restore drill remains green.
 
+The production appearance is protected by the [Iron House OS visual design lock](docs/visual-design-lock.md). New features must follow the existing gold, silver, black, and charcoal visual system; significant restyling requires explicit owner approval.
+
 The approved Build 216 DigitalOcean configuration and operator procedure are documented in [Build 216](docs/builds/BUILD_216.md). The live script requires the exact merged commit, the matching GitHub release-evidence artifact, protected provider credentials, matching DNS, and an explicit go flag.
 
 ## Core Application Areas
