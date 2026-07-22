@@ -1,0 +1,12 @@
+# The current OS appearance is an owner-approved production baseline.
+/frontend/tailwind.config.ts @iron-house-os
+/frontend/src/styles.css @iron-house-os
+/frontend/src/components/AppLayout.tsx @iron-house-os
+/frontend/src/pages/LoginPage.tsx @iron-house-os
+/frontend/src/pages/DashboardPage.tsx @iron-house-os
+/frontend/public/ @iron-house-os
+/frontend/visual-design-lock.json @iron-house-os
+/scripts/check_visual_design_lock.py @iron-house-os
+/docs/visual-design-lock.md @iron-house-os
+/.github/CODEOWNERS @iron-house-os
+/.github/pull_request_template.md @iron-house-os
