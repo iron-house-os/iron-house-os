@@ -9,6 +9,7 @@ class CostCodeGroup(StrEnum):
     general = "general"
     earthworks = "earthworks"
     utilities = "utilities"
+    shallows = "shallows"
     structures = "structures"
     concrete = "concrete"
     asphalt = "asphalt"
@@ -50,3 +51,4 @@ class CostCodeResolveResponse(BaseModel):
     match: CostCode | None
     confidence: float = Field(ge=0, le=1)
     alternatives: list[CostCode] = Field(default_factory=list)
+
