@@ -7,7 +7,12 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DocumentOperationsPage } from "./pages/DocumentOperationsPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
-import { EmployeePortalPage } from "./pages/EmployeePortalPage";
+import {
+  EmployeePortalPage,
+  ForemanPortalPage,
+  OperatorPortalPage,
+  VehicleTrackingPage,
+} from "./pages/EmployeePortalPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
@@ -44,6 +49,9 @@ function AuthenticatedApp() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
+        <Route path="/foreman-portal" element={<ForemanPortalPage />} />
+        <Route path="/operator-portal" element={<OperatorPortalPage />} />
+        <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
         <Route path="/document-operations" element={<DocumentOperationsPage />} />

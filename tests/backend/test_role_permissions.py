@@ -50,6 +50,7 @@ def test_role_matrix_separates_administration_and_mutation() -> None:
     assert not can_access_module("estimator", "equipment", ModulePermission.WRITE)
     assert can_access_module("estimator", "estimates", ModulePermission.WRITE)
     assert not can_access_module("viewer", "projects", ModulePermission.WRITE)
+    assert can_access_module("viewer", "field-operations", ModulePermission.WRITE)
 
 
 def test_viewer_is_read_only_and_denial_is_audited() -> None:

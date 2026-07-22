@@ -1,80 +1,101 @@
 {
-  "version": 1,
-  "strategy": "mvp-first",
+  "version": 3,
+  "strategy": "field-operations-reviewable-builds",
+  "program": "Iron House Field Operations",
+  "constraints": [
+    "Preserve the approved production visual baseline",
+    "Exclude SIN, banking, medical and payroll data",
+    "Require authenticated digital acknowledgements",
+    "Never send, approve, purchase, merge or deploy without the applicable safety gate"
+  ],
   "tasks": [
     {
-      "id": "mvp-dashboard-page",
-      "priority": 10,
+      "id": "build-220-field-operations-foundation",
+      "priority": 220,
       "status": "done",
-      "title": "Build MVP dashboard page",
-      "summary": "Replace the placeholder dashboard with operating cards for projects, RFQs, suppliers, tenders, and next actions.",
-      "acceptance_criteria": [
-        "Dashboard route shows real app data where available",
-        "Cards link to working modules",
-        "Frontend build passes"
-      ]
+      "title": "Build field operations foundation",
+      "summary": "Connect vehicles, employee records, tickets, time, field forms, photos, signatures, alerts and all three field portals.",
+      "acceptance_criteria": ["Fleet 001 and 002 are seeded", "Role portal routes work", "Field data persists", "Tests and visual lock pass"]
     },
     {
-      "id": "quote-comparison-ui",
-      "priority": 20,
-      "status": "done",
-      "title": "Build quote comparison UI",
-      "summary": "Add a simple manual quote comparison page or panel connected to POST /api/v1/quotes/compare.",
-      "acceptance_criteria": [
-        "User can enter supplier, scope, amount, and selected flag",
-        "UI displays lowest total, selected total, and delta",
-        "Frontend build passes"
-      ]
-    },
-    {
-      "id": "project-workspace-command-center",
-      "priority": 25,
-      "status": "done",
-      "title": "Upgrade Project Workspace into command center",
-      "summary": "Make one project record the hub for tender info, documents, drawings, RFQs, suppliers, quotes, estimate, schedule, municipality requirements, bid package, and activity.",
-      "acceptance_criteria": [
-        "Project detail shows command-center action cards",
-        "Project detail links to RFQs, documents, suppliers, quotes, and estimating",
-        "Project detail provides next practical step guidance"
-      ]
-    },
-    {
-      "id": "project-scoped-module-links",
-      "priority": 30,
+      "id": "build-221-job-workbook-production",
+      "priority": 221,
       "status": "open",
-      "title": "Add project-scoped module links",
-      "summary": "Pass project context from Project Workspace into RFQs, documents, quotes, and estimating using project query parameters or route state so users stay inside one bid workspace.",
-      "acceptance_criteria": [
-        "Command Center links include selected project id where useful",
-        "RFQ Builder can preselect or display selected project context",
-        "Documents and estimating pages can show selected project context",
-        "Frontend build passes"
-      ]
+      "title": "Connect job workbook and production tracking",
+      "summary": "Expose project materials, estimate quantities, installed-to-date quantities and remaining production inside the Foreman Portal.",
+      "acceptance_criteria": ["Foreman selects a job workbook", "Estimated and installed quantities are compared", "Entries link to cost codes and project", "Tests pass"]
     },
     {
-      "id": "estimating-ui-complete-fields",
-      "priority": 40,
+      "id": "build-222-vendor-rental-workflow",
+      "priority": 222,
       "status": "open",
-      "title": "Complete estimating UI fields",
-      "summary": "Add disposal, vendor quote, risk probability, and category breakdown to the Estimating page.",
-      "acceptance_criteria": [
-        "Estimate payload supports disposal inputs",
-        "Estimate payload supports vendor quote inputs",
-        "Summary shows category breakdown",
-        "Workbook download remains functional"
-      ]
+      "title": "Complete subcontractor and rental workflow",
+      "summary": "Add vendor-filtered subcontractor and rental equipment entries with hours, rates, quantities, tickets and cost-code matching.",
+      "acceptance_criteria": ["Vendor categories filter selections", "Rental and subcontract costs calculate", "Documents attach to entries", "Tests pass"]
     },
     {
-      "id": "deployment-readiness",
-      "priority": 50,
+      "id": "build-223-safety-form-engine",
+      "priority": 223,
       "status": "open",
-      "title": "Prepare MVP deployment",
-      "summary": "Add deployment docs and environment checklist for running frontend, backend, and Postgres in production.",
-      "acceptance_criteria": [
-        "Production environment variables documented",
-        "Backend deployment steps documented",
-        "Frontend deployment steps documented"
-      ]
+      "title": "Complete selectable safety form engine",
+      "summary": "Build reusable task-hazard-control templates, crew attendance, individual authenticated signatures and corrective-action tracking.",
+      "acceptance_criteria": ["Selectable tasks populate hazards and controls", "Every selected employee can sign", "Unsigned workers remain visible", "Corrective actions alert management"]
+    },
+    {
+      "id": "build-224-inspections-alerts-service",
+      "priority": 224,
+      "status": "open",
+      "title": "Complete inspections and service alerts",
+      "summary": "Add equipment-specific inspection checklists, hours, next service calculations, severity routing and Jeremie/Mac notification delivery.",
+      "acceptance_criteria": ["Inspection templates vary by equipment", "Flagged items create actionable alerts", "Service due dates and hours update", "Alert delivery is audited"]
+    },
+    {
+      "id": "build-225-employee-compliance",
+      "priority": 225,
+      "status": "open",
+      "title": "Complete employee compliance records",
+      "summary": "Add management entry/edit screens for contacts, emergency contacts, positions, course tickets, attachments and expiry notifications.",
+      "acceptance_criteria": ["Management can maintain employee records", "Tickets support document photos", "60/30/7-day expiry alerts work", "Sensitive excluded data is not collected"]
+    },
+    {
+      "id": "build-226-requests-reviews",
+      "priority": 226,
+      "status": "open",
+      "title": "Complete time-off and performance workflows",
+      "summary": "Add employee requests, manager decisions, status history, private review scheduling and acknowledgement.",
+      "acceptance_criteria": ["Employees submit and track requests", "Managers approve or decline with audit history", "Performance reviews are access controlled", "Tests pass"]
+    },
+    {
+      "id": "build-227-field-reporting-exports",
+      "priority": 227,
+      "status": "open",
+      "title": "Build field reporting and exports",
+      "summary": "Create daily report, weekly labour, fuel, maintenance, production, safety and expense summaries with spreadsheet/PDF export.",
+      "acceptance_criteria": ["Reports filter by job and date", "Cost codes reconcile across records", "Exports preserve photos and signatures by reference", "Tests pass"]
+    },
+    {
+      "id": "build-228-field-role-security",
+      "priority": 228,
+      "status": "open",
+      "title": "Harden field role permissions",
+      "summary": "Provision Foreman, Operator and Employee access with own-record boundaries, manager oversight and portal-specific navigation.",
+      "acceptance_criteria": ["Employees only access authorized records", "Foremen access assigned crews/jobs", "Operators access assigned equipment/jobs", "Permission-denial tests pass"]
+    },
+    {
+      "id": "build-229-mobile-offline",
+      "priority": 229,
+      "status": "open",
+      "title": "Add mobile offline field capture",
+      "summary": "Queue time, inspections, safety forms and photos during poor connectivity, then synchronize safely with conflict handling.",
+      "acceptance_criteria": ["Forms save offline", "Uploads resume", "Duplicate submissions are prevented", "iPhone and iPad flows pass"]
+    },
+    {
+      "id": "build-230-production-validation",
+      "priority": 230,
+      "status": "open",
+      "title": "Validate field operations in production",
+      "summary": "Run migration, backup, permission, mobile, upload, alert and rollback checks before the controlled production release.",
+      "acceptance_criteria": ["Production backup is verified", "Migration and rollback rehearsal pass", "Field acceptance checklist passes", "Release evidence is recorded"]
     }
   ]
 }
