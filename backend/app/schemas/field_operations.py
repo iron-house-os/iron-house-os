@@ -18,6 +18,7 @@ RecordType = Literal[
     "time_off_request",
     "performance_review",
     "material_quantity",
+    "material_movement",
     "subcontractor",
     "rental_equipment",
     "weather",
@@ -184,6 +185,25 @@ class FieldRecordCreate(BaseModel):
     def default_management_alerts(cls, value: list[str]) -> list[str]:
         return list(dict.fromkeys(item.strip() for item in value if item.strip()))
 
+    @model_validator(mode="after")
+    def validate_material_movement(self) -> "FieldRecordCreate":
+        if self.record_type != "material_movement":
+            return self
+        direction = self.details.get("direction")
+        material_type = str(self.details.get("material_type") or "").strip()
+        try:
+            loads = float(self.details.get("loads") or 0)
+            total_tonnes = float(self.details.get("total_tonnes") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Loads and total tonnes must be numbers.") from exc
+        if direction not in {"imported", "exported"}:
+            raise ValueError("Material direction must be imported or exported.")
+        if not material_type:
+            raise ValueError("Select a material type.")
+        if loads <= 0 or total_tonnes <= 0:
+            raise ValueError("Loads and total tonnes must be greater than zero.")
+        return self
+
 
 class FieldRecordRead(FieldRecordCreate):
     model_config = ConfigDict(from_attributes=True)
@@ -218,6 +238,8 @@ class FieldOperationsBootstrap(BaseModel):
     cost_codes: list[dict]
     job_workbooks: list[dict]
     production_items: list[dict]
+    material_types: list[dict]
+    material_movement_summary: list[dict]
     vehicles: list[VehicleRead]
     vehicle_logs: list[VehicleLogRead]
     time_entries: list[TimeEntryRead]
