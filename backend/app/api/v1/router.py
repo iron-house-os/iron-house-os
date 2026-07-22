@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from app.api.dependencies.auth import require_authenticated_user, require_module_access
 
 from app.api.v1.routes import (
+    assistant,
     auth,
     bid_package,
     bid_readiness,
@@ -54,6 +55,7 @@ protected_router.include_router(tenders.router, prefix="/tenders", tags=["tender
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
+protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)
