@@ -1,21 +1,30 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models.assistant import AssistantConversation, AssistantMessage
+from app.models.assistant import AssistantConversation, AssistantMessage, ProjectMemory
 from app.schemas.assistant import (
     AssistantConversationRead,
     AssistantPrompt,
     AssistantReply,
     AssistantStatus,
+    MemoryImportResult,
+    ProjectMemoryRead,
 )
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
 from app.services.iron_house_chat import AssistantUnavailable, generate_help_reply
+from app.services.project_brain import (
+    format_memory_context,
+    import_chatgpt_export,
+    memory_count,
+    relevant_memory,
+    seed_canonical_memory,
+)
 from app.services.request_context import get_request_audit_context
 from fastapi import Depends
 
@@ -28,15 +37,43 @@ def _require_management(user: CurrentUser) -> None:
 
 
 @router.get("/status", response_model=AssistantStatus)
-def assistant_status(user: CurrentUser) -> AssistantStatus:
+def assistant_status(user: CurrentUser, db: Session = Depends(get_db)) -> AssistantStatus:
     _require_management(user)
     settings = get_settings()
+    seed_canonical_memory(db)
     return AssistantStatus(
         enabled=settings.iron_house_chat_enabled,
         configured=bool(settings.openai_api_key),
         model=settings.openai_chat_model,
         mode="read-only",
+        memory_count=memory_count(db),
     )
+
+
+@router.get("/brain", response_model=list[ProjectMemoryRead])
+def list_project_brain(user: CurrentUser, db: Session = Depends(get_db)):
+    _require_management(user)
+    seed_canonical_memory(db)
+    return db.scalars(select(ProjectMemory).order_by(
+        ProjectMemory.authority.desc(), ProjectMemory.source_date.desc()
+    ).limit(200)).all()
+
+
+@router.post("/brain/import-chatgpt", response_model=MemoryImportResult)
+async def import_project_chats(request: Request, user: CurrentUser, db: Session = Depends(get_db),
+                               export: UploadFile = File(...)):
+    _require_management(user)
+    try:
+        result = import_chatgpt_export(db, await export.read(), export.filename or "conversations.json", user.email)
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    context = get_request_audit_context(request)
+    emit_document_audit_event(DocumentAuditEvent(
+        action="project_brain_import", outcome="completed", actor=user.email,
+        request_id=context.request_id,
+        metadata={"imported": result["imported"], "updated": result["updated"], "skipped": result["skipped"]},
+    ))
+    return MemoryImportResult(**result)
 
 
 @router.get("/conversations", response_model=list[AssistantConversationRead])
@@ -101,8 +138,10 @@ def send_message(payload: AssistantPrompt, request: Request, user: CurrentUser, 
         AssistantMessage.conversation_id == conversation.id
     ).order_by(AssistantMessage.created_at.desc()).limit(12)).all()
     provider_messages = [{"role": item.role, "content": item.content} for item in reversed(history)]
+    seed_canonical_memory(db)
+    memories = relevant_memory(db, payload.message)
     try:
-        answer = generate_help_reply(provider_messages)
+        answer = generate_help_reply(provider_messages, format_memory_context(memories))
         answer_status = "completed"
     except AssistantUnavailable as exc:
         answer = str(exc)
@@ -120,7 +159,7 @@ def send_message(payload: AssistantPrompt, request: Request, user: CurrentUser, 
     emit_document_audit_event(DocumentAuditEvent(
         action="assistant_help_request", outcome=answer_status, actor=user.email,
         request_id=context.request_id,
-        metadata={"conversation_id": str(conversation.id), "mode": "read-only", "model": settings.openai_chat_model},
+        metadata={"conversation_id": str(conversation.id), "mode": "read-only", "model": settings.openai_chat_model,
+                  "memory_sources": [item.source_id for item in memories]},
     ))
     return AssistantReply(conversation=conversation, user_message=user_message, assistant_message=assistant_message)
-

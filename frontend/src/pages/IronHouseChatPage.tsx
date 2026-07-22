@@ -1,4 +1,4 @@
-import { Bot, Mic, MicOff, Send, ShieldCheck, Volume2 } from "lucide-react";
+import { Bot, Brain, Mic, MicOff, Send, ShieldCheck, Upload, Volume2 } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 
@@ -23,6 +23,8 @@ export function IronHouseChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const submitRef = useRef<(text: string) => void>(() => undefined);
 
@@ -70,6 +72,18 @@ export function IronHouseChatPage() {
     try { recognition.start(); setListening(true); setError(null); } catch { setError("Unable to start microphone listening."); }
   }
 
+  async function importHistory(file: File | undefined) {
+    if (!file) return;
+    setImporting(true); setImportMessage(null); setError(null);
+    try {
+      const result = await ironHouseChatApi.importChatGpt(file);
+      setImportMessage(`Project Brain updated: ${result.imported} conversations imported, ${result.updated} refreshed, ${result.skipped} unrelated conversations skipped.`);
+      setStatus((current) => current ? { ...current, memory_count: result.total_project_memories } : current);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to import ChatGPT history");
+    } finally { setImporting(false); }
+  }
+
   if (user?.role !== "admin" && user?.role !== "operations_manager") return <Navigate to="/dashboard" replace />;
 
   return (
@@ -81,12 +95,21 @@ export function IronHouseChatPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatusCard label="AI service" value={status?.configured ? "Connected" : "Credential required"} />
-        <StatusCard label="Control mode" value="Read-only" />
+        <StatusCard label="Project Brain" value={`${status?.memory_count ?? 0} sources`} />
         <StatusCard label="Voice phrase" value='“Hey Chat…”' />
       </div>
 
       {!status?.configured && status ? <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><strong>Installation complete; activation pending.</strong> Management must add the separate server-side <code>OPENAI_API_KEY</code>. No key is stored in the browser.</div> : null}
       {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+
+      <div className="rounded-md border border-iron-100 bg-white p-5">
+        <div className="flex items-start gap-3"><Brain className="mt-0.5 h-5 w-5 text-brand-gold" /><div><h2 className="font-semibold text-iron-950">Project Brain migration</h2><p className="mt-1 text-sm leading-6 text-iron-500">Import a ChatGPT data-export ZIP or conversations JSON. Only Iron House project conversations are retained; likely secrets are redacted and unrelated chats are skipped.</p></div></div>
+        <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white">
+          <Upload className="h-4 w-4" />{importing ? "Importing…" : "Import ChatGPT export"}
+          <input className="sr-only" type="file" accept=".zip,.json,application/zip,application/json" disabled={importing} onChange={(event) => void importHistory(event.target.files?.[0])} />
+        </label>
+        {importMessage ? <div role="status" className="mt-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{importMessage}</div> : null}
+      </div>
 
       <div className="rounded-md border border-iron-100 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-iron-100 p-4">
@@ -112,4 +135,3 @@ export function IronHouseChatPage() {
 function StatusCard({ label, value }: { label: string; value: string }) {
   return <div className="rounded-md border border-iron-100 bg-white p-4"><div className="text-xs font-semibold uppercase tracking-wide text-iron-500">{label}</div><div className="mt-2 font-semibold text-iron-950">{value}</div></div>;
 }
-
