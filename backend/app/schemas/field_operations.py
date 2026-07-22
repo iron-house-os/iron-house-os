@@ -19,6 +19,7 @@ RecordType = Literal[
     "performance_review",
     "material_quantity",
     "material_movement",
+    "milestone_review",
     "subcontractor",
     "rental_equipment",
     "weather",
@@ -221,6 +222,14 @@ class SignatureCreate(BaseModel):
     acknowledgement: str = Field(default="I acknowledge and understand this record.", min_length=10)
 
 
+class MilestoneDecision(BaseModel):
+    decision: Literal["approved", "declined"]
+    practical_passed: bool = False
+    practical_notes: str | None = None
+    reward_type: Literal["none", "bonus", "gift", "training", "paid_time", "other"] = "none"
+    reward_description: str | None = None
+
+
 class ToolboxTalk(BaseModel):
     week_of: date
     title: str
@@ -240,6 +249,9 @@ class FieldOperationsBootstrap(BaseModel):
     production_items: list[dict]
     material_types: list[dict]
     material_movement_summary: list[dict]
+    milestone_catalog: list[dict]
+    milestone_recognitions: list[dict]
+    paperwork_recognitions: list[dict]
     vehicles: list[VehicleRead]
     vehicle_logs: list[VehicleLogRead]
     time_entries: list[TimeEntryRead]
