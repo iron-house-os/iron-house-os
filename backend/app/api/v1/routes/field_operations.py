@@ -31,13 +31,13 @@ DBSession = Annotated[Session, Depends(get_db)]
 
 
 @router.get("/bootstrap", response_model=FieldOperationsBootstrap)
-def bootstrap(db: DBSession) -> FieldOperationsBootstrap:
-    return field_operations.get_bootstrap(db)
+def bootstrap(db: DBSession, user: CurrentUser) -> FieldOperationsBootstrap:
+    return field_operations.get_bootstrap(db, user)
 
 
 @router.post("/employees", response_model=EmployeeRead, status_code=status.HTTP_201_CREATED)
-def create_employee(payload: EmployeeCreate, db: DBSession) -> EmployeeRead:
-    return field_operations.create_employee(db, payload)
+def create_employee(payload: EmployeeCreate, db: DBSession, user: CurrentUser) -> EmployeeRead:
+    return field_operations.create_employee(db, payload, user)
 
 
 @router.post("/certifications", response_model=CertificationRead, status_code=status.HTTP_201_CREATED)
