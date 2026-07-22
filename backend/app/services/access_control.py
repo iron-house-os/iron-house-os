@@ -10,6 +10,7 @@ class ModulePermission(StrEnum):
 
 
 BUSINESS_MODULES = (
+    "iron-house-chat",
     "projects",
     "suppliers",
     "rfqs",
@@ -56,7 +57,7 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
     normalized_role = normalize_role(role)
     if module not in ALL_MODULES:
         return frozenset()
-    if module == "finance" and normalized_role not in {"admin", "operations_manager"}:
+    if module in {"finance", "iron-house-chat"} and normalized_role not in {"admin", "operations_manager"}:
         return frozenset()
     if normalized_role == "admin":
         permissions = {ModulePermission.READ, ModulePermission.WRITE}

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str | None = None
     bootstrap_admin_name: str = "Iron House Administrator"
     backend_cors_origins: list[str] = ["http://localhost:5173"]
+    openai_api_key: str | None = None
+    openai_chat_model: str = "gpt-5.6-sol"
+    openai_api_base_url: str = "https://api.openai.com/v1"
+    iron_house_chat_enabled: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

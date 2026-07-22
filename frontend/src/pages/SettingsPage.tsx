@@ -1,8 +1,9 @@
-import { KeyRound, ShieldCheck } from "lucide-react";
+import { Bot, KeyRound, ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
 import { RoleAccess, authApi } from "../api/auth";
 import { useAuth } from "../contexts/AuthContext";
+import { Link } from "react-router-dom";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -25,6 +26,12 @@ export function SettingsPage() {
       {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
+        {user?.role === "admin" || user?.role === "operations_manager" ? (
+          <Link to="/iron-house-chat" className="rounded-md border border-brand-gold/40 bg-white p-5 transition hover:bg-brand-gold/10 xl:col-span-2">
+            <div className="flex items-center gap-2"><Bot className="h-5 w-5 text-brand-gold" /><h2 className="font-semibold">Iron House Chat</h2></div>
+            <p className="mt-2 text-sm text-iron-500">Open the separate, management-only AI help assistant with read-only controls and “Hey Chat” voice activation.</p>
+          </Link>
+        ) : null}
         <div className="rounded-md border border-iron-100 bg-white p-5">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /><h2 className="font-semibold">Account and access</h2></div>
           <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">

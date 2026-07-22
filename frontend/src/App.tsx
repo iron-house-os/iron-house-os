@@ -19,6 +19,7 @@ import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
+import { IronHouseChatPage } from "./pages/IronHouseChatPage";
 import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -67,6 +68,7 @@ function AuthenticatedApp() {
         <Route path="/operator-portal" element={<OperatorPortalPage />} />
         <Route path="/operator-portal/:section" element={<OperatorPortalRoute />} />
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
+        <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
         <Route path="/document-operations" element={<DocumentOperationsPage />} />

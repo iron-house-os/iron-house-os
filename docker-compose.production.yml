@@ -44,6 +44,9 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       DOCUMENT_AUDIT_STORE: jsonl
       DOCUMENT_AUDIT_JSONL_PATH: /app/data/audit/document-events.jsonl
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-5.6-sol}
+      IRON_HOUSE_CHAT_ENABLED: ${IRON_HOUSE_CHAT_ENABLED:-true}
     command:
       - /bin/sh
       - -c
