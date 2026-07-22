@@ -14,6 +14,7 @@ import {
   VehicleTrackingPage,
 } from "./pages/EmployeePortalPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
+import { FinancialControlPage } from "./pages/FinancialControlPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
@@ -88,6 +89,7 @@ function AuthenticatedApp() {
         <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />
         <Route path="/municipality-intelligence" element={<MunicipalityIntelligencePage />} />
         <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/finance" element={<FinancialControlPage />} />
         <Route path="/reporting" element={<ReportingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
