@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  DollarSign,
   BookOpen,
   Building2,
   ClipboardList,
@@ -159,6 +160,13 @@ export const modules: AppModule[] = [
     icon: Truck,
     description: "Owned and rental equipment availability, identifiers, and estimating rates.",
     status: "Active",
+  },
+  {
+    label: "Financial Control",
+    path: "/finance",
+    icon: DollarSign,
+    description: "Project budgets, commitments, actuals, forecasts, margin, and QuickBooks export.",
+    status: "Build 226 active",
   },
   {
     label: "Reporting",

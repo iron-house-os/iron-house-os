@@ -27,6 +27,7 @@ BUSINESS_MODULES = (
     "tenders",
     "equipment",
     "field-operations",
+    "finance",
 )
 ALL_MODULES = (*BUSINESS_MODULES, "users", "operations")
 
@@ -54,6 +55,8 @@ ESTIMATOR_WRITE_MODULES = frozenset(
 def module_permissions_for_role(role: str | None, module: str) -> frozenset[ModulePermission]:
     normalized_role = normalize_role(role)
     if module not in ALL_MODULES:
+        return frozenset()
+    if module == "finance" and normalized_role not in {"admin", "operations_manager"}:
         return frozenset()
     if normalized_role == "admin":
         permissions = {ModulePermission.READ, ModulePermission.WRITE}
