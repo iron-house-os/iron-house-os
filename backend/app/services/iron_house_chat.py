@@ -18,7 +18,7 @@ class AssistantUnavailable(RuntimeError):
     pass
 
 
-def generate_help_reply(messages: list[dict[str, str]]) -> str:
+def generate_help_reply(messages: list[dict[str, str]], project_context: str = "") -> str:
     settings = get_settings()
     if not settings.openai_api_key:
         raise AssistantUnavailable(
@@ -26,7 +26,7 @@ def generate_help_reply(messages: list[dict[str, str]]) -> str:
         )
     payload = {
         "model": settings.openai_chat_model,
-        "instructions": SYSTEM_INSTRUCTIONS,
+        "instructions": f"{SYSTEM_INSTRUCTIONS}\n\nPROJECT BRAIN CONTEXT\n{project_context}",
         "input": messages,
         "max_output_tokens": 700,
     }
@@ -56,4 +56,3 @@ def generate_help_reply(messages: list[dict[str, str]]) -> str:
             if content.get("type") == "output_text" and content.get("text"):
                 return str(content["text"]).strip()
     raise AssistantUnavailable("The AI provider returned no answer.")
-

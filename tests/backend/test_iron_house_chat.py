@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 from fastapi import Request
@@ -32,6 +33,7 @@ def test_management_can_see_separate_assistant_status() -> None:
         "model": "gpt-5.6-sol",
         "mode": "read-only",
         "voice_supported": True,
+        "memory_count": 7,
     }
 
 
@@ -53,3 +55,32 @@ def test_missing_provider_credential_is_reported_without_exposing_secrets() -> N
     history = client.get(f"/api/v1/iron-house-chat/conversations/{conversation_id}/messages")
     assert history.status_code == 200
     assert [item["role"] for item in history.json()] == ["user", "assistant"]
+
+
+def test_chatgpt_export_import_keeps_project_threads_and_skips_unrelated_chats() -> None:
+    export = [
+        {
+            "id": "ihos-thread-1", "title": "Build 43 Recovery Plan", "create_time": 1783620338,
+            "mapping": {
+                "1": {"message": {"create_time": 1, "author": {"role": "user"},
+                                    "content": {"parts": ["Continue Iron House OS and repair Build 43."]}}},
+                "2": {"message": {"create_time": 2, "author": {"role": "assistant"},
+                                    "content": {"parts": ["The RFQ workflow needs repair."]}}},
+            },
+        },
+        {
+            "id": "personal-thread", "title": "Dinner ideas", "create_time": 1783620339,
+            "mapping": {"1": {"message": {"create_time": 1, "author": {"role": "user"},
+                                            "content": {"parts": ["What should I cook tonight?"]}}}},
+        },
+    ]
+    response = client.post(
+        "/api/v1/iron-house-chat/brain/import-chatgpt",
+        files={"export": ("conversations.json", json.dumps(export), "application/json")},
+    )
+    assert response.status_code == 200
+    assert response.json()["imported"] == 1
+    assert response.json()["skipped"] == 1
+    brain = client.get("/api/v1/iron-house-chat/brain")
+    assert brain.status_code == 200
+    assert any(item["source_id"] == "chatgpt:ihos-thread-1" for item in brain.json())

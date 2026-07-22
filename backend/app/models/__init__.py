@@ -1,5 +1,5 @@
 from app.models.bid import Bid
-from app.models.assistant import AssistantConversation, AssistantMessage
+from app.models.assistant import AssistantConversation, AssistantMessage, ProjectMemory
 from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
@@ -21,6 +21,7 @@ from app.models.user import Employee, LoginThrottle, UserAccount
 __all__ = [
     "AssistantConversation",
     "AssistantMessage",
+    "ProjectMemory",
     "Bid",
     "Contact",
     "Document",
