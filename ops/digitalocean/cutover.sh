@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 environment_file=${IHOS_COMPOSE_ENV_FILE:-/etc/iron-house-os/production.env}
+export IHOS_COMPOSE_ENV_FILE="$environment_file"
 release_sha=
 evidence_file=
 confirm_go=0
