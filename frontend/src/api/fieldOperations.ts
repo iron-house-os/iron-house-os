@@ -66,6 +66,15 @@ export type FieldOperationsBootstrap = {
     percent_complete: number;
     materials: Array<Record<string, unknown>>;
   }>;
+  material_types: Array<{ code: string; name: string }>;
+  material_movement_summary: Array<{
+    project_id: string | null;
+    direction: "imported" | "exported";
+    material_code: string;
+    material_type: string;
+    loads: number;
+    total_tonnes: number;
+  }>;
   vehicles: Vehicle[];
   vehicle_logs: Array<Record<string, unknown>>;
   time_entries: Array<Record<string, unknown>>;
