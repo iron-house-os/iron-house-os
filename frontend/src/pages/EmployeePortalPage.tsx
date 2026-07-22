@@ -136,6 +136,7 @@ export function ForemanPortalPage() {
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
+          <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} />
           <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} />
           <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
           <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
@@ -143,6 +144,49 @@ export function ForemanPortalPage() {
         </>
       ) : null}
     </PortalShell>
+  );
+}
+
+function JobWorkbookCard({ data, onSaved, onError }: { data: FieldOperationsBootstrap; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const [projectId, setProjectId] = useState(data.job_workbooks[0]?.project_id ?? "");
+  const items = data.production_items.filter((item) => item.project_id === projectId);
+  const [lineKey, setLineKey] = useState(items[0]?.line_key ?? "");
+  const [quantity, setQuantity] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const selected = data.production_items.find((item) => item.line_key === lineKey);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !quantity) return;
+    setSaving(true); onError(null);
+    try {
+      await fieldOperationsApi.createRecord({
+        record_type: "material_quantity",
+        project_id: selected.project_id,
+        cost_code: selected.cost_code,
+        work_date: today(),
+        title: selected.description,
+        details: { line_key: selected.line_key, workbook_id: selected.workbook_id, installed_quantity: Number(quantity), unit: selected.unit, notes },
+      });
+      setQuantity(""); setNotes(""); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to save production quantity."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<ClipboardCheck />} title="Job workbook production" subtitle="Compare estimated, installed-to-date and remaining quantities from the latest project estimate." />
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Select label="Project / job workbook" value={projectId} onChange={(value) => { setProjectId(value); setLineKey(""); }} options={data.job_workbooks.map((book) => { const project = data.projects.find((item) => item.id === book.project_id); return [book.project_id, (project?.name ?? "Project") + " — " + book.line_count + " lines"]; })} />
+        <Select label="Production line" value={lineKey} onChange={setLineKey} options={items.map((item) => [item.line_key, (item.cost_code ? item.cost_code + " — " : "") + item.description])} />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => <div key={item.line_key} className="rounded-md border border-iron-100 p-3"><div className="text-sm font-semibold text-iron-950">{item.description}</div><div className="mt-1 text-xs text-iron-500">{item.cost_code ?? "No cost code"} · {item.unit}</div><div className="mt-3 grid grid-cols-3 gap-2"><Fact label="Estimate" value={String(item.estimated_quantity)} /><Fact label="Installed" value={String(item.installed_quantity)} /><Fact label="Remaining" value={String(item.remaining_quantity)} /></div><div className="mt-2 text-xs font-semibold text-brand-gold-dark">{item.percent_complete}% complete · {item.materials.length} material(s)</div></div>)}
+      </div>
+      {selected ? <form onSubmit={submit} className="mt-4 grid gap-3 rounded-md bg-iron-50 p-4 md:grid-cols-3"><Input label={"Installed today (" + selected.unit + ")"} value={quantity} onChange={setQuantity} type="number" required /><Input label="Production notes" value={notes} onChange={setNotes} /><div className="self-end"><PrimaryButton disabled={saving || !quantity}>{saving ? "Saving…" : "Add installed quantity"}</PrimaryButton></div></form> : null}
+      {!data.job_workbooks.length ? <div className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">Save a project estimate workspace to activate production tracking.</div> : null}
+    </section>
   );
 }
 
