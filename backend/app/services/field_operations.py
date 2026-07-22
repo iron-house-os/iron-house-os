@@ -35,6 +35,25 @@ from app.services.cost_codes import get_cost_code_library
 
 
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
+MATERIAL_TYPES = [
+    {"code": "pit_run", "name": "Pit run gravel"},
+    {"code": "75mm_minus", "name": "75 mm minus"},
+    {"code": "50mm_minus", "name": "50 mm minus"},
+    {"code": "25mm_minus", "name": "25 mm minus"},
+    {"code": "19mm_minus", "name": "19 mm minus / road base"},
+    {"code": "19mm_clear", "name": "19 mm clear crush"},
+    {"code": "13mm_clear", "name": "13 mm clear crush"},
+    {"code": "10mm_screenings", "name": "10 mm screenings"},
+    {"code": "pea_gravel", "name": "Pea gravel"},
+    {"code": "drain_rock", "name": "Drain rock"},
+    {"code": "bedding_sand", "name": "Bedding sand"},
+    {"code": "concrete_sand", "name": "Concrete sand"},
+    {"code": "riprap", "name": "Riprap"},
+    {"code": "structural_fill", "name": "Structural fill"},
+    {"code": "native_material", "name": "Native material"},
+    {"code": "topsoil", "name": "Topsoil"},
+    {"code": "other", "name": "Other material"},
+]
 
 
 def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
@@ -48,6 +67,7 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
     records = list(db.scalars(select(FieldRecord).order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc()).limit(200)))
     certifications = list(db.scalars(select(EmployeeCertification).order_by(EmployeeCertification.expiry_date)))
     workbooks, production_items = build_job_workbooks(db)
+    material_movement_summary = build_material_movement_summary(db)
     alerts = build_alerts(vehicles, records, certifications)
     return FieldOperationsBootstrap(
         employees=[EmployeeRead.model_validate(item) for item in employees],
@@ -57,6 +77,8 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         cost_codes=[item.model_dump(mode="json") for item in get_cost_code_library().items],
         job_workbooks=workbooks,
         production_items=production_items,
+        material_types=MATERIAL_TYPES,
+        material_movement_summary=material_movement_summary,
         vehicles=[vehicle_schema(item) for item in vehicles],
         vehicle_logs=[VehicleLogRead.model_validate(item) for item in vehicle_logs],
         time_entries=[TimeEntryRead.model_validate(item) for item in time_entries],
@@ -65,6 +87,33 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         alerts=alerts,
         toolbox_talk=current_toolbox_talk(),
     )
+
+
+def build_material_movement_summary(db: Session) -> list[dict]:
+    records = db.scalars(
+        select(FieldRecord).where(FieldRecord.record_type == "material_movement")
+    )
+    totals: dict[tuple[str, str, str], dict] = {}
+    for record in records:
+        details = record.details or {}
+        direction = str(details.get("direction") or "")
+        material_code = str(details.get("material_code") or "other")
+        material_type = str(details.get("material_type") or "Other material")
+        key = (str(record.project_id or ""), direction, material_code)
+        item = totals.setdefault(key, {
+            "project_id": str(record.project_id) if record.project_id else None,
+            "direction": direction,
+            "material_code": material_code,
+            "material_type": material_type,
+            "loads": 0.0,
+            "total_tonnes": 0.0,
+        })
+        try:
+            item["loads"] += float(details.get("loads") or 0)
+            item["total_tonnes"] += float(details.get("total_tonnes") or 0)
+        except (TypeError, ValueError):
+            continue
+    return sorted(totals.values(), key=lambda item: (item["project_id"] or "", item["material_type"], item["direction"]))
 
 
 def build_job_workbooks(db: Session) -> tuple[list[dict], list[dict]]:
