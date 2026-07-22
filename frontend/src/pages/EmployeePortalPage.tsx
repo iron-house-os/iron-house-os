@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowDownUp,
   BookOpenCheck,
   Camera,
   CheckCircle2,
@@ -137,6 +138,7 @@ export function ForemanPortalPage() {
         <>
           <AlertStrip alerts={state.data.alerts} />
           <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} />
+          <MaterialMovementCard data={state.data} onSaved={state.refresh} onError={state.setError} />
           <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} />
           <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
           <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
@@ -144,6 +146,64 @@ export function ForemanPortalPage() {
         </>
       ) : null}
     </PortalShell>
+  );
+}
+
+function MaterialMovementCard({ data, onSaved, onError }: { data: FieldOperationsBootstrap; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const [projectId, setProjectId] = useState("");
+  const [costCode, setCostCode] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [direction, setDirection] = useState("imported");
+  const [materialCode, setMaterialCode] = useState("");
+  const [loads, setLoads] = useState("");
+  const [tonnesPerLoad, setTonnesPerLoad] = useState("");
+  const [ticketNumber, setTicketNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  const totalTonnes = Number(loads || 0) * Number(tonnesPerLoad || 0);
+  const material = data.material_types.find((item) => item.code === materialCode);
+  const summaries = data.material_movement_summary.filter((item) => !projectId || item.project_id === projectId);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!projectId || !costCode || !material || totalTonnes <= 0) return;
+    setSaving(true); onError(null);
+    try {
+      const documentIds = await uploadPhotos(files, projectId, direction + " material ticket");
+      await fieldOperationsApi.createRecord({
+        record_type: "material_movement", project_id: projectId, supplier_id: supplierId || null,
+        cost_code: costCode, work_date: today(), title: direction + " — " + material.name,
+        document_ids: documentIds,
+        details: { direction, material_code: material.code, material_type: material.name, loads: Number(loads), tonnes_per_load: Number(tonnesPerLoad), total_tonnes: totalTonnes, ticket_number: ticketNumber, notes },
+      });
+      setLoads(""); setTonnesPerLoad(""); setTicketNumber(""); setNotes(""); setFiles([]); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to save material movement."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <SectionTitle icon={<ArrowDownUp />} title="Imported and exported materials" subtitle="Record gravel and other material by truck loads and tonnes, linked to the job and cost code." />
+      <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Select label="Project" value={projectId} onChange={setProjectId} required options={data.projects.map((item) => [item.id, item.name])} />
+        <Select label="Direction" value={direction} onChange={setDirection} options={[["imported", "Imported to job"], ["exported", "Exported from job"]]} />
+        <Select label="Material / gravel type" value={materialCode} onChange={setMaterialCode} required options={data.material_types.map((item) => [item.code, item.name])} />
+        <Select label="Cost code" value={costCode} onChange={setCostCode} required options={data.cost_codes.map((item) => [item.code, item.code + " — " + item.name])} />
+        <Select label="Supplier / disposal site" value={supplierId} onChange={setSupplierId} options={data.suppliers.map((item) => [item.id, item.name])} />
+        <Input label="Number of loads" value={loads} onChange={setLoads} type="number" required />
+        <Input label="Tonnes per load" value={tonnesPerLoad} onChange={setTonnesPerLoad} type="number" required />
+        <Input label="Scale ticket / reference" value={ticketNumber} onChange={setTicketNumber} />
+        <Input label="Notes" value={notes} onChange={setNotes} />
+        <FilePicker files={files} onChange={setFiles} />
+        <div className="rounded-md bg-iron-50 p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-iron-500">Calculated total</div><div className="mt-1 text-lg font-semibold text-iron-950">{totalTonnes.toLocaleString("en-CA")} tonnes</div></div>
+        <div className="self-end"><PrimaryButton disabled={saving || !projectId || !costCode || !materialCode || totalTonnes <= 0}>{saving ? "Saving…" : "Record material movement"}</PrimaryButton></div>
+      </form>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {summaries.map((item) => <div key={(item.project_id ?? "all") + item.direction + item.material_code} className="rounded-md border border-iron-100 p-3"><div className="text-xs font-semibold uppercase tracking-wide text-brand-gold-dark">{item.direction}</div><div className="mt-1 text-sm font-semibold text-iron-950">{item.material_type}</div><div className="mt-3 grid grid-cols-2 gap-2"><Fact label="Loads" value={item.loads.toLocaleString("en-CA")} /><Fact label="Tonnes" value={item.total_tonnes.toLocaleString("en-CA")} /></div></div>)}
+        {!summaries.length ? <div className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">No imported or exported materials recorded for this selection.</div> : null}
+      </div>
+    </section>
   );
 }
 
