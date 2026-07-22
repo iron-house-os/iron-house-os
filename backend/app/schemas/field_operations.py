@@ -20,6 +20,7 @@ RecordType = Literal[
     "material_quantity",
     "material_movement",
     "milestone_review",
+    "small_equipment_inspection",
     "subcontractor",
     "rental_equipment",
     "weather",
@@ -39,6 +40,8 @@ class EmployeeCreate(BaseModel):
     hire_date: date | None = None
     portal_role: PortalRole = "employee"
     notes: str | None = None
+    provision_portal_access: bool = Field(default=True, exclude=True)
+    temporary_password: str | None = Field(default=None, min_length=12, max_length=512, exclude=True)
 
 
 class EmployeeRead(EmployeeCreate):
@@ -48,6 +51,8 @@ class EmployeeRead(EmployeeCreate):
     status: str
     created_at: datetime
     updated_at: datetime
+    portal_access_created: bool = False
+    temporary_password: str | None = None
 
 
 class CertificationCreate(BaseModel):

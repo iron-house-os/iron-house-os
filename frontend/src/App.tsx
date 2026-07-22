@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -31,8 +31,12 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
 
+function EmployeePortalRoute() { return <EmployeePortalPage section={useParams().section} />; }
+function ForemanPortalRoute() { return <ForemanPortalPage section={useParams().section} />; }
+function OperatorPortalRoute() { return <OperatorPortalPage section={useParams().section} />; }
+
 function AuthenticatedApp() {
-  const { user, isLoading } = useAuth();
+  const { user, portalRole, isLoading } = useAuth();
   if (isLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-iron-950 text-sm font-medium text-white">
@@ -43,14 +47,24 @@ function AuthenticatedApp() {
   if (!user) return <LoginPage />;
   if (user.password_reset_required) return <PasswordRecoveryPage />;
 
+  if (user.role === "viewer") {
+    const root = `/${portalRole ?? "employee"}-portal`;
+    const sections = portalRole === "foreman" ? ["time", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
+    const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
+    return <AppLayout><Routes><Route path={root} element={<Page />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+  }
+
   return (
     <AppLayout>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
+        <Route path="/employee-portal/:section" element={<EmployeePortalRoute />} />
         <Route path="/foreman-portal" element={<ForemanPortalPage />} />
+        <Route path="/foreman-portal/:section" element={<ForemanPortalRoute />} />
         <Route path="/operator-portal" element={<OperatorPortalPage />} />
+        <Route path="/operator-portal/:section" element={<OperatorPortalRoute />} />
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />

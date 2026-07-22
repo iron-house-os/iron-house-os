@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+import secrets
 from uuid import UUID
 
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from app.models.bid import Bid
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.project import Project
 from app.models.supplier import Supplier
-from app.models.user import Employee
+from app.models.user import Employee, UserAccount
 from app.schemas.field_operations import (
     CertificationCreate,
     CertificationRead,
@@ -31,7 +32,7 @@ from app.schemas.field_operations import (
     VehicleRead,
     VehicleUpdate,
 )
-from app.services.auth import AuthenticatedUser
+from app.services.auth import AuthenticatedUser, hash_password
 from app.services.cost_codes import get_cost_code_library
 
 
@@ -88,8 +89,10 @@ MILESTONE_QUESTIONS = {
 }
 
 
-def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
+def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootstrap:
     employees = list(db.scalars(select(Employee).order_by(Employee.last_name, Employee.first_name)))
+    profile = next((item for item in employees if item.email.lower() == user.email.lower()), None)
+    field_role = profile.portal_role if profile else None
     projects = list(db.scalars(select(Project).order_by(Project.name)))
     suppliers = list(db.scalars(select(Supplier).order_by(Supplier.name)))
     equipment = list(db.scalars(select(Equipment).order_by(Equipment.name)))
@@ -102,6 +105,14 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
     material_movement_summary = build_material_movement_summary(db)
     milestone_recognitions = build_milestone_recognitions(db)
     paperwork_recognitions = build_paperwork_recognitions(db, employees)
+    if user.role == "viewer" and field_role in {"employee", "operator"}:
+        employee_id = profile.id if profile else None
+        employees = [profile] if profile else []
+        time_entries = [item for item in time_entries if item.employee_id == employee_id]
+        records = [item for item in records if item.employee_id == employee_id or item.record_type == "toolbox_talk"]
+        certifications = [item for item in certifications if item.employee_id == employee_id]
+        milestone_recognitions = [item for item in milestone_recognitions if item["employee_id"] == str(employee_id)]
+        paperwork_recognitions = [item for item in paperwork_recognitions if item["employee_id"] == str(employee_id)]
     alerts = build_alerts(vehicles, records, certifications)
     return FieldOperationsBootstrap(
         employees=[EmployeeRead.model_validate(item) for item in employees],
@@ -240,12 +251,20 @@ def build_job_workbooks(db: Session) -> tuple[list[dict], list[dict]]:
     return workbooks, production_items
 
 
-def create_employee(db: Session, payload: EmployeeCreate) -> EmployeeRead:
+def create_employee(db: Session, payload: EmployeeCreate, user: AuthenticatedUser) -> EmployeeRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError("Management access is required to create employees.", status_code=403)
     item = Employee(**payload.model_dump(), status="active")
     db.add(item)
     commit(db, "An employee with that email already exists.")
     db.refresh(item)
-    return EmployeeRead.model_validate(item)
+    temporary_password = payload.temporary_password or secrets.token_urlsafe(14)
+    access_created = False
+    if payload.provision_portal_access and db.scalar(select(UserAccount).where(UserAccount.email.ilike(item.email))) is None:
+        db.add(UserAccount(email=item.email.lower(), display_name=f"{item.first_name} {item.last_name}", role="viewer", password_hash=hash_password(temporary_password), is_active=True, password_reset_required=True))
+        commit(db)
+        access_created = True
+    return EmployeeRead.model_validate(item).model_copy(update={"portal_access_created": access_created, "temporary_password": temporary_password if access_created else None})
 
 
 def create_certification(db: Session, payload: CertificationCreate) -> CertificationRead:

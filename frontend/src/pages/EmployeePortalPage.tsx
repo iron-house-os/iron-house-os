@@ -18,6 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { documentsApi } from "../api/documents";
 import { useAuth } from "../contexts/AuthContext";
@@ -131,21 +132,23 @@ export function VehicleTrackingPage() {
   );
 }
 
-export function ForemanPortalPage() {
+export function ForemanPortalPage({ section = "dashboard" }: { section?: string }) {
   const state = useFieldOperations();
   return (
     <PortalShell title="Foreman Portal" eyebrow="Field command centre" description="Crew time, daily records, vendors, quantities, weather, safety and production evidence." icon={<HardHat />}>
       <Status state={state} />
+      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["time", "Crew timesheet"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
-          <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} />
-          <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
-          <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} />
-          <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} />
-          <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} />
-          <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
-          <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} />
+          {section === "production" ? <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "loads" ? <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "records" ? <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
       ) : null}
     </PortalShell>
@@ -263,39 +266,43 @@ function JobWorkbookCard({ data, onSaved, onError }: { data: FieldOperationsBoot
   );
 }
 
-export function OperatorPortalPage() {
+export function OperatorPortalPage({ section = "dashboard" }: { section?: string }) {
   const state = useFieldOperations();
   return (
     <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
       <Status state={state} />
+      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
-          <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
-          <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} />
-          <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
-          <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} />
-          <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "job_photo", "time_off_request", "performance_review"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} />
+          {section === "loads" ? <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "milestones" ? <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "time" ? <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {["inspections", "photos"].includes(section) ? <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "records" ? <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "small_equipment_inspection", "job_photo", "time_off_request", "performance_review"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
       ) : null}
     </PortalShell>
   );
 }
 
-export function EmployeePortalPage() {
+export function EmployeePortalPage({ section = "dashboard" }: { section?: string }) {
   const state = useFieldOperations();
   return (
     <PortalShell title="Employee Portal" eyebrow="Iron House Contracting" description="Time, daily journal, safety, job photos, requests, contact information and course tickets." icon={<HardHat />}>
       <Status state={state} />
-      <SafetyProgramCard />
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["time", "My time"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
+      {section === "safety" ? <SafetyProgramCard /> : null}
       {state.data ? (
         <>
-          <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} />
-          <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} />
-          <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} />
-          <EmployeeDirectory data={state.data} />
-          <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} />
-          <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} />
+          {section === "time" ? <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
+          {["journal", "schedule"].includes(section) ? <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "profile" ? <EmployeeDirectory data={state.data} /> : null}
+          {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "records" ? <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
       ) : null}
     </PortalShell>
@@ -348,6 +355,32 @@ function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperation
       {isManagement && pending.length ? <div className="mt-5"><div className="font-semibold text-iron-950">Management milestone reviews</div><div className="mt-3 grid gap-3">{pending.map((item) => <MilestoneDecisionControls key={item.id} record={item} onSaved={onSaved} onError={onError} />)}</div></div> : null}
     </section>
   );
+}
+
+function PortalSectionDashboard({ root, items }: { root: string; items: string[][] }) {
+  return <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<ClipboardCheck />} title="Portal dashboard" subtitle="Open one workspace at a time for more room to enter notes, comments, photos and details." /><div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(([path, label]) => <Link key={path} to={`/${root}/${path}`} className="rounded-xl border border-brand-gold/30 bg-iron-50 p-5 transition hover:border-brand-gold hover:bg-brand-gold/10"><div className="font-semibold text-iron-950">{label}</div><div className="mt-2 text-sm text-iron-500">Open workspace</div></Link>)}</div></section>;
+}
+
+function SmallEquipmentInspectionCard({ data, onSaved, onError }: { data: FieldOperationsBootstrap; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+  const [employeeId, setEmployeeId] = useState(data.employees.length === 1 ? data.employees[0].id : "");
+  const [projectId, setProjectId] = useState("");
+  const [equipmentType, setEquipmentType] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [condition, setCondition] = useState("serviceable");
+  const [notes, setNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault(); if (!employeeId || !equipmentType) return;
+    setSaving(true); onError(null);
+    try {
+      const documentIds = await uploadPhotos(files, projectId || undefined, "Small equipment inspection");
+      await fieldOperationsApi.createRecord({ record_type: "small_equipment_inspection", employee_id: employeeId, project_id: projectId || null, work_date: today(), title: equipmentType + (identifier ? " — " + identifier : ""), severity: condition === "serviceable" ? "none" : condition === "remove_from_service" ? "high" : "medium", details: { equipment_type: equipmentType, identifier, condition, notes, checks: ["guards", "controls", "cords_or_hoses", "fuel_or_battery", "general_condition"] }, document_ids: documentIds });
+      setIdentifier(""); setNotes(""); setFiles([]); setCondition("serviceable"); await onSaved();
+    } catch (current) { onError(current instanceof Error ? current.message : "Unable to save small equipment inspection."); }
+    finally { setSaving(false); }
+  }
+  return <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<Wrench />} title="Small equipment inspection" subtitle="Inspect saws, compactors, pumps, generators, lasers and power tools before use. Flagged items alert management." /><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><Select label="Employee" value={employeeId} onChange={setEmployeeId} required options={employeeOptions(data.employees)} /><Select label="Project" value={projectId} onChange={setProjectId} options={data.projects.map((item) => [item.id, item.name])} /><Select label="Equipment type" value={equipmentType} onChange={setEquipmentType} required options={[["Cut-off saw", "Cut-off saw"], ["Chainsaw", "Chainsaw"], ["Plate compactor", "Plate compactor"], ["Jumping jack", "Jumping jack"], ["Pump", "Pump"], ["Generator", "Generator"], ["Laser / level", "Laser / level"], ["Power tool", "Power tool"], ["Other", "Other"]]} /><Input label="Asset number / description" value={identifier} onChange={setIdentifier} /><Select label="Condition" value={condition} onChange={setCondition} options={[["serviceable", "Serviceable"], ["monitor", "Monitor / repair soon"], ["remove_from_service", "Remove from service"]]} /><Input label="Inspection comments" value={notes} onChange={setNotes} /><FilePicker files={files} onChange={setFiles} /></div><div className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-600">Check guards, controls, cords or hoses, fuel or battery condition, leaks, damage and overall safe operation.</div><PrimaryButton disabled={saving || !employeeId || !equipmentType}>{saving ? "Saving…" : "Submit inspection"}</PrimaryButton></form>;
 }
 
 function MilestoneDecisionControls({ record, onSaved, onError }: { record: FieldRecord; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {

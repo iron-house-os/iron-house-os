@@ -8,7 +8,7 @@ import { modulePathWithProjectContext, readEffectiveProjectContext } from "../ut
 
 export function AppLayout({ children }: PropsWithChildren) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, portalRole, logout } = useAuth();
   const location = useLocation();
   const activeProject = readEffectiveProjectContext(location.search);
   const accessLabel =
@@ -35,7 +35,10 @@ export function AppLayout({ children }: PropsWithChildren) {
           </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Primary navigation">
-          {modules.map((module) => {
+          {modules.filter((module) => {
+            if (user?.role !== "viewer") return true;
+            return module.path === `/${portalRole ?? "employee"}-portal`;
+          }).map((module) => {
             const Icon = module.icon;
             return (
               <NavLink

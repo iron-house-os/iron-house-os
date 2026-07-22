@@ -11,7 +11,7 @@
     "frontend/public/icon-512.png": "410c16b7f12ce56ff98c4bce34dbe234c53bde79726c1498abceac68ac06fc82",
     "frontend/public/os-logo-256.png": "ee3d1cc318206fcce1e038fc97631f1bf09f56d7162c47ea8bbb7917cf8a74e3",
     "frontend/public/site.webmanifest": "1de7d6a57ba4976412f4f3923862c9d7e8037a10b0d3bba9a636395ef06bdce3",
-    "frontend/src/components/AppLayout.tsx": "45a72b9de0847dfbb7c56027ddce3037bd6724904866b49caf654b8a3229dde6",
+    "frontend/src/components/AppLayout.tsx": "bdd21fc104dfff16369d5de7d677ea423772bbd7045fe1b3dc2f1e7f4b011482",
     "frontend/src/pages/DashboardPage.tsx": "c8fb703a5c2014231c7934205d18cce247a15a805b73624fa21463225dd5649a",
     "frontend/src/pages/LoginPage.tsx": "8cc96693579ea7e18e3fa34b456f259ad47b8479230df8c04bf7de50e3b510fe",
     "frontend/src/styles.css": "d0ed7ee59b1690db07d4d70193cfbf1f3f80d6a5084edfedad786817de4ce58d",

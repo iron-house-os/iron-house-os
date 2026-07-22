@@ -2,10 +2,14 @@ import { PropsWithChildren, createContext, useCallback, useContext, useEffect, u
 
 import { AuthUser, authApi } from "../api/auth";
 import { AUTH_SESSION_EXPIRED_EVENT } from "../api/client";
+import { fieldOperationsApi } from "../api/fieldOperations";
+
+export type PortalRole = "employee" | "operator" | "foreman" | "management" | null;
 
 type AuthContextValue = {
   user: AuthUser | null;
   isLoading: boolean;
+  portalRole: PortalRole;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -16,13 +20,23 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [portalRole, setPortalRole] = useState<PortalRole>(null);
+
+  const resolvePortalRole = useCallback(async (account: AuthUser | null) => {
+    if (!account) { setPortalRole(null); return; }
+    if (account.role !== "viewer") { setPortalRole("management"); return; }
+    try {
+      const field = await fieldOperationsApi.bootstrap();
+      setPortalRole(field.employees.find((item) => item.email.toLowerCase() === account.email.toLowerCase())?.portal_role ?? "employee");
+    } catch { setPortalRole("employee"); }
+  }, []);
 
   useEffect(() => {
     let active = true;
     authApi
       .me()
       .then((account) => {
-        if (active) setUser(account);
+        if (active) { setUser(account); return resolvePortalRole(account); }
       })
       .catch(() => {
         if (active) setUser(null);
@@ -33,7 +47,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [resolvePortalRole]);
 
   useEffect(() => {
     const expireSession = () => setUser(null);
@@ -42,14 +56,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    setUser(await authApi.login(email, password));
-  }, []);
+    const account = await authApi.login(email, password); setUser(account); await resolvePortalRole(account);
+  }, [resolvePortalRole]);
 
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
     } finally {
       setUser(null);
+      setPortalRole(null);
     }
   }, []);
 
@@ -58,8 +73,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, logout, changePassword }),
-    [changePassword, isLoading, login, logout, user],
+    () => ({ user, isLoading, portalRole, login, logout, changePassword }),
+    [changePassword, isLoading, login, logout, portalRole, user],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

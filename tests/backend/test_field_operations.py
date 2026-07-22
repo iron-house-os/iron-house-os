@@ -1,8 +1,12 @@
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
+from fastapi import Request
+from uuid import UUID
 
 from app.main import app
+from app.api.dependencies.auth import require_authenticated_user
+from app.services.auth import AuthenticatedUser
 
 
 client = TestClient(app)
@@ -331,3 +335,46 @@ def test_bootstrap_exposes_milestone_ladders_and_on_time_paperwork_recognition()
     assert "Fine Finish Operator" in names
     paperwork = next(item for item in bootstrap["paperwork_recognitions"] if item["employee_id"] == employee["id"])
     assert paperwork["on_time_days"] == 1
+
+
+def test_employee_creation_provisions_a_password_change_required_portal_account() -> None:
+    response = client.post(
+        "/api/v1/field-operations/employees",
+        json={"first_name": "New", "last_name": "Worker", "email": "new.worker@ironhousecivil.com", "portal_role": "employee"},
+    )
+    assert response.status_code == 201
+    assert response.json()["portal_access_created"] is True
+    temporary_password = response.json()["temporary_password"]
+    assert len(temporary_password) >= 12
+    login = client.post("/api/v1/auth/login", json={"email": "new.worker@ironhousecivil.com", "password": temporary_password})
+    assert login.status_code == 200
+    assert login.json()["user"]["password_reset_required"] is True
+
+
+def test_employee_bootstrap_is_limited_to_own_records() -> None:
+    own = _employee()
+    other = client.post(
+        "/api/v1/field-operations/employees",
+        json={"first_name": "Other", "last_name": "Worker", "email": "other.worker@ironhousecivil.com", "portal_role": "employee"},
+    ).json()
+
+    def employee_user(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000009"), email=own["email"], display_name="Crew Member", role="viewer", session_version=1)
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = employee_user
+    bootstrap = client.get("/api/v1/field-operations/bootstrap")
+    assert bootstrap.status_code == 200
+    assert [item["id"] for item in bootstrap.json()["employees"]] == [own["id"]]
+    assert other["id"] not in {item["id"] for item in bootstrap.json()["employees"]}
+
+
+def test_small_equipment_inspection_flags_unsafe_saw_for_management() -> None:
+    employee = _employee()
+    record = client.post(
+        "/api/v1/field-operations/records",
+        json={"record_type": "small_equipment_inspection", "employee_id": employee["id"], "work_date": str(date.today()), "title": "Cut-off saw — SAW-01", "severity": "high", "details": {"equipment_type": "Cut-off saw", "condition": "remove_from_service", "notes": "Guard damaged"}},
+    )
+    assert record.status_code == 201
+    assert record.json()["alert_recipients"] == ["Jeremie Peters", "Mac Warren"]
