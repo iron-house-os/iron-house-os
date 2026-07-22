@@ -184,3 +184,69 @@ def test_job_workbook_compares_estimated_installed_and_remaining_quantities() ->
     assert line["installed_quantity"] == 35
     assert line["remaining_quantity"] == 65
     assert line["percent_complete"] == 35
+
+
+def test_material_imports_and_exports_are_tracked_by_loads_and_tonnes() -> None:
+    project = _project()
+    imported = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "material_movement",
+            "project_id": project["id"],
+            "cost_code": "02-200",
+            "work_date": str(date.today()),
+            "title": "Imported — 19 mm minus / road base",
+            "details": {
+                "direction": "imported",
+                "material_code": "19mm_minus",
+                "material_type": "19 mm minus / road base",
+                "loads": 4,
+                "tonnes_per_load": 18.5,
+                "total_tonnes": 74,
+            },
+        },
+    )
+    assert imported.status_code == 201
+    exported = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "material_movement",
+            "project_id": project["id"],
+            "cost_code": "01-300",
+            "work_date": str(date.today()),
+            "title": "Exported — Native material",
+            "details": {
+                "direction": "exported",
+                "material_code": "native_material",
+                "material_type": "Native material",
+                "loads": 3,
+                "tonnes_per_load": 16,
+                "total_tonnes": 48,
+            },
+        },
+    )
+    assert exported.status_code == 201
+
+    bootstrap = client.get("/api/v1/field-operations/bootstrap").json()
+    assert any(item["code"] == "19mm_minus" for item in bootstrap["material_types"])
+    imported_total = next(item for item in bootstrap["material_movement_summary"] if item["direction"] == "imported")
+    exported_total = next(item for item in bootstrap["material_movement_summary"] if item["direction"] == "exported")
+    assert imported_total["loads"] == 4
+    assert imported_total["total_tonnes"] == 74
+    assert exported_total["loads"] == 3
+    assert exported_total["total_tonnes"] == 48
+
+
+def test_material_movement_rejects_missing_or_zero_quantities() -> None:
+    project = _project()
+    response = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "material_movement",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Invalid gravel movement",
+            "details": {"direction": "imported", "material_type": "Pit run gravel", "loads": 0, "total_tonnes": 0},
+        },
+    )
+    assert response.status_code == 422
