@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
 import { DocumentOperationsPage } from "./pages/DocumentOperationsPage";
 import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
+import { EmployeePortalPage } from "./pages/EmployeePortalPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
@@ -42,6 +43,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/employee-portal" element={<EmployeePortalPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
         <Route path="/document-operations" element={<DocumentOperationsPage />} />
