@@ -16,6 +16,7 @@ RecordType = Literal[
     "daily_hazard_assessment",
     "toolbox_talk",
     "time_off_request",
+    "crew_shift",
     "performance_review",
     "material_quantity",
     "material_movement",
@@ -193,21 +194,33 @@ class FieldRecordCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_material_movement(self) -> "FieldRecordCreate":
-        if self.record_type != "material_movement":
-            return self
-        direction = self.details.get("direction")
-        material_type = str(self.details.get("material_type") or "").strip()
-        try:
-            loads = float(self.details.get("loads") or 0)
-            total_tonnes = float(self.details.get("total_tonnes") or 0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Loads and total tonnes must be numbers.") from exc
-        if direction not in {"imported", "exported"}:
-            raise ValueError("Material direction must be imported or exported.")
-        if not material_type:
-            raise ValueError("Select a material type.")
-        if loads <= 0 or total_tonnes <= 0:
-            raise ValueError("Loads and total tonnes must be greater than zero.")
+        if self.record_type == "material_movement":
+            direction = self.details.get("direction")
+            material_type = str(self.details.get("material_type") or "").strip()
+            try:
+                loads = float(self.details.get("loads") or 0)
+                total_tonnes = float(self.details.get("total_tonnes") or 0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Loads and total tonnes must be numbers.") from exc
+            if direction not in {"imported", "exported"}:
+                raise ValueError("Material direction must be imported or exported.")
+            if not material_type:
+                raise ValueError("Select a material type.")
+            if loads <= 0 or total_tonnes <= 0:
+                raise ValueError("Loads and total tonnes must be greater than zero.")
+        if self.record_type == "crew_shift":
+            if not self.employee_id or not self.project_id:
+                raise ValueError("Crew shifts require an employee and project.")
+            if not self.details.get("start_time") or not self.details.get("end_time"):
+                raise ValueError("Crew shifts require start and end times.")
+        if self.record_type == "time_off_request":
+            try:
+                start = date.fromisoformat(str(self.details.get("start_date") or ""))
+                end = date.fromisoformat(str(self.details.get("end_date") or ""))
+            except ValueError as exc:
+                raise ValueError("Time-off requests require valid start and end dates.") from exc
+            if end < start:
+                raise ValueError("Time-off end date cannot be before the start date.")
         return self
 
 
@@ -233,6 +246,11 @@ class MilestoneDecision(BaseModel):
     practical_notes: str | None = None
     reward_type: Literal["none", "bonus", "gift", "training", "paid_time", "other"] = "none"
     reward_description: str | None = None
+
+
+class TimeOffDecision(BaseModel):
+    decision: Literal["approved", "declined"]
+    management_notes: str | None = Field(default=None, max_length=2000)
 
 
 class ToolboxTalk(BaseModel):

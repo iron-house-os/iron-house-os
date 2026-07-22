@@ -23,6 +23,7 @@ from app.schemas.field_operations import (
     FieldRecordRead,
     MilestoneDecision,
     SignatureCreate,
+    TimeOffDecision,
     TimeEntryCreate,
     TimeEntryRead,
     ToolboxTalk,
@@ -309,7 +310,10 @@ def create_vehicle_log(db: Session, payload: VehicleLogCreate) -> VehicleLogRead
 
 
 def create_time_entry(db: Session, payload: TimeEntryCreate, user: AuthenticatedUser) -> TimeEntryRead:
-    require_exists(db, Employee, payload.employee_id, "Employee")
+    employee = require_exists(db, Employee, payload.employee_id, "Employee")
+    profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+    if user.role == "viewer" and (profile is None or (profile.portal_role != "foreman" and employee.id != profile.id)):
+        raise AppError("You can only submit time for your own employee profile.", status_code=403)
     require_exists(db, Project, payload.project_id, "Project")
     item = TimeEntry(**payload.model_dump(), status="submitted", submitted_by=user.email)
     db.add(item)
@@ -327,6 +331,25 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     if payload.severity in {"medium", "high", "critical"} and not alerts:
         alerts = MANAGEMENT_ALERT_RECIPIENTS
     values = payload.model_dump()
+    profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+    if user.role == "viewer":
+        if profile is None:
+            raise AppError("Your employee profile is not linked to this account.", status_code=400)
+        if payload.record_type == "crew_shift" and profile.portal_role != "foreman":
+            raise AppError("Foreman access is required to schedule crews.", status_code=403)
+        if profile.portal_role in {"employee", "operator"}:
+            if payload.employee_id and payload.employee_id != profile.id:
+                raise AppError("You can only create records for your own employee profile.", status_code=403)
+            values["employee_id"] = profile.id
+    if payload.record_type == "crew_shift":
+        values["status"] = "scheduled"
+        values["details"] = {**payload.details, "scheduled_by": user.display_name, "scheduled_at": datetime.now(UTC).isoformat()}
+    if payload.record_type == "time_off_request":
+        if profile is None and not payload.employee_id:
+            raise AppError("Select an employee for the time-off request.", status_code=400)
+        values["employee_id"] = values.get("employee_id") or profile.id
+        values["status"] = "pending"
+        values["details"] = {**payload.details, "requested_by": user.display_name, "requested_at": datetime.now(UTC).isoformat()}
     if payload.record_type == "milestone_review":
         employee = require_exists(db, Employee, payload.employee_id, "Employee") if payload.employee_id else db.scalar(
             select(Employee).where(Employee.email.ilike(user.email))
@@ -358,6 +381,32 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def decide_time_off(
+    db: Session,
+    record_id: UUID,
+    payload: TimeOffDecision,
+    user: AuthenticatedUser,
+) -> FieldRecordRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError("Management access is required for time-off decisions.", status_code=403)
+    item = require_exists(db, FieldRecord, record_id, "Time-off request")
+    if item.record_type != "time_off_request":
+        raise AppError("That record is not a time-off request.", status_code=400)
+    if item.status != "pending":
+        raise AppError("That time-off request has already been decided.", status_code=409)
+    item.status = payload.decision
+    item.details = {
+        **(item.details or {}),
+        "management_notes": payload.management_notes,
+        "decision_by": user.display_name,
+        "decision_at": datetime.now(UTC).isoformat(),
+    }
     db.add(item)
     commit(db)
     db.refresh(item)

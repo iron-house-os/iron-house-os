@@ -378,3 +378,84 @@ def test_small_equipment_inspection_flags_unsafe_saw_for_management() -> None:
     )
     assert record.status_code == 201
     assert record.json()["alert_recipients"] == ["Jeremie Peters", "Mac Warren"]
+
+
+def test_foreman_schedule_and_management_time_off_decision_workflow() -> None:
+    employee = _employee()
+    project = _project()
+    shift = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "crew_shift",
+            "employee_id": employee["id"],
+            "project_id": project["id"],
+            "work_date": str(date.today() + timedelta(days=1)),
+            "title": "Scheduled shift — Field Operations Test",
+            "details": {"start_time": "07:00", "end_time": "15:30", "meeting_point": "Site trailer", "notes": "Bring pipe laser"},
+        },
+    )
+    assert shift.status_code == 201
+    assert shift.json()["status"] == "scheduled"
+
+    request = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "time_off_request",
+            "employee_id": employee["id"],
+            "work_date": str(date.today()),
+            "title": "Time off request",
+            "details": {"start_date": str(date.today() + timedelta(days=10)), "end_date": str(date.today() + timedelta(days=11)), "reason": "Appointment"},
+        },
+    )
+    assert request.status_code == 201
+    assert request.json()["status"] == "pending"
+    decision = client.post(
+        f"/api/v1/field-operations/records/{request.json()['id']}/time-off-decision",
+        json={"decision": "approved", "management_notes": "Coverage confirmed."},
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "approved"
+    assert decision.json()["details"]["management_notes"] == "Coverage confirmed."
+
+
+def test_employee_cannot_schedule_or_submit_records_for_another_employee() -> None:
+    own = _employee()
+    other = client.post(
+        "/api/v1/field-operations/employees",
+        json={"first_name": "Other", "last_name": "Worker", "email": "other.schedule@ironhousecivil.com", "portal_role": "employee"},
+    ).json()
+    project = _project()
+
+    def employee_user(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000019"), email=own["email"], display_name="Crew Member", role="viewer", session_version=1)
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = employee_user
+    try:
+        shift = client.post(
+            "/api/v1/field-operations/records",
+            json={"record_type": "crew_shift", "employee_id": own["id"], "project_id": project["id"], "work_date": str(date.today()), "title": "Unauthorized shift", "details": {"start_time": "07:00", "end_time": "15:30"}},
+        )
+        assert shift.status_code == 403
+        other_record = client.post(
+            "/api/v1/field-operations/records",
+            json={"record_type": "journal", "employee_id": other["id"], "work_date": str(date.today()), "title": "Not mine", "details": {}},
+        )
+        assert other_record.status_code == 403
+        other_time = client.post(
+            "/api/v1/field-operations/time-entries",
+            json={"employee_id": other["id"], "project_id": project["id"], "cost_code": "02-200", "work_date": str(date.today()), "regular_hours": 8},
+        )
+        assert other_time.status_code == 403
+    finally:
+        app.dependency_overrides.pop(require_authenticated_user, None)
+
+
+def test_time_off_request_rejects_reversed_dates() -> None:
+    employee = _employee()
+    response = client.post(
+        "/api/v1/field-operations/records",
+        json={"record_type": "time_off_request", "employee_id": employee["id"], "work_date": str(date.today()), "title": "Invalid dates", "details": {"start_date": "2026-08-10", "end_date": "2026-08-09"}},
+    )
+    assert response.status_code == 422
