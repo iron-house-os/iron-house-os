@@ -8,6 +8,7 @@ import {
   FileStack,
   FolderKanban,
   Gauge,
+  HardHat,
   Landmark,
   Ruler,
   Settings,
@@ -31,6 +32,13 @@ export const modules: AppModule[] = [
     icon: Gauge,
     description: "Operational snapshot for projects, bids, suppliers, and workload.",
     status: "MVP active",
+  },
+  {
+    label: "Employee Portal",
+    path: "/employee-portal",
+    icon: HardHat,
+    description: "Company safety information and controlled employee resources.",
+    status: "Active",
   },
   {
     label: "MVP Workflow",
