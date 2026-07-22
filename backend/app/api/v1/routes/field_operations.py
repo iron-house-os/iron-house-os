@@ -14,6 +14,7 @@ from app.schemas.field_operations import (
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
+    MilestoneDecision,
     SignatureCreate,
     TimeEntryCreate,
     TimeEntryRead,
@@ -77,3 +78,13 @@ def sign_field_record(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.sign_field_record(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/milestone-decision", response_model=FieldRecordRead)
+def decide_milestone(
+    record_id: UUID,
+    payload: MilestoneDecision,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.decide_milestone(db, record_id, payload, user)

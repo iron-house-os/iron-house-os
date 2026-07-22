@@ -250,3 +250,84 @@ def test_material_movement_rejects_missing_or_zero_quantities() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_milestone_requires_written_and_practical_pass_before_recognition() -> None:
+    employee = _employee()
+    review = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "milestone_review",
+            "employee_id": employee["id"],
+            "work_date": str(date.today()),
+            "title": "Milestone review — Green Hat Operator",
+            "details": {
+                "milestone_id": "operator_green_hat",
+                "written_answers": {"inspection": 0, "stability": 0, "signals": 1, "loading": 0, "shutdown": 1},
+            },
+        },
+    )
+    assert review.status_code == 201
+    assert review.json()["status"] == "practical_pending"
+    assert review.json()["details"]["written_score"] == 100
+
+    blocked = client.post(
+        f"/api/v1/field-operations/records/{review.json()['id']}/milestone-decision",
+        json={"decision": "approved", "practical_passed": False},
+    )
+    assert blocked.status_code == 400
+
+    approved = client.post(
+        f"/api/v1/field-operations/records/{review.json()['id']}/milestone-decision",
+        json={
+            "decision": "approved",
+            "practical_passed": True,
+            "practical_notes": "Safely completed the observed operating checklist.",
+            "reward_type": "training",
+            "reward_description": "Advanced excavator training day",
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    recognitions = client.get("/api/v1/field-operations/bootstrap").json()["milestone_recognitions"]
+    assert recognitions[0]["employee_name"] == "Crew Member"
+    assert recognitions[0]["milestone_name"] == "Green Hat Operator"
+
+
+def test_failed_written_milestone_test_requires_retry() -> None:
+    employee = _employee()
+    review = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "milestone_review",
+            "employee_id": employee["id"],
+            "work_date": str(date.today()),
+            "title": "Milestone review — Skilled Labourer",
+            "details": {
+                "milestone_id": "civil_skilled_labourer",
+                "written_answers": {"hazard": 0, "grade": 1, "paperwork": 2, "utility": 0, "compaction": 2},
+            },
+        },
+    )
+    assert review.status_code == 201
+    assert review.json()["status"] == "written_retry_required"
+    assert review.json()["details"]["written_passed"] is False
+
+
+def test_bootstrap_exposes_milestone_ladders_and_on_time_paperwork_recognition() -> None:
+    employee = _employee()
+    project = _project()
+    entry = client.post(
+        "/api/v1/field-operations/time-entries",
+        json={
+            "employee_id": employee["id"], "project_id": project["id"], "cost_code": "02-200",
+            "work_date": str(date.today()), "regular_hours": 8, "entry_type": "employee",
+        },
+    )
+    assert entry.status_code == 201
+    bootstrap = client.get("/api/v1/field-operations/bootstrap").json()
+    names = {item["name"] for item in bootstrap["milestone_catalog"]}
+    assert "Foreman" in names
+    assert "Fine Finish Operator" in names
+    paperwork = next(item for item in bootstrap["paperwork_recognitions"] if item["employee_id"] == employee["id"])
+    assert paperwork["on_time_days"] == 1
