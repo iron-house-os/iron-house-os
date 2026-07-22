@@ -52,6 +52,20 @@ export type FieldOperationsBootstrap = {
   suppliers: SelectRecord[];
   equipment: SelectRecord[];
   cost_codes: Array<{ code: string; name: string }>;
+  job_workbooks: Array<{ id: string; project_id: string; status: string; created_at: string; line_count: number }>;
+  production_items: Array<{
+    line_key: string;
+    workbook_id: string;
+    project_id: string;
+    cost_code: string | null;
+    description: string;
+    unit: string;
+    estimated_quantity: number;
+    installed_quantity: number;
+    remaining_quantity: number;
+    percent_complete: number;
+    materials: Array<Record<string, unknown>>;
+  }>;
   vehicles: Vehicle[];
   vehicle_logs: Array<Record<string, unknown>>;
   time_entries: Array<Record<string, unknown>>;

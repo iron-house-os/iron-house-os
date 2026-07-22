@@ -216,6 +216,8 @@ class FieldOperationsBootstrap(BaseModel):
     suppliers: list[dict]
     equipment: list[dict]
     cost_codes: list[dict]
+    job_workbooks: list[dict]
+    production_items: list[dict]
     vehicles: list[VehicleRead]
     vehicle_logs: list[VehicleLogRead]
     time_entries: list[TimeEntryRead]

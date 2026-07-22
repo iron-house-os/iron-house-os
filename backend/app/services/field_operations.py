@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.equipment import Equipment
+from app.models.bid import Bid
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.project import Project
 from app.models.supplier import Supplier
@@ -46,6 +47,7 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
     time_entries = list(db.scalars(select(TimeEntry).order_by(TimeEntry.work_date.desc()).limit(200)))
     records = list(db.scalars(select(FieldRecord).order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc()).limit(200)))
     certifications = list(db.scalars(select(EmployeeCertification).order_by(EmployeeCertification.expiry_date)))
+    workbooks, production_items = build_job_workbooks(db)
     alerts = build_alerts(vehicles, records, certifications)
     return FieldOperationsBootstrap(
         employees=[EmployeeRead.model_validate(item) for item in employees],
@@ -53,6 +55,8 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         suppliers=[{"id": str(item.id), "name": item.name, "category": item.category} for item in suppliers],
         equipment=[{"id": str(item.id), "name": item.name, "identifier": item.identifier, "status": item.status} for item in equipment],
         cost_codes=[item.model_dump(mode="json") for item in get_cost_code_library().items],
+        job_workbooks=workbooks,
+        production_items=production_items,
         vehicles=[vehicle_schema(item) for item in vehicles],
         vehicle_logs=[VehicleLogRead.model_validate(item) for item in vehicle_logs],
         time_entries=[TimeEntryRead.model_validate(item) for item in time_entries],
@@ -61,6 +65,58 @@ def get_bootstrap(db: Session) -> FieldOperationsBootstrap:
         alerts=alerts,
         toolbox_talk=current_toolbox_talk(),
     )
+
+
+def build_job_workbooks(db: Session) -> tuple[list[dict], list[dict]]:
+    bids = list(db.scalars(select(Bid).order_by(Bid.project_id, Bid.created_at.desc())))
+    latest: dict[UUID, Bid] = {}
+    for bid in bids:
+        if bid.project_id not in latest and (bid.bid_json or {}).get("source") == "estimate_workspace":
+            latest[bid.project_id] = bid
+
+    production_records = db.scalars(
+        select(FieldRecord).where(FieldRecord.record_type == "material_quantity")
+    )
+    installed: dict[str, float] = {}
+    for record in production_records:
+        line_key = str((record.details or {}).get("line_key") or "")
+        try:
+            quantity = float((record.details or {}).get("installed_quantity") or 0)
+        except (TypeError, ValueError):
+            quantity = 0
+        if line_key:
+            installed[line_key] = installed.get(line_key, 0) + quantity
+
+    workbooks: list[dict] = []
+    production_items: list[dict] = []
+    for project_id, bid in latest.items():
+        estimate = (bid.bid_json or {}).get("estimate") or {}
+        lines = estimate.get("line_items") or []
+        workbooks.append({
+            "id": str(bid.id),
+            "project_id": str(project_id),
+            "status": bid.status,
+            "created_at": bid.created_at.isoformat(),
+            "line_count": len(lines),
+        })
+        for index, line in enumerate(lines):
+            line_key = f"{bid.id}:{index}"
+            estimated = float(line.get("quantity") or 0)
+            installed_quantity = installed.get(line_key, 0)
+            production_items.append({
+                "line_key": line_key,
+                "workbook_id": str(bid.id),
+                "project_id": str(project_id),
+                "cost_code": line.get("code"),
+                "description": line.get("description") or f"Line {index + 1}",
+                "unit": line.get("unit") or "lump_sum",
+                "estimated_quantity": estimated,
+                "installed_quantity": installed_quantity,
+                "remaining_quantity": max(estimated - installed_quantity, 0),
+                "percent_complete": round(min(installed_quantity / estimated * 100, 100), 1) if estimated else 0,
+                "materials": line.get("materials") or [],
+            })
+    return workbooks, production_items
 
 
 def create_employee(db: Session, payload: EmployeeCreate) -> EmployeeRead:

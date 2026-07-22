@@ -139,3 +139,48 @@ def test_course_ticket_expiry_creates_management_alert() -> None:
     assert response.json()["expiry_status"] == "expires_soon"
     alerts = client.get("/api/v1/field-operations/bootstrap").json()["alerts"]
     assert any(alert["type"] == "ticket_expiry" for alert in alerts)
+
+
+def test_job_workbook_compares_estimated_installed_and_remaining_quantities() -> None:
+    project = _project()
+    workspace = client.post(
+        "/api/v1/estimates/workspace",
+        json={
+            "project_id": project["id"],
+            "estimate": {
+                "project_name": project["name"],
+                "line_items": [{
+                    "code": "03-100",
+                    "description": "Storm main installation",
+                    "quantity": 100,
+                    "unit": "m",
+                    "materials": [{"name": "PVC pipe", "quantity": 100, "unit": "m", "unit_cost": 20}],
+                }],
+            },
+        },
+    )
+    assert workspace.status_code == 201
+
+    bootstrap = client.get("/api/v1/field-operations/bootstrap").json()
+    line = next(item for item in bootstrap["production_items"] if item["project_id"] == project["id"])
+    assert line["estimated_quantity"] == 100
+    assert line["installed_quantity"] == 0
+
+    record = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "material_quantity",
+            "project_id": project["id"],
+            "cost_code": "03-100",
+            "work_date": str(date.today()),
+            "title": "Storm main installation",
+            "details": {"line_key": line["line_key"], "installed_quantity": 35, "unit": "metre"},
+        },
+    )
+    assert record.status_code == 201
+
+    updated = client.get("/api/v1/field-operations/bootstrap").json()
+    line = next(item for item in updated["production_items"] if item["project_id"] == project["id"])
+    assert line["installed_quantity"] == 35
+    assert line["remaining_quantity"] == 65
+    assert line["percent_complete"] == 35
