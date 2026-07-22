@@ -75,6 +75,24 @@ export type FieldOperationsBootstrap = {
     loads: number;
     total_tonnes: number;
   }>;
+  milestone_catalog: Array<{
+    id: string;
+    track: "civil" | "operator";
+    name: string;
+    minimum_months: number;
+    practical: string[];
+    written_questions: Array<{ id: string; prompt: string; options: string[] }>;
+  }>;
+  milestone_recognitions: Array<{
+    record_id: string;
+    employee_id: string;
+    employee_name: string;
+    milestone_name: string;
+    approved_at: string;
+    reward_type: string;
+    reward_description: string | null;
+  }>;
+  paperwork_recognitions: Array<{ employee_id: string; employee_name: string; on_time_days: number }>;
   vehicles: Vehicle[];
   vehicle_logs: Array<Record<string, unknown>>;
   time_entries: Array<Record<string, unknown>>;
@@ -117,6 +135,8 @@ export const fieldOperationsApi = {
     request<FieldRecord>("/field-operations/records", { method: "POST", body: JSON.stringify(payload) }),
   signRecord: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/sign", { method: "POST", body: JSON.stringify(payload) }),
+  decideMilestone: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/milestone-decision", { method: "POST", body: JSON.stringify(payload) }),
   createEmployee: (payload: Record<string, unknown>) =>
     request("/field-operations/employees", { method: "POST", body: JSON.stringify(payload) }),
   createCertification: (payload: Record<string, unknown>) =>
