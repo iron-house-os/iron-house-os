@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,6 +16,14 @@ class Employee(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     role: Mapped[str | None] = mapped_column(String(120))
     auth_subject: Mapped[str | None] = mapped_column(String(255), unique=True)
     status: Mapped[str] = mapped_column(String(80), default="active")
+    phone: Mapped[str | None] = mapped_column(String(80))
+    address: Mapped[str | None] = mapped_column(String(500))
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(255))
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(80))
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(120))
+    hire_date: Mapped[date | None] = mapped_column(Date)
+    portal_role: Mapped[str] = mapped_column(String(40), default="employee", nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
 
 
 class UserAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):

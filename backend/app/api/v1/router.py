@@ -11,6 +11,7 @@ from app.api.v1.routes import (
     documents,
     drawing_intelligence,
     equipment,
+    field_operations,
     estimates,
     municipality,
     operations,
@@ -50,6 +51,7 @@ protected_router.include_router(takeoff.router, prefix="/takeoff", tags=["takeof
 protected_router.include_router(municipality.router, prefix="/municipality", tags=["municipality"])
 protected_router.include_router(tenders.router, prefix="/tenders", tags=["tenders"])
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
+protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)

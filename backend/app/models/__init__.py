@@ -2,6 +2,7 @@ from app.models.bid import Bid
 from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
+from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.municipality import Municipality
 from app.models.project import Project, ProjectSupplier
 from app.models.rfq import (
@@ -22,6 +23,8 @@ __all__ = [
     "Drawing",
     "Employee",
     "Equipment",
+    "EmployeeCertification",
+    "FieldRecord",
     "LoginThrottle",
     "Municipality",
     "Project",
@@ -34,5 +37,8 @@ __all__ = [
     "Supplier",
     "Takeoff",
     "Tender",
+    "TimeEntry",
     "UserAccount",
+    "Vehicle",
+    "VehicleLog",
 ]
