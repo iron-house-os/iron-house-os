@@ -6,9 +6,19 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.bid import Bid
-from app.models.finance import FinancialEntry
+from app.models.finance import FinancialEntry, StartupExpense
 from app.models.project import Project
-from app.schemas.finance import EstimateBudgetImportRequest, FinancialEntryCreate, FinancialEntryRead, ProjectFinancialSummary, CostCodeFinancialSummary
+from app.schemas.finance import (
+    CostCodeFinancialSummary,
+    EstimateBudgetImportRequest,
+    FinancialEntryCreate,
+    FinancialEntryRead,
+    ProjectFinancialSummary,
+    StartupExpenseCreate,
+    StartupExpenseRead,
+    StartupExpenseSummary,
+    StartupExpenseUpdate,
+)
 from app.services.auth import AuthenticatedUser
 
 
@@ -30,6 +40,41 @@ def create_entry(db: Session, payload: FinancialEntryCreate, user: Authenticated
     db.commit()
     db.refresh(entry)
     return FinancialEntryRead.model_validate(entry)
+
+
+def create_startup_expense(db: Session, payload: StartupExpenseCreate, user: AuthenticatedUser) -> StartupExpenseRead:
+    require_management(user)
+    entry = StartupExpense(**payload.model_dump(), created_by=user.email)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return StartupExpenseRead.model_validate(entry)
+
+
+def update_startup_expense(db: Session, expense_id: UUID, payload: StartupExpenseUpdate, user: AuthenticatedUser) -> StartupExpenseRead:
+    require_management(user)
+    entry = db.get(StartupExpense, expense_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Startup expense not found")
+    for key, value in payload.model_dump(exclude_none=True).items():
+        setattr(entry, key, value)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return StartupExpenseRead.model_validate(entry)
+
+
+def startup_expense_summary(db: Session, user: AuthenticatedUser) -> StartupExpenseSummary:
+    require_management(user)
+    entries = list(db.scalars(select(StartupExpense).where(StartupExpense.status != "void").order_by(StartupExpense.expense_date.desc(), StartupExpense.created_at.desc())))
+    active = [entry for entry in entries if entry.status in {"review", "approved", "reimbursed"}]
+    owner_funded = [entry for entry in active if entry.funding_source == "owner_loan"]
+    total = round(sum(float(entry.amount) for entry in active), 2)
+    reimbursed = round(sum(float(entry.amount) for entry in owner_funded if entry.status == "reimbursed"), 2)
+    owner_loan_payable = round(sum(float(entry.amount) for entry in owner_funded if entry.status in {"review", "approved"}), 2)
+    pending = round(sum(float(entry.amount) for entry in active if entry.status == "review"), 2)
+    approved = round(sum(float(entry.amount) for entry in owner_funded if entry.status == "approved"), 2)
+    return StartupExpenseSummary(total_startup_costs=total, owner_loan_payable=owner_loan_payable, reimbursed_to_owner=reimbursed, pending_review=pending, approved_unreimbursed=approved, entries=[StartupExpenseRead.model_validate(entry) for entry in entries])
 
 
 def import_estimate_budget(db: Session, project_id: UUID, payload: EstimateBudgetImportRequest, user: AuthenticatedUser) -> ProjectFinancialSummary:
@@ -92,6 +137,16 @@ def quickbooks_rows(db: Session, project_id: UUID, user: AuthenticatedUser) -> l
         if entry.entry_type == "budget":
             continue
         rows.append([entry.entry_date.isoformat(), entry.reference or "", summary.project_name, entry.cost_code, entry.category, entry.entry_type, entry.vendor_name or "", entry.description or "", f"{entry.amount:.2f}", entry.status])
+    return rows
+
+
+def startup_quickbooks_rows(db: Session, user: AuthenticatedUser) -> list[list[str]]:
+    summary = startup_expense_summary(db, user)
+    rows = [["Date", "Vendor", "Reference", "Description", "Category", "Expense", "Funding account", "Status", "Tax treatment"]]
+    for entry in summary.entries:
+        if entry.status == "void":
+            continue
+        rows.append([entry.expense_date.isoformat(), entry.vendor_name, entry.reference or "", entry.description, entry.category, f"{entry.amount:.2f}", "Owner/Shareholder Loan Payable" if entry.funding_source == "owner_loan" else "Company cash/bank", entry.status, entry.tax_treatment])
     return rows
 
 
