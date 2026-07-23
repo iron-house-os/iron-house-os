@@ -29,6 +29,7 @@ import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQAutomationPage } from "./pages/RFQAutomationPage";
 import { RFQBuilderPage } from "./pages/RFQBuilderPage";
 import { ReportingPage } from "./pages/ReportingPage";
+import { SafetyProgramPage } from "./pages/SafetyProgramPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
@@ -68,6 +69,7 @@ function AuthenticatedApp() {
         <Route path="/operator-portal" element={<OperatorPortalPage />} />
         <Route path="/operator-portal/:section" element={<OperatorPortalRoute />} />
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
+        <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
