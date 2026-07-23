@@ -23,7 +23,6 @@ SECRET_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
 )
-
 CANONICAL_MEMORY = (
     ("canonical:identity", "Company identity", 95, "Iron House Civil Constructors operates Iron House OS. Owners named in project planning are Jeremie Peters and Mack Warren. The established OS visual appearance is locked against significant change without Jeremie Peters' explicit approval."),
     ("canonical:execution-model", "Civil execution model", 90, "Default bid execution model: self-perform excavation, trenching, pipe installation, manholes and catch basins, backfill, compaction, subgrade, granular base, topsoil, cleanup and general earthworks. Subcontract concrete formwork and placement, fine grading for asphalt, asphalt paving, pavement markings and street lighting."),
@@ -79,13 +78,41 @@ def import_chatgpt_export(db: Session, raw: bytes, filename: str, actor: str) ->
             "total_project_memories": memory_count(db)}
 
 
+def search_memory(
+    db: Session,
+    query: str = "",
+    source_kind: str | None = None,
+    min_authority: int = 0,
+    limit: int = 25,
+) -> list[ProjectMemory]:
+    """Return authority-ranked Project Brain records with deterministic text scoring."""
+    statement = select(ProjectMemory).where(ProjectMemory.authority >= min_authority)
+    if source_kind:
+        statement = statement.where(ProjectMemory.source_kind == source_kind)
+    candidates = list(db.scalars(statement.order_by(
+        ProjectMemory.authority.desc(), ProjectMemory.source_date.desc()
+    ).limit(500)))
+    terms = {term.lower() for term in re.findall(r"[A-Za-z0-9-]{2,}", query)}
+    phrase = query.strip().lower()
+
+    def score(item: ProjectMemory) -> tuple[int, int, float]:
+        title = item.title.lower()
+        content = item.content.lower()
+        title_hits = sum(20 for term in terms if term in title)
+        content_hits = sum(7 for term in terms if term in content)
+        phrase_bonus = 40 if phrase and (phrase in title or phrase in content) else 0
+        source_bonus = 15 if item.source_kind == "management_decision" else 0
+        timestamp = item.source_date.timestamp() if item.source_date else 0.0
+        return (item.authority + title_hits + content_hits + phrase_bonus + source_bonus,
+                item.authority, timestamp)
+
+    if not terms and not phrase:
+        return candidates[:limit]
+    return sorted(candidates, key=score, reverse=True)[:limit]
+
+
 def relevant_memory(db: Session, query: str, limit: int = 10) -> list[ProjectMemory]:
-    terms = {term.lower() for term in re.findall(r"[A-Za-z0-9-]{3,}", query)}
-    items = list(db.scalars(select(ProjectMemory).order_by(ProjectMemory.authority.desc(), ProjectMemory.source_date.desc()).limit(250)))
-    def score(item: ProjectMemory) -> tuple[int, int]:
-        haystack = f"{item.title} {item.content}".lower()
-        return (item.authority + sum(12 for term in terms if term in haystack), item.authority)
-    return sorted(items, key=score, reverse=True)[:limit]
+    return search_memory(db, query=query, min_authority=0, limit=limit)
 
 
 def format_memory_context(items: list[ProjectMemory]) -> str:
