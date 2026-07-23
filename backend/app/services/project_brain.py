@@ -24,7 +24,7 @@ SECRET_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
 )
 CANONICAL_MEMORY = (
-    ("canonical:identity", "Company identity", 95, "Iron House Civil Constructors operates Iron House OS. Owners named in project planning are Jeremie Peters and Mack Warren. The established OS visual appearance is locked against significant change without Jeremie Peters' explicit approval."),
+    ("canonical:identity", "Company identity", 95, "Iron House Civil Constructors operates Iron House OS. Owners named in project planning are Jeremie Peters and Mac Warren. The established OS visual appearance is locked against significant change without Jeremie Peters' explicit approval."),
     ("canonical:execution-model", "Civil execution model", 90, "Default bid execution model: self-perform excavation, trenching, pipe installation, manholes and catch basins, backfill, compaction, subgrade, granular base, topsoil, cleanup and general earthworks. Subcontract concrete formwork and placement, fine grading for asphalt, asphalt paving, pavement markings and street lighting."),
     ("canonical:suppliers", "Default supplier preferences", 90, "Use EMCO for PVC and ductile iron pipe; Amrize for catch basins and manholes; Superior Paving for asphalt; Advanced Testing for testing; JWS for concrete subcontracting; and Performance Coring for coring unless management directs otherwise."),
     ("canonical:portals", "Role-scoped portals", 95, "Employees receive only their own employee, foreman or operator portal. Portal work includes time, schedules, journals, safety, milestones, small equipment, photos, inspections, loads, employee records and role-specific workflows. Company and management modules remain hidden from employee accounts."),
