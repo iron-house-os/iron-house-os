@@ -1,8 +1,8 @@
-import { Bot, Brain, Mic, MicOff, Send, ShieldCheck, Upload, Volume2 } from "lucide-react";
+import { Bot, Brain, Filter, Mic, MicOff, Search, Send, ShieldCheck, Upload, Volume2 } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 
-import { ChatMessage, ChatStatus, ironHouseChatApi } from "../api/ironHouseChat";
+import { ChatMessage, ChatStatus, ironHouseChatApi, ProjectMemory } from "../api/ironHouseChat";
 import { useAuth } from "../contexts/AuthContext";
 
 type SpeechRecognitionEventLike = { results: ArrayLike<{ 0: { transcript: string } }> };
@@ -13,6 +13,11 @@ type SpeechRecognitionLike = {
   start: () => void; stop: () => void;
 };
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+const SOURCE_LABELS: Record<string, string> = {
+  management_decision: "Management decision",
+  chatgpt_conversation: "ChatGPT import",
+};
 
 export function IronHouseChatPage() {
   const { user } = useAuth();
@@ -25,12 +30,35 @@ export function IronHouseChatPage() {
   const [listening, setListening] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [brainQuery, setBrainQuery] = useState("");
+  const [brainSource, setBrainSource] = useState("");
+  const [brainAuthority, setBrainAuthority] = useState(0);
+  const [brainResults, setBrainResults] = useState<ProjectMemory[]>([]);
+  const [brainLoading, setBrainLoading] = useState(false);
+  const [brainError, setBrainError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const submitRef = useRef<(text: string) => void>(() => undefined);
 
   useEffect(() => {
     ironHouseChatApi.status().then(setStatus).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load Iron House Chat"));
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setBrainLoading(true);
+      setBrainError(null);
+      ironHouseChatApi.searchBrain({ query: brainQuery, sourceKind: brainSource, minAuthority: brainAuthority, limit: 30 })
+        .then(setBrainResults)
+        .catch((reason) => {
+          if (!controller.signal.aborted) setBrainError(reason instanceof Error ? reason.message : "Unable to search Project Brain");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setBrainLoading(false);
+        });
+    }, 250);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [brainQuery, brainSource, brainAuthority, status?.memory_count]);
 
   async function send(text: string) {
     const clean = text.trim();
@@ -109,6 +137,48 @@ export function IronHouseChatPage() {
           <input className="sr-only" type="file" accept=".zip,.json,application/zip,application/json" disabled={importing} onChange={(event) => void importHistory(event.target.files?.[0])} />
         </label>
         {importMessage ? <div role="status" className="mt-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{importMessage}</div> : null}
+      </div>
+
+      <div className="rounded-md border border-iron-100 bg-white shadow-sm">
+        <div className="border-b border-iron-100 p-5">
+          <div className="flex items-center gap-2"><Search className="h-5 w-5 text-brand-gold" /><h2 className="font-semibold text-iron-950">Search Project Brain</h2></div>
+          <p className="mt-1 text-sm text-iron-500">Search company decisions and imported project conversations. Higher-authority records appear first.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_180px]">
+            <label className="relative">
+              <span className="sr-only">Search Project Brain</span>
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-iron-400" />
+              <input value={brainQuery} onChange={(event) => setBrainQuery(event.target.value)} placeholder="Search suppliers, estimates, safety, builds…" className="w-full rounded-md border border-iron-200 py-2.5 pl-9 pr-3 text-sm" />
+            </label>
+            <label className="relative">
+              <span className="sr-only">Filter by source</span>
+              <Filter className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-iron-400" />
+              <select value={brainSource} onChange={(event) => setBrainSource(event.target.value)} className="w-full appearance-none rounded-md border border-iron-200 py-2.5 pl-9 pr-3 text-sm">
+                <option value="">All sources</option>
+                <option value="management_decision">Management decisions</option>
+                <option value="chatgpt_conversation">ChatGPT imports</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-iron-500">Minimum authority
+              <select value={brainAuthority} onChange={(event) => setBrainAuthority(Number(event.target.value))} className="mt-1 w-full rounded-md border border-iron-200 px-3 py-2 text-sm font-normal normal-case text-iron-900">
+                <option value={0}>Any authority</option><option value={60}>60+</option><option value={80}>80+</option><option value={90}>90+</option><option value={95}>95+</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="divide-y divide-iron-100">
+          {brainLoading ? <div className="p-5 text-sm text-iron-500">Searching Project Brain…</div> : null}
+          {brainError ? <div role="alert" className="p-5 text-sm text-red-700">{brainError}</div> : null}
+          {!brainLoading && !brainError && brainResults.length === 0 ? <div className="p-5 text-sm text-iron-500">No matching Project Brain records.</div> : null}
+          {!brainLoading && !brainError ? brainResults.map((item) => <article key={item.id} className="p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-iron-950">{item.title}</h3>
+              <span className="rounded-full bg-iron-100 px-2 py-0.5 text-xs font-semibold text-iron-700">{SOURCE_LABELS[item.source_kind] ?? item.source_kind}</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">Authority {item.authority}</span>
+            </div>
+            <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-iron-600">{item.content}</p>
+            <div className="mt-2 text-xs text-iron-400">{item.source_date ? new Date(item.source_date).toLocaleDateString("en-CA") : "Canonical record"}</div>
+          </article>) : null}
+        </div>
       </div>
 
       <div className="rounded-md border border-iron-100 bg-white shadow-sm">
