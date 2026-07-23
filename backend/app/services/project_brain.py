@@ -85,30 +85,32 @@ def search_memory(
     min_authority: int = 0,
     limit: int = 25,
 ) -> list[ProjectMemory]:
-    """Return authority-ranked Project Brain records with deterministic text scoring."""
+    """Return relevant Project Brain records using authority-aware deterministic ranking."""
     statement = select(ProjectMemory).where(ProjectMemory.authority >= min_authority)
     if source_kind:
         statement = statement.where(ProjectMemory.source_kind == source_kind)
     candidates = list(db.scalars(statement.order_by(
-        ProjectMemory.authority.desc(), ProjectMemory.source_date.desc()
+        ProjectMemory.authority.desc(), ProjectMemory.source_date.desc(), ProjectMemory.title.asc()
     ).limit(500)))
     terms = {term.lower() for term in re.findall(r"[A-Za-z0-9-]{2,}", query)}
     phrase = query.strip().lower()
 
-    def score(item: ProjectMemory) -> tuple[int, int, float]:
+    def match_score(item: ProjectMemory) -> tuple[int, int, int, float, str]:
         title = item.title.lower()
         content = item.content.lower()
         title_hits = sum(20 for term in terms if term in title)
         content_hits = sum(7 for term in terms if term in content)
         phrase_bonus = 40 if phrase and (phrase in title or phrase in content) else 0
         source_bonus = 15 if item.source_kind == "management_decision" else 0
+        text_score = title_hits + content_hits + phrase_bonus
         timestamp = item.source_date.timestamp() if item.source_date else 0.0
-        return (item.authority + title_hits + content_hits + phrase_bonus + source_bonus,
-                item.authority, timestamp)
+        return (text_score, item.authority + text_score + source_bonus, item.authority, timestamp, item.title.lower())
 
     if not terms and not phrase:
         return candidates[:limit]
-    return sorted(candidates, key=score, reverse=True)[:limit]
+
+    matched = [item for item in candidates if match_score(item)[0] > 0]
+    return sorted(matched, key=match_score, reverse=True)[:limit]
 
 
 def relevant_memory(db: Session, query: str, limit: int = 10) -> list[ProjectMemory]:
