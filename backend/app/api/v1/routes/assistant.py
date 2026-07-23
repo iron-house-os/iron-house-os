@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,10 +23,10 @@ from app.services.project_brain import (
     import_chatgpt_export,
     memory_count,
     relevant_memory,
+    search_memory,
     seed_canonical_memory,
 )
 from app.services.request_context import get_request_audit_context
-from fastapi import Depends
 
 router = APIRouter()
 
@@ -57,6 +57,26 @@ def list_project_brain(user: CurrentUser, db: Session = Depends(get_db)):
     return db.scalars(select(ProjectMemory).order_by(
         ProjectMemory.authority.desc(), ProjectMemory.source_date.desc()
     ).limit(200)).all()
+
+
+@router.get("/brain/search", response_model=list[ProjectMemoryRead])
+def search_project_brain(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    q: str = Query(default="", max_length=500),
+    source_kind: str | None = Query(default=None, max_length=40),
+    min_authority: int = Query(default=0, ge=0, le=100),
+    limit: int = Query(default=25, ge=1, le=100),
+):
+    _require_management(user)
+    seed_canonical_memory(db)
+    return search_memory(
+        db,
+        query=q,
+        source_kind=source_kind,
+        min_authority=min_authority,
+        limit=limit,
+    )
 
 
 @router.post("/brain/import-chatgpt", response_model=MemoryImportResult)
