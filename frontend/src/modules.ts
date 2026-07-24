@@ -12,6 +12,7 @@ import {
   HardHat,
   UserRoundCog,
   Landmark,
+  Scale,
   Ruler,
   Settings,
   ShieldCheck,
@@ -27,9 +28,18 @@ export type AppModule = {
   icon: LucideIcon;
   description: string;
   status: string;
+  allowedRoles?: string[];
 };
 
 export const modules: AppModule[] = [
+  {
+    label: "Legal Control",
+    path: "/legal",
+    icon: Scale,
+    description: "Supervised legal matters, contract review, construction-law analysis, risk and deadline controls.",
+    status: "Build 230 gated",
+    allowedRoles: ["admin"],
+  },
   {
     label: "Dashboard",
     path: "/dashboard",
@@ -199,3 +209,7 @@ export const modules: AppModule[] = [
     status: "Active",
   },
 ];
+
+export function moduleIsVisibleForRole(module: AppModule, role: string | undefined): boolean {
+  return !module.allowedRoles || (!!role && module.allowedRoles.includes(role));
+}

@@ -20,6 +20,7 @@ import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePa
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
 import { IronHouseChatPage } from "./pages/IronHouseChatPage";
+import { LegalControlCentrePage } from "./pages/LegalControlCentrePage";
 import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -73,6 +74,7 @@ function AuthenticatedApp() {
         <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
+        <Route path="/legal" element={user.role === "admin" ? <LegalControlCentrePage /> : <Navigate to="/dashboard" replace />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
         <Route path="/document-operations" element={<DocumentOperationsPage />} />

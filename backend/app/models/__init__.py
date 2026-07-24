@@ -5,6 +5,7 @@ from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.finance import FinancialEntry, StartupExpense
+from app.models.legal import LegalAnalysis, LegalAuditEvent, LegalDeadline, LegalMatter
 from app.models.municipality import Municipality
 from app.models.project import Project, ProjectSupplier
 from app.models.rfq import (
@@ -33,6 +34,10 @@ __all__ = [
     "FinancialEntry",
     "StartupExpense",
     "LoginThrottle",
+    "LegalAnalysis",
+    "LegalAuditEvent",
+    "LegalDeadline",
+    "LegalMatter",
     "Municipality",
     "Project",
     "ProjectSupplier",

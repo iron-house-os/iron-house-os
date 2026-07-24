@@ -11,6 +11,7 @@ class ModulePermission(StrEnum):
 
 BUSINESS_MODULES = (
     "iron-house-chat",
+    "legal",
     "projects",
     "suppliers",
     "rfqs",
@@ -56,6 +57,8 @@ ESTIMATOR_WRITE_MODULES = frozenset(
 def module_permissions_for_role(role: str | None, module: str) -> frozenset[ModulePermission]:
     normalized_role = normalize_role(role)
     if module not in ALL_MODULES:
+        return frozenset()
+    if module == "legal" and normalized_role != "admin":
         return frozenset()
     if module in {"finance", "iron-house-chat"} and normalized_role not in {"admin", "operations_manager"}:
         return frozenset()
