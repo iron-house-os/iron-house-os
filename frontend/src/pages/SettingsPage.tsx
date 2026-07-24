@@ -1,7 +1,7 @@
-import { Bot, KeyRound, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Bot, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
-import { RoleAccess, authApi } from "../api/auth";
+import { IdentityGovernance, RoleAccess, authApi } from "../api/auth";
 import { useAuth } from "../contexts/AuthContext";
 import { Link } from "react-router-dom";
 
@@ -54,8 +54,61 @@ export function SettingsPage() {
 
         <ChangePasswordPanel />
       </div>
+      {user?.role === "admin" ? <IdentityGovernancePanel /> : null}
     </section>
   );
+}
+
+function IdentityGovernancePanel() {
+  const [governance, setGovernance] = useState<IdentityGovernance | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    authApi.identityGovernance().then(setGovernance).catch((currentError) => {
+      setError(currentError instanceof Error ? currentError.message : "Unable to load identity governance");
+    });
+  }, []);
+
+  return (
+    <div className="rounded-md border border-iron-100 bg-white p-5">
+      <div className="flex items-center gap-2"><Users className="h-5 w-5" /><h2 className="font-semibold">Identity Governance Centre</h2></div>
+      <p className="mt-2 text-sm text-iron-500">Administrator-only review of company identities, access continuity, and account hygiene.</p>
+      {error ? <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {!governance && !error ? <p className="mt-4 text-sm text-iron-500">Loading identity governance…</p> : null}
+      {governance ? (
+        <>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <Metric label="Accounts" value={governance.summary.total_accounts} />
+            <Metric label="Active" value={governance.summary.active_accounts} />
+            <Metric label="Administrators" value={governance.summary.active_administrators} />
+            <Metric label="Legacy domain" value={governance.summary.legacy_domain_accounts} />
+            <Metric label="Needs review" value={governance.summary.accounts_requiring_review} />
+            <Metric label="Critical" value={governance.summary.critical_findings} />
+          </div>
+          <div className="mt-6 grid gap-3">
+            {governance.findings.length ? governance.findings.map((finding) => (
+              <div key={finding.code} className="rounded-md border border-iron-100 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`mt-0.5 h-5 w-5 ${finding.severity === "critical" ? "text-red-600" : "text-brand-gold"}`} />
+                  <div><div className="font-semibold text-iron-950">{finding.title}</div><div className="mt-1 text-sm text-iron-500">{finding.recommendation}</div><div className="mt-2 text-xs uppercase tracking-wide text-iron-500">{finding.severity} · {finding.account_ids.length} affected</div></div>
+                </div>
+              </div>
+            )) : <div className="rounded-md bg-green-50 p-4 text-sm text-green-800">No identity governance findings require action.</div>}
+          </div>
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead><tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500"><th className="px-3 py-2">Account</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Review</th></tr></thead>
+              <tbody>{governance.accounts.map((account) => <tr key={account.id} className="border-b border-iron-100"><td className="px-3 py-3"><div className="font-medium">{account.display_name}</div><div className="text-xs text-iron-500">{account.email}</div></td><td className="px-3 py-3 capitalize">{account.role.replace("_", " ")}</td><td className="px-3 py-3">{account.is_active ? "Active" : "Inactive"}</td><td className="px-3 py-3 text-iron-500">{account.review_reasons.join(", ") || "Clear"}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-md bg-iron-50 p-3"><div className="text-xs uppercase tracking-wide text-iron-500">{label}</div><div className="mt-1 text-2xl font-semibold text-iron-950">{value}</div></div>;
 }
 
 function ChangePasswordPanel() {

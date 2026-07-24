@@ -13,7 +13,9 @@ from app.schemas.auth import (
     UserAccountRead,
     UserAccountUpdate,
 )
+from app.schemas.identity_governance import IdentityGovernanceSnapshot
 from app.services import auth
+from app.services.identity_governance import build_identity_governance_snapshot
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
 from app.services.request_context import get_request_audit_context
 
@@ -35,6 +37,11 @@ def list_users(_: AdminUser, db: DBSession) -> UserAccountList:
         items=[UserAccountRead.model_validate(account) for account in accounts],
         total=len(accounts),
     )
+
+
+@router.get("/governance", response_model=IdentityGovernanceSnapshot)
+def identity_governance(_: AdminUser, db: DBSession) -> IdentityGovernanceSnapshot:
+    return build_identity_governance_snapshot(db)
 
 
 @router.post("", response_model=UserAccountRead, status_code=status.HTTP_201_CREATED)
