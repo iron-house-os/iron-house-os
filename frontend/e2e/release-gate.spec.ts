@@ -3,7 +3,7 @@ import { expect, Page, test } from "@playwright/test";
 
 const user = {
   id: "00000000-0000-0000-0000-000000000214",
-  email: "release-gate@ironhousecivil.com",
+  email: "release-gate@ironhousecontracting.com",
   display_name: "Release Gate Operator",
   role: "admin",
   is_active: true,
@@ -45,7 +45,7 @@ async function mockApi(page: Page) {
 
 async function signIn(page: Page) {
   await page.goto("/");
-  await page.getByLabel("Email").fill("release-gate@ironhousecivil.com");
+  await page.getByLabel("Email").fill("release-gate@ironhousecontracting.com");
   await page.getByLabel("Password").fill("Local-release-gate-only");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Iron House Dashboard" })).toBeVisible();

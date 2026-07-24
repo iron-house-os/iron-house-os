@@ -75,7 +75,7 @@ def test_startup_expenses_build_owner_loan_until_reimbursed() -> None:
 def test_financial_data_is_denied_to_non_management_accounts() -> None:
     project = _project()
     def estimator_user(request: Request) -> AuthenticatedUser:
-        user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000026"), email="estimator@ironhousecivil.com", display_name="Estimator", role="estimator", session_version=1)
+        user = AuthenticatedUser(id=UUID("00000000-0000-0000-0000-000000000026"), email="estimator@ironhousecontracting.com", display_name="Estimator", role="estimator", session_version=1)
         request.state.authenticated_user = user
         return user
     app.dependency_overrides[require_authenticated_user] = estimator_user
