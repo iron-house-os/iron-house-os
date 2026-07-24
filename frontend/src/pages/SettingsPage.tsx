@@ -1,4 +1,4 @@
-import { Bot, KeyRound, ShieldCheck } from "lucide-react";
+import { Bot, KeyRound, Scale, ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
 import { RoleAccess, authApi } from "../api/auth";
@@ -26,6 +26,12 @@ export function SettingsPage() {
       {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
+        {user?.role === "admin" ? (
+          <Link to="/legal" className="rounded-md border border-brand-gold/40 bg-white p-5 transition hover:bg-brand-gold/10 xl:col-span-2">
+            <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-brand-gold" /><h2 className="font-semibold">AI Legal Control Centre</h2></div>
+            <p className="mt-2 text-sm text-iron-500">Open the administrator-only construction legal matter, contract drafting, risk and verified-deadline workspace.</p>
+          </Link>
+        ) : null}
         {user?.role === "admin" || user?.role === "operations_manager" ? (
           <Link to="/iron-house-chat" className="rounded-md border border-brand-gold/40 bg-white p-5 transition hover:bg-brand-gold/10 xl:col-span-2">
             <div className="flex items-center gap-2"><Bot className="h-5 w-5 text-brand-gold" /><h2 className="font-semibold">Iron House Chat</h2></div>

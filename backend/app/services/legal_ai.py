@@ -38,7 +38,7 @@ def generate_legal_analysis(
     source_register = [
         {"id": source["id"], "title": source["title"], "url": source["url"]} for source in approved_sources
     ]
-    instructions = f"""You are an internal supervised Canadian construction legal analysis team.
+    instructions = """You are an internal supervised Canadian construction legal analysis team.
 Work for a BC civil contractor performing excavation, underground utilities, grading and earthworks.
 Return only a JSON object with: executive_summary (string), draft_text (string or null), issues (array of objects with issue, risk,
 reasoning, source_ids), recommendations (array of objects with action, owner, urgency, source_ids),

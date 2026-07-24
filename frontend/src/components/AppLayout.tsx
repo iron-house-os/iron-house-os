@@ -2,7 +2,7 @@ import { LogOut, Menu } from "lucide-react";
 import { PropsWithChildren, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
-import { moduleIsVisibleForRole, modules } from "../modules";
+import { modules } from "../modules";
 import { useAuth } from "../contexts/AuthContext";
 import { modulePathWithProjectContext, readEffectiveProjectContext } from "../utils/projectContext";
 
@@ -36,7 +36,6 @@ export function AppLayout({ children }: PropsWithChildren) {
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Primary navigation">
           {modules.filter((module) => {
-            if (!moduleIsVisibleForRole(module, user?.role)) return false;
             if (user?.role !== "viewer") return true;
             return module.path === `/${portalRole ?? "employee"}-portal`;
           }).map((module) => {
