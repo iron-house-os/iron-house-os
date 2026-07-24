@@ -22,6 +22,27 @@ export type RoleAccess = {
   modules: Record<string, string[]>;
 };
 
+export type IdentityGovernance = {
+  generated_at: string;
+  canonical_email_domain: string;
+  summary: {
+    total_accounts: number;
+    active_accounts: number;
+    active_administrators: number;
+    legacy_domain_accounts: number;
+    accounts_requiring_review: number;
+    critical_findings: number;
+  };
+  accounts: Array<AuthUser & { review_reasons: string[] }>;
+  findings: Array<{
+    code: string;
+    severity: "critical" | "high" | "normal";
+    title: string;
+    recommendation: string;
+    account_ids: string[];
+  }>;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function readAuthResponse(response: Response): Promise<AuthStatus> {
@@ -64,5 +85,10 @@ export const authApi = {
     const response = await apiFetch(`${API_BASE_URL}/auth/me/permissions`);
     if (!response.ok) throw new Error(`Unable to load permissions (${response.status})`);
     return response.json() as Promise<RoleAccess>;
+  },
+  identityGovernance: async (): Promise<IdentityGovernance> => {
+    const response = await apiFetch(`${API_BASE_URL}/users/governance`);
+    if (!response.ok) throw new Error(`Unable to load identity governance (${response.status})`);
+    return response.json() as Promise<IdentityGovernance>;
   },
 };

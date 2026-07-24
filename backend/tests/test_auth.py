@@ -107,7 +107,7 @@ def test_admin_can_create_users_and_new_user_cannot_administer_accounts() -> Non
     created = client.post(
         "/api/v1/users",
         json={
-            "email": "estimator@ironhousecivil.com",
+            "email": "estimator@ironhousecontracting.com",
             "display_name": "Iron House Estimator",
             "role": "estimator",
             "password": "estimate-password-2026",
@@ -122,7 +122,7 @@ def test_admin_can_create_users_and_new_user_cannot_administer_accounts() -> Non
     client.post(
         "/api/v1/auth/login",
         json={
-            "email": "estimator@ironhousecivil.com",
+            "email": "estimator@ironhousecontracting.com",
             "password": "estimate-password-2026",
         },
     )
@@ -169,7 +169,7 @@ def test_admin_cannot_change_user_email_to_an_existing_account() -> None:
     created = client.post(
         "/api/v1/users",
         json={
-            "email": "estimator@ironhousecivil.com",
+            "email": "estimator@ironhousecontracting.com",
             "display_name": "Iron House Estimator",
             "role": "estimator",
             "password": "estimate-password-2026",

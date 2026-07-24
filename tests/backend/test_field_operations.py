@@ -18,7 +18,7 @@ def _employee() -> dict:
         json={
             "first_name": "Crew",
             "last_name": "Member",
-            "email": "crew.member@ironhousecivil.com",
+            "email": "crew.member@ironhousecontracting.com",
             "portal_role": "operator",
             "phone": "604-555-0100",
             "emergency_contact_name": "Emergency Contact",
@@ -340,13 +340,13 @@ def test_bootstrap_exposes_milestone_ladders_and_on_time_paperwork_recognition()
 def test_employee_creation_provisions_a_password_change_required_portal_account() -> None:
     response = client.post(
         "/api/v1/field-operations/employees",
-        json={"first_name": "New", "last_name": "Worker", "email": "new.worker@ironhousecivil.com", "portal_role": "employee"},
+        json={"first_name": "New", "last_name": "Worker", "email": "new.worker@ironhousecontracting.com", "portal_role": "employee"},
     )
     assert response.status_code == 201
     assert response.json()["portal_access_created"] is True
     temporary_password = response.json()["temporary_password"]
     assert len(temporary_password) >= 12
-    login = client.post("/api/v1/auth/login", json={"email": "new.worker@ironhousecivil.com", "password": temporary_password})
+    login = client.post("/api/v1/auth/login", json={"email": "new.worker@ironhousecontracting.com", "password": temporary_password})
     assert login.status_code == 200
     assert login.json()["user"]["password_reset_required"] is True
 
@@ -355,7 +355,7 @@ def test_employee_bootstrap_is_limited_to_own_records() -> None:
     own = _employee()
     other = client.post(
         "/api/v1/field-operations/employees",
-        json={"first_name": "Other", "last_name": "Worker", "email": "other.worker@ironhousecivil.com", "portal_role": "employee"},
+        json={"first_name": "Other", "last_name": "Worker", "email": "other.worker@ironhousecontracting.com", "portal_role": "employee"},
     ).json()
 
     def employee_user(request: Request) -> AuthenticatedUser:
@@ -422,7 +422,7 @@ def test_employee_cannot_schedule_or_submit_records_for_another_employee() -> No
     own = _employee()
     other = client.post(
         "/api/v1/field-operations/employees",
-        json={"first_name": "Other", "last_name": "Worker", "email": "other.schedule@ironhousecivil.com", "portal_role": "employee"},
+        json={"first_name": "Other", "last_name": "Worker", "email": "other.schedule@ironhousecontracting.com", "portal_role": "employee"},
     ).json()
     project = _project()
 

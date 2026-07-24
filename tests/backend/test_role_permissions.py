@@ -24,7 +24,7 @@ def _authenticate_as(role: str) -> None:
     def override(request: Request) -> AuthenticatedUser:
         user = AuthenticatedUser(
             id=UUID("00000000-0000-0000-0000-000000000001"),
-            email=f"{role}@ironhousecivil.com",
+            email=f"{role}@ironhousecontracting.com",
             display_name=f"Test {role}",
             role=role,
             session_version=1,
@@ -67,7 +67,7 @@ def test_viewer_is_read_only_and_denial_is_audited() -> None:
     assert response.status_code == 403
     assert "write" in response.json()["detail"]
     event = list_recent_document_audit_events(action="module_access", outcome="denied")[0]
-    assert event["actor"] == "viewer@ironhousecivil.com"
+    assert event["actor"] == "viewer@ironhousecontracting.com"
     assert event["request_id"] == "build-210-viewer-denial"
     assert event["metadata"] == {
         "module": "projects",

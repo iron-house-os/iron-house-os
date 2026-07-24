@@ -3,7 +3,7 @@ import { expect, Page, test } from "@playwright/test";
 
 const user = {
   id: "00000000-0000-0000-0000-000000000214",
-  email: "release-gate@ironhousecivil.com",
+  email: "release-gate@ironhousecontracting.com",
   display_name: "Release Gate Operator",
   role: "admin",
   is_active: true,
@@ -35,6 +35,32 @@ async function mockApi(page: Page) {
       await route.fulfill({ status: 200, json: { role: "admin", modules: { projects: ["read", "write"], suppliers: ["read", "write"], equipment: ["read", "write"] } } });
       return;
     }
+    if (path.endsWith("/users/governance")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          generated_at: "2026-07-24T00:00:00Z",
+          canonical_email_domain: "ironhousecontracting.com",
+          summary: {
+            total_accounts: 1,
+            active_accounts: 1,
+            active_administrators: 1,
+            legacy_domain_accounts: 0,
+            accounts_requiring_review: 1,
+            critical_findings: 0,
+          },
+          accounts: [{ ...user, review_reasons: ["Only active administrator"] }],
+          findings: [{
+            code: "single_active_administrator",
+            severity: "high",
+            title: "Single active administrator",
+            recommendation: "Approve and provision a second named administrator.",
+            account_ids: [user.id],
+          }],
+        },
+      });
+      return;
+    }
     if (path.endsWith("/estimates/rate-library")) {
       await route.fulfill({ status: 200, json: { production_rates: [] } });
       return;
@@ -45,7 +71,7 @@ async function mockApi(page: Page) {
 
 async function signIn(page: Page) {
   await page.goto("/");
-  await page.getByLabel("Email").fill("release-gate@ironhousecivil.com");
+  await page.getByLabel("Email").fill("release-gate@ironhousecontracting.com");
   await page.getByLabel("Password").fill("Local-release-gate-only");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Iron House Dashboard" })).toBeVisible();

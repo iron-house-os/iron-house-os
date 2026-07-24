@@ -33,7 +33,7 @@ def override_get_db() -> Generator[Session, None, None]:
 def override_authenticated_user(request: Request) -> AuthenticatedUser:
     user = AuthenticatedUser(
         id=UUID("00000000-0000-0000-0000-000000000001"),
-        email="test-admin@ironhousecivil.com",
+        email="test-admin@ironhousecontracting.com",
         display_name="Test Administrator",
         role="admin",
         session_version=1,

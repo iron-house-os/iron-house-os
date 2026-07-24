@@ -104,7 +104,7 @@ jobs:
       POSTGRES_USER: iron_house
       POSTGRES_PASSWORD: build-207-ci-database-password
       SECRET_KEY: build-207-ci-secret-key-at-least-32-characters
-      BOOTSTRAP_ADMIN_EMAIL: build209@ironhousecivil.com
+      BOOTSTRAP_ADMIN_EMAIL: build209@ironhousecontracting.com
       BOOTSTRAP_ADMIN_PASSWORD: build-209-ci-login-password
       BOOTSTRAP_ADMIN_NAME: Build 209 Release User
       SESSION_COOKIE_SECURE: "false"

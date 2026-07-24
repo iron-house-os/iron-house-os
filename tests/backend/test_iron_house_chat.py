@@ -16,7 +16,7 @@ def _authenticate_as(role: str) -> None:
     def override(request: Request) -> AuthenticatedUser:
         user = AuthenticatedUser(
             id=UUID("00000000-0000-0000-0000-000000000001"),
-            email=f"{role}@ironhousecivil.com",
+            email=f"{role}@ironhousecontracting.com",
             display_name=f"Test {role}", role=role, session_version=1,
         )
         request.state.authenticated_user = user

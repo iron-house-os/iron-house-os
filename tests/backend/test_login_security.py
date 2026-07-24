@@ -16,7 +16,7 @@ from app.services.document_audit import (
     list_recent_document_audit_events,
 )
 
-ADMIN_EMAIL = "security-admin@ironhousecivil.com"
+ADMIN_EMAIL = "security-admin@ironhousecontracting.com"
 ADMIN_PASSWORD = "correct-horse-battery-staple"
 
 
@@ -98,7 +98,7 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
     created = client.post(
         "/api/v1/users",
         json={
-            "email": "recovering-estimator@ironhousecivil.com",
+            "email": "recovering-estimator@ironhousecontracting.com",
             "display_name": "Recovering Estimator",
             "role": "estimator",
             "password": "initial-password-2026",
@@ -112,7 +112,7 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
         client.post("/api/v1/auth/logout")
         client.post(
             "/api/v1/auth/login",
-            json={"email": "recovering-estimator@ironhousecivil.com", "password": "wrong-password"},
+            json={"email": "recovering-estimator@ironhousecontracting.com", "password": "wrong-password"},
         )
 
     client.cookies.clear()
@@ -132,7 +132,7 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
     login = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "recovering-estimator@ironhousecivil.com",
+            "email": "recovering-estimator@ironhousecontracting.com",
             "password": "temporary-password-2026",
         },
     )
