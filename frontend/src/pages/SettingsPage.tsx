@@ -95,7 +95,7 @@ function IdentityGovernancePanel() {
               </div>
             )) : <div className="rounded-md bg-green-50 p-4 text-sm text-green-800">No identity governance findings require action.</div>}
           </div>
-          <div className="mt-6 overflow-x-auto">
+          <div className="mt-6 overflow-x-auto" tabIndex={0} aria-label="Identity governance account review table">
             <table className="w-full text-left text-sm">
               <thead><tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500"><th className="px-3 py-2">Account</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Review</th></tr></thead>
               <tbody>{governance.accounts.map((account) => <tr key={account.id} className="border-b border-iron-100"><td className="px-3 py-3"><div className="font-medium">{account.display_name}</div><div className="text-xs text-iron-500">{account.email}</div></td><td className="px-3 py-3 capitalize">{account.role.replace("_", " ")}</td><td className="px-3 py-3">{account.is_active ? "Active" : "Inactive"}</td><td className="px-3 py-3 text-iron-500">{account.review_reasons.join(", ") || "Clear"}</td></tr>)}</tbody>
