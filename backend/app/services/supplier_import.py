@@ -61,7 +61,7 @@ def preview_supplier_import(payload: SupplierImportPreviewRequest) -> SupplierIm
         items=items,
         valid_count=sum(1 for item in items if item.valid),
         error_count=sum(len(item.errors) for item in items),
-        warning_count=sum(len(item.warnings) for item in items),
+        warning_count=sum(len(item.warnings) for item in items if item.valid),
     )
 
 

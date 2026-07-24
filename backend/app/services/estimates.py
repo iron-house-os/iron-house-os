@@ -367,13 +367,7 @@ def _selected_vendor_quote(item: EstimateLineItem):
     if len(selected_quotes) != 1:
         return lowest_quote
 
-    selected_quote = selected_quotes[0]
-    has_selection_reason = bool(
-        selected_quote.selection_reason and selected_quote.selection_reason.strip()
-    )
-    if selected_quote.amount > lowest_quote.amount and not has_selection_reason:
-        return lowest_quote
-    return selected_quote
+    return selected_quotes[0]
 
 
 def _expected_risk_amount(amount: float, probability: float | None) -> float:

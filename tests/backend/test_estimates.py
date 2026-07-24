@@ -122,14 +122,14 @@ def test_vendor_quotes_ignore_unqualified_lower_quote() -> None:
     assert result.selected_quote_supplier == "Qualified quote"
 
 
-def test_vendor_quotes_fall_back_to_lowest_when_non_low_selection_has_no_reason() -> None:
+def test_vendor_quotes_respect_selected_quote_without_reason() -> None:
     item = EstimateLineItem(
         description="Paving",
         quantity=1,
         vendor_quotes=[
             VendorQuoteInput(supplier="Lowest", scope="Paving", amount=10000),
             VendorQuoteInput(
-                supplier="Undocumented selection",
+                supplier="Preferred supplier",
                 scope="Paving",
                 amount=11250,
                 is_selected=True,
@@ -139,8 +139,8 @@ def test_vendor_quotes_fall_back_to_lowest_when_non_low_selection_has_no_reason(
 
     result = calculate_line_item(item)
 
-    assert result.subcontract_cost == 10000
-    assert result.selected_quote_supplier == "Lowest"
+    assert result.subcontract_cost == 11250
+    assert result.selected_quote_supplier == "Preferred supplier"
 
 
 def test_default_production_rate_activity_populates_crew_and_equipment() -> None:
