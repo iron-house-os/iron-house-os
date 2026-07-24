@@ -1,4 +1,5 @@
 from functools import lru_cache
+from secrets import token_urlsafe
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,8 +11,8 @@ class Settings(BaseSettings):
     release_id: str = "development"
     log_level: str = "INFO"
     api_v1_prefix: str = "/api/v1"
-    database_url: str = "postgresql+psycopg://iron_house:iron_house_dev@localhost:5432/iron_house_os"
-    secret_key: str = Field(default="change-me-in-development", min_length=16)
+    database_url: str = "postgresql+psycopg://iron_house@localhost:5432/iron_house_os"
+    secret_key: str = Field(default_factory=lambda: token_urlsafe(32), min_length=16)
     access_token_expire_minutes: int = 480
     session_cookie_name: str = "ihos_session"
     session_cookie_secure: bool = False
@@ -25,6 +26,8 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-5.6-sol"
     openai_api_base_url: str = "https://api.openai.com/v1"
     iron_house_chat_enabled: bool = True
+    legal_control_enabled: bool = False
+    legal_ai_model: str = "gpt-5.6-sol"
 
     model_config = SettingsConfigDict(
         env_file=".env",

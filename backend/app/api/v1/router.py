@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     equipment,
     field_operations,
     finance,
+    legal,
     estimates,
     municipality,
     operations,
@@ -55,6 +56,7 @@ protected_router.include_router(tenders.router, prefix="/tenders", tags=["tender
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
+protected_router.include_router(legal.router, prefix="/legal", tags=["legal"])
 protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
