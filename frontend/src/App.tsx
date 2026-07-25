@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { HandsFreeVoiceProvider } from "./contexts/HandsFreeVoiceContext";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
@@ -107,7 +108,9 @@ function AuthenticatedApp() {
 export function App() {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <HandsFreeVoiceProvider>
+        <AuthenticatedApp />
+      </HandsFreeVoiceProvider>
     </AuthProvider>
   );
 }
