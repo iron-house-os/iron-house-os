@@ -84,6 +84,17 @@ export IHOS_RELEASE_ID="$release_sha"
 : "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required}"
 : "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required}"
 : "${IHOS_TLS_EMAIL:?IHOS_TLS_EMAIL is required}"
+
+canonical_email_domain=ironhousecontracting.com
+bootstrap_admin_local=${BOOTSTRAP_ADMIN_EMAIL%@*}
+bootstrap_admin_domain=${BOOTSTRAP_ADMIN_EMAIL##*@}
+if [[ "$BOOTSTRAP_ADMIN_EMAIL" != *@* ||
+      -z "$bootstrap_admin_local" ||
+      "${bootstrap_admin_domain,,}" != "$canonical_email_domain" ]]; then
+  echo "BOOTSTRAP_ADMIN_EMAIL must use the canonical $canonical_email_domain domain before cutover." >&2
+  exit 1
+fi
+
 if [[ "$IHOS_STORAGE_BACKEND" != "s3" || "$AWS_REGION" != "ca-central-1" ]]; then
   echo "Build 216 requires private S3 storage in ca-central-1." >&2
   exit 1

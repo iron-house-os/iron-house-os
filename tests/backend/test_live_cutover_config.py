@@ -53,6 +53,21 @@ def test_gateway_configs_hold_maintenance_until_live_gate() -> None:
     assert "post-cutover-$stamp" in cutover
 
 
+def test_cutover_validates_canonical_bootstrap_domain_before_maintenance() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+
+    validation = "BOOTSTRAP_ADMIN_EMAIL must use the canonical"
+    maintenance = (
+        "install -m 0644 ops/digitalocean/nginx-maintenance.conf "
+        "/etc/nginx/sites-available/iron-house-os"
+    )
+
+    assert "canonical_email_domain=ironhousecontracting.com" in cutover
+    assert '"${bootstrap_admin_domain,,}" != "$canonical_email_domain"' in cutover
+    assert validation in cutover
+    assert cutover.index(validation) < cutover.index(maintenance)
+
+
 def test_cloud_init_contains_no_production_credentials() -> None:
     cloud_init = (ROOT / "ops/digitalocean/cloud-init.yaml").read_text()
 
