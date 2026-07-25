@@ -1,18 +1,10 @@
-import { Bot, Brain, Mic, MicOff, Send, ShieldCheck, Upload, Volume2 } from "lucide-react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { Bot, Brain, Send, ShieldCheck, Upload, Volume2 } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
 import { ChatMessage, ChatStatus, ironHouseChatApi } from "../api/ironHouseChat";
 import { useAuth } from "../contexts/AuthContext";
-
-type SpeechRecognitionEventLike = { results: ArrayLike<{ 0: { transcript: string } }> };
-type SpeechRecognitionLike = {
-  continuous: boolean; interimResults: boolean; lang: string;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null; onerror: (() => void) | null;
-  start: () => void; stop: () => void;
-};
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+import { useHandsFreeVoice } from "../contexts/HandsFreeVoiceContext";
 
 export function IronHouseChatPage() {
   const { user } = useAuth();
@@ -22,11 +14,9 @@ export function IronHouseChatPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [listening, setListening] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const submitRef = useRef<(text: string) => void>(() => undefined);
+  const { speakAssistantResponse } = useHandsFreeVoice();
 
   useEffect(() => {
     ironHouseChatApi.status().then(setStatus).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load Iron House Chat"));
@@ -40,36 +30,10 @@ export function IronHouseChatPage() {
       const reply = await ironHouseChatApi.send(clean, conversationId);
       setConversationId(reply.conversation.id);
       setMessages((current) => [...current, reply.user_message, reply.assistant_message]);
-      if ("speechSynthesis" in window && reply.assistant_message.status === "completed") {
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(reply.assistant_message.content));
-      }
+      if (reply.assistant_message.status === "completed") speakAssistantResponse(reply.assistant_message.content);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to send message");
     } finally { setSending(false); }
-  }
-  submitRef.current = (text) => void send(text);
-
-  function toggleListening() {
-    if (listening) { recognitionRef.current?.stop(); setListening(false); return; }
-    const speechWindow = window as typeof window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
-    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-    if (!Recognition) { setError("Voice recognition is not supported by this browser. Use text or a supported Safari/Chrome device."); return; }
-    const recognition = new Recognition();
-    recognition.continuous = true; recognition.interimResults = false; recognition.lang = "en-CA";
-    recognition.onresult = (event) => {
-      const transcript = event.results[event.results.length - 1][0].transcript.trim();
-      const wakeMatch = transcript.match(/hey\s+chat[,.]?\s*(.*)/i);
-      if (wakeMatch) {
-        const request = wakeMatch[1].trim();
-        if (request) submitRef.current(request);
-        else setDraft("");
-      }
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => { setListening(false); setError("Microphone listening stopped. Check browser microphone permission."); };
-    recognitionRef.current = recognition;
-    try { recognition.start(); setListening(true); setError(null); } catch { setError("Unable to start microphone listening."); }
   }
 
   async function importHistory(file: File | undefined) {
@@ -114,9 +78,7 @@ export function IronHouseChatPage() {
       <div className="rounded-md border border-iron-100 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-iron-100 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4" /> Audited management conversation</div>
-          <button type="button" onClick={toggleListening} className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${listening ? "bg-red-600 text-white" : "bg-brand-gold text-brand-black"}`} aria-pressed={listening}>
-            {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}{listening ? "Stop listening" : "Enable Hey Chat"}
-          </button>
+          <span className="text-xs font-medium text-iron-500">Global hands-free control</span>
         </div>
         <div className="min-h-[360px] space-y-4 p-4" aria-live="polite">
           {messages.length === 0 ? <div className="grid min-h-[300px] place-items-center text-center"><div><Volume2 className="mx-auto h-8 w-8 text-brand-gold" /><p className="mt-3 font-semibold">Ask how to use Iron House OS</p><p className="mt-1 text-sm text-iron-500">Try “Hey Chat, where do I review project costs?”</p></div></div> : messages.map((message) => <div key={message.id} className={`max-w-3xl rounded-md p-3 text-sm leading-6 ${message.role === "user" ? "ml-auto bg-brand-gold text-brand-black" : "bg-iron-50 text-iron-800"}`}><div className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">{message.role === "user" ? "Management" : "Iron House Chat"}</div>{message.content}</div>)}
@@ -127,7 +89,7 @@ export function IronHouseChatPage() {
           <button type="submit" disabled={sending || !draft.trim()} className="self-stretch rounded-md bg-iron-950 px-4 text-white disabled:bg-iron-300" aria-label="Send message"><Send className="h-4 w-4" /></button>
         </form>
       </div>
-      <p className="text-xs text-iron-500">Voice listening works only while this page is open and microphone permission is active. Do not enter passwords, SINs, banking, medical, or payroll information.</p>
+      <p className="text-xs text-iron-500">Enable Hey Chat once from the global control to use it across Iron House OS while this browser tab remains open. Do not enter passwords, SINs, banking, medical, or payroll information.</p>
     </section>
   );
 }
