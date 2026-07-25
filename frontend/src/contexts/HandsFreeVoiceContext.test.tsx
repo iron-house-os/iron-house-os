@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 const testState = vi.hoisted(() => ({
   role: "admin",
@@ -27,6 +28,7 @@ vi.mock("../api/ironHouseChat", () => ({
 }));
 
 import { HandsFreeVoiceProvider, interpretVoiceTranscript } from "./HandsFreeVoiceContext";
+import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 
 type ResultHandler = ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
 
@@ -80,6 +82,35 @@ describe("interpretVoiceTranscript", () => {
   });
 });
 
+describe("resolveVoiceNavigation", () => {
+  it("accepts explicit navigation requests and rejects ordinary questions", () => {
+    expect(resolveVoiceNavigation("Open financial control")).toEqual({
+      label: "Financial Control",
+      path: "/finance",
+    });
+    expect(resolveVoiceNavigation("Hey, what are the project costs?")).toBeNull();
+    expect(resolveVoiceNavigation("Show me the safety page")).toEqual({
+      label: "Safety Program",
+      path: "/safety-program",
+    });
+  });
+});
+
+function LocationProbe() {
+  return <div data-testid="location">{useLocation().pathname}</div>;
+}
+
+function renderProvider() {
+  return render(
+    <MemoryRouter initialEntries={["/dashboard"]}>
+      <HandsFreeVoiceProvider>
+        <div>OS workspace</div>
+        <LocationProbe />
+      </HandsFreeVoiceProvider>
+    </MemoryRouter>,
+  );
+}
+
 describe("HandsFreeVoiceProvider", () => {
   beforeEach(() => {
     testState.role = "admin";
@@ -113,7 +144,7 @@ describe("HandsFreeVoiceProvider", () => {
 
   it("sends a command spoken in the wake phrase and speaks the answer", async () => {
     const user = userEvent.setup();
-    render(<HandsFreeVoiceProvider><div>OS workspace</div></HandsFreeVoiceProvider>);
+    renderProvider();
 
     await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
     expect(MockSpeechRecognition.instances).toHaveLength(1);
@@ -126,9 +157,9 @@ describe("HandsFreeVoiceProvider", () => {
     expect(screen.getByRole("button", { name: "Stop hands-free Hey Chat" })).toBeInTheDocument();
   });
 
-  it("accepts the sentence after a wake-only phrase and automatically resumes listening", async () => {
+  it("accepts a navigation direction after a wake-only phrase and automatically resumes listening", async () => {
     const user = userEvent.setup();
-    render(<HandsFreeVoiceProvider><div>OS workspace</div></HandsFreeVoiceProvider>);
+    renderProvider();
 
     await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
     act(() => MockSpeechRecognition.instances[0].emit("Hey Chat"));
@@ -140,12 +171,14 @@ describe("HandsFreeVoiceProvider", () => {
     const resumedRecognition = MockSpeechRecognition.instances.at(-1);
     act(() => resumedRecognition?.emit("Show me the safety page"));
 
-    await waitFor(() => expect(testState.send).toHaveBeenCalledWith("Show me the safety page", undefined));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/safety-program"));
+    expect(testState.send).not.toHaveBeenCalled();
+    expect(spoken).toContain("Opening Safety Program.");
   });
 
   it("restarts an interrupted recognition session while enabled", async () => {
     const user = userEvent.setup();
-    render(<HandsFreeVoiceProvider><div>OS workspace</div></HandsFreeVoiceProvider>);
+    renderProvider();
 
     await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
     act(() => MockSpeechRecognition.instances[0].end());
@@ -156,8 +189,20 @@ describe("HandsFreeVoiceProvider", () => {
 
   it("does not expose the microphone control to non-management accounts", () => {
     testState.role = "viewer";
-    render(<HandsFreeVoiceProvider><div>OS workspace</div></HandsFreeVoiceProvider>);
+    renderProvider();
 
     expect(screen.queryByRole("button", { name: /Hey Chat/i })).not.toBeInTheDocument();
+  });
+
+  it("opens a requested OS module without sending the command to the AI", async () => {
+    const user = userEvent.setup();
+    renderProvider();
+
+    await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
+    act(() => MockSpeechRecognition.instances[0].emit("Hey Chat, open financial control"));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/finance"));
+    expect(testState.send).not.toHaveBeenCalled();
+    expect(spoken).toContain("Opening Financial Control.");
   });
 });

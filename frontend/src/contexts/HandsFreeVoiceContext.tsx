@@ -9,8 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { ironHouseChatApi } from "../api/ironHouseChat";
+import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 import { useAuth } from "./AuthContext";
 
 type SpeechRecognitionEventLike = {
@@ -75,6 +77,7 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
 
 export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const allowed =
     Boolean(user) &&
     !user?.password_reset_required &&
@@ -157,6 +160,15 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       const clean = command.trim();
       if (!clean || busyRef.current) return;
 
+      const navigation = resolveVoiceNavigation(clean);
+      if (navigation) {
+        awaitingCommandRef.current = false;
+        setError(null);
+        navigate(navigation.path);
+        speak(`Opening ${navigation.label}.`);
+        return;
+      }
+
       busyRef.current = true;
       awaitingCommandRef.current = false;
       clearRestartTimer();
@@ -181,7 +193,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         busyRef.current = false;
       }
     },
-    [clearRestartTimer, resumeListening, speak, stopRecognition],
+    [clearRestartTimer, navigate, resumeListening, speak, stopRecognition],
   );
 
   const handleTranscript = useCallback(
@@ -398,7 +410,7 @@ function HandsFreeVoiceControl({
       </div>
       {error ? <div role="alert" className="mt-3 rounded-md bg-red-950/70 p-2 text-xs text-red-100">{error}</div> : null}
       <div className="mt-3 border-t border-white/10 pt-2 text-[11px] text-iron-300">
-        Open tab only • Management only • Read-only
+        Open tab only • Management only • Navigation and read-only answers
       </div>
     </section>
   );
