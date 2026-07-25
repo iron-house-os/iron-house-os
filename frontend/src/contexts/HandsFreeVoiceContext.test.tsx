@@ -28,6 +28,7 @@ vi.mock("../api/ironHouseChat", () => ({
 }));
 
 import { HandsFreeVoiceProvider, interpretVoiceTranscript } from "./HandsFreeVoiceContext";
+import { resolveVoiceControl } from "../utils/voiceControls";
 import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 
 type ResultHandler = ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
@@ -79,6 +80,17 @@ describe("interpretVoiceTranscript", () => {
       command: "Show me the safety page",
     });
     expect(interpretVoiceTranscript("ordinary site conversation", false)).toEqual({ kind: "ignore" });
+  });
+});
+
+describe("resolveVoiceControl", () => {
+  it("recognizes only the approved local hands-free controls", () => {
+    expect(resolveVoiceControl("Go back")).toBe("back");
+    expect(resolveVoiceControl("Go home")).toBe("home");
+    expect(resolveVoiceControl("What can I say?")).toBe("help");
+    expect(resolveVoiceControl("Say that again")).toBe("repeat");
+    expect(resolveVoiceControl("Stop listening")).toBe("stop");
+    expect(resolveVoiceControl("Delete the project")).toBeNull();
   });
 });
 
@@ -204,5 +216,37 @@ describe("HandsFreeVoiceProvider", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/finance"));
     expect(testState.send).not.toHaveBeenCalled();
     expect(spoken).toContain("Opening Financial Control.");
+  });
+
+  it("repeats the previous answer locally without another API request", async () => {
+    const user = userEvent.setup();
+    renderProvider();
+
+    await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
+    act(() => MockSpeechRecognition.instances[0].emit("Hey Chat, where are project costs?"));
+
+    await waitFor(() => expect(spoken).toContain("Open Financial Control from the main navigation."));
+    await waitFor(() => expect(MockSpeechRecognition.instances.length).toBeGreaterThan(1));
+    const resumedRecognition = MockSpeechRecognition.instances.at(-1);
+    act(() => resumedRecognition?.emit("Hey Chat, repeat that"));
+
+    await waitFor(() =>
+      expect(spoken.filter((text) => text === "Open Financial Control from the main navigation.")).toHaveLength(2),
+    );
+    expect(testState.send).toHaveBeenCalledOnce();
+  });
+
+  it("stops hands-free listening by voice without an API request", async () => {
+    const user = userEvent.setup();
+    renderProvider();
+
+    await user.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
+    act(() => MockSpeechRecognition.instances[0].emit("Hey Chat, stop listening"));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Enable hands-free Hey Chat" })).toBeInTheDocument(),
+    );
+    expect(testState.send).not.toHaveBeenCalled();
+    expect(spoken).toContain("Hey Chat is off.");
   });
 });
