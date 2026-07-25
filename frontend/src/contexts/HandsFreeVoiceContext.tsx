@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { ironHouseChatApi } from "../api/ironHouseChat";
+import { resolveVoiceControl } from "../utils/voiceControls";
 import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 import { useAuth } from "./AuthContext";
 
@@ -94,6 +95,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const restartTimerRef = useRef<number | null>(null);
   const startRecognitionRef = useRef<() => void>(() => undefined);
   const handleTranscriptRef = useRef<(transcript: string) => void>(() => undefined);
+  const lastSpokenRef = useRef<string | null>(null);
 
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current !== null) {
@@ -135,6 +137,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
 
   const speak = useCallback(
     (text: string, resumePhase: "listening" | "awaiting-command" = "listening") => {
+      lastSpokenRef.current = text;
       if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
         resumeListening(resumePhase);
         return;
@@ -159,6 +162,42 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     async (command: string) => {
       const clean = command.trim();
       if (!clean || busyRef.current) return;
+
+      const control = resolveVoiceControl(clean);
+      if (control) {
+        awaitingCommandRef.current = false;
+        setError(null);
+
+        if (control === "back") {
+          navigate(-1);
+          speak("Going back.");
+          return;
+        }
+        if (control === "home") {
+          navigate("/dashboard");
+          speak("Opening Dashboard.");
+          return;
+        }
+        if (control === "help") {
+          speak("You can ask a read-only question, open an OS module, go back, go home, repeat the last answer, or stop listening.");
+          return;
+        }
+        if (control === "repeat") {
+          const previous = lastSpokenRef.current;
+          speak(previous ?? "There is no previous response to repeat.");
+          return;
+        }
+
+        enabledRef.current = false;
+        busyRef.current = false;
+        pausedForSpeechRef.current = false;
+        clearRestartTimer();
+        stopRecognition();
+        setEnabled(false);
+        setPhase("off");
+        speak("Hey Chat is off.");
+        return;
+      }
 
       const navigation = resolveVoiceNavigation(clean);
       if (navigation) {
