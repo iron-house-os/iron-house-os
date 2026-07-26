@@ -83,6 +83,25 @@ async function mockApi(page: Page) {
       await route.fulfill({ status: 200, json: [] });
       return;
     }
+    if (path.endsWith("/google-calendar/status")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          enabled: true,
+          configured: true,
+          connected: true,
+          status: "connected",
+          required_scope: "https://www.googleapis.com/auth/calendar.events.owned",
+          last_synced_at: null,
+          last_error: null,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/google-calendar/events")) {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
     await route.fulfill({ status: 200, json: { items: [], total: 0 } });
   });
 }
@@ -130,6 +149,7 @@ test("authenticated core shell is responsive and accessible", async ({ page }, t
 const tabs = [
   ["Dashboard", "Iron House Dashboard"],
   ["Meeting Minutes", "Meeting Minutes"],
+  ["Google Calendar", "Google Calendar"],
   ["MVP Workflow", "IHOS MVP Workflow"],
   ["Project Operations", "Project Operations"],
   ["Document Operations", "Document Operations"],

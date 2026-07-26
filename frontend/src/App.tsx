@@ -22,6 +22,7 @@ import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
 import { IronHouseChatPage } from "./pages/IronHouseChatPage";
 import { MeetingMinutesPage } from "./pages/MeetingMinutesPage";
+import { GoogleCalendarPage } from "./pages/GoogleCalendarPage";
 import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -76,6 +77,7 @@ function AuthenticatedApp() {
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/meeting-minutes" element={<MeetingMinutesPage />} />
+        <Route path="/google-calendar" element={<GoogleCalendarPage />} />
         <Route path="/mvp-workflow" element={<MVPWorkflowPage />} />
         <Route path="/project-operations" element={<ProjectOperationsPage />} />
         <Route path="/document-operations" element={<DocumentOperationsPage />} />
