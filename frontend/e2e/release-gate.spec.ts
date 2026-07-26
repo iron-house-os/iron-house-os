@@ -65,6 +65,24 @@ async function mockApi(page: Page) {
       await route.fulfill({ status: 200, json: { production_rates: [] } });
       return;
     }
+    if (path.endsWith("/meeting-minutes/status")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          enabled: true,
+          configured: true,
+          transcription_model: "gpt-4o-mini-transcribe",
+          summary_model: "gpt-5.6-sol",
+          max_audio_bytes: 26214400,
+          audio_retained: false,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/meeting-minutes")) {
+      await route.fulfill({ status: 200, json: [] });
+      return;
+    }
     await route.fulfill({ status: 200, json: { items: [], total: 0 } });
   });
 }
@@ -111,6 +129,7 @@ test("authenticated core shell is responsive and accessible", async ({ page }, t
 
 const tabs = [
   ["Dashboard", "Iron House Dashboard"],
+  ["Meeting Minutes", "Meeting Minutes"],
   ["MVP Workflow", "IHOS MVP Workflow"],
   ["Project Operations", "Project Operations"],
   ["Document Operations", "Document Operations"],

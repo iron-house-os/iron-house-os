@@ -16,6 +16,7 @@ from app.api.v1.routes import (
     finance,
     estimates,
     municipality,
+    meeting_minutes,
     operations,
     projects,
     quotes,
@@ -56,6 +57,11 @@ protected_router.include_router(equipment.router, prefix="/equipment", tags=["eq
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
 protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
+protected_router.include_router(
+    meeting_minutes.router,
+    prefix="/meeting-minutes",
+    tags=["meeting-minutes"],
+)
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)

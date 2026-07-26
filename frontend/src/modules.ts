@@ -12,6 +12,7 @@ import {
   HardHat,
   UserRoundCog,
   Landmark,
+  Mic2,
   Ruler,
   Settings,
   ShieldCheck,
@@ -78,6 +79,13 @@ export const modules: AppModule[] = [
     icon: Siren,
     description: "High-risk permits, corrective actions, emergency cards and field release controls.",
     status: "Build 221 active",
+  },
+  {
+    label: "Meeting Minutes",
+    path: "/meeting-minutes",
+    icon: Mic2,
+    description: "Consent-controlled recording, transcription, prioritized AI draft, and approved meeting records.",
+    status: "Build 239 active",
   },
   {
     label: "MVP Workflow",
