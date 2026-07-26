@@ -1,5 +1,6 @@
 from app.models.bid import Bid
 from app.models.assistant import AssistantConversation, AssistantMessage, MeetingMinute, ProjectMemory
+from app.models.calendar import GoogleCalendarConnection, GoogleCalendarOAuthState
 from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
@@ -23,6 +24,8 @@ __all__ = [
     "AssistantMessage",
     "MeetingMinute",
     "ProjectMemory",
+    "GoogleCalendarConnection",
+    "GoogleCalendarOAuthState",
     "Bid",
     "Contact",
     "Document",

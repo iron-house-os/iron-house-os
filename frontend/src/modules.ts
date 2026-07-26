@@ -3,6 +3,7 @@ import {
   DollarSign,
   BookOpen,
   Building2,
+  CalendarDays,
   ClipboardList,
   Database,
   FileSearch,
@@ -86,6 +87,13 @@ export const modules: AppModule[] = [
     icon: Mic2,
     description: "Consent-controlled recording, transcription, prioritized AI draft, and approved meeting records.",
     status: "Build 239 active",
+  },
+  {
+    label: "Google Calendar",
+    path: "/google-calendar",
+    icon: CalendarDays,
+    description: "Management calendar connection, upcoming events, and controlled event creation.",
+    status: "Build 240 active",
   },
   {
     label: "MVP Workflow",

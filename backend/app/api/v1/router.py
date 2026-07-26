@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     equipment,
     field_operations,
     finance,
+    google_calendar,
     estimates,
     municipality,
     meeting_minutes,
@@ -61,6 +62,11 @@ protected_router.include_router(
     meeting_minutes.router,
     prefix="/meeting-minutes",
     tags=["meeting-minutes"],
+)
+protected_router.include_router(
+    google_calendar.router,
+    prefix="/google-calendar",
+    tags=["google-calendar"],
 )
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])

@@ -162,6 +162,29 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
     meeting_minutes = _json_request(base_url, "/api/v1/meeting-minutes", opener=opener)
     if not isinstance(meeting_minutes, list):
         raise RuntimeError(f"Meeting Minutes returned an invalid list payload: {meeting_minutes}")
+    google_calendar_status = _json_request(
+        base_url,
+        "/api/v1/google-calendar/status",
+        opener=opener,
+    )
+    forbidden_calendar_fields = {
+        "access_token",
+        "refresh_token",
+        "encrypted_access_token",
+        "encrypted_refresh_token",
+    }
+    exposed_calendar_fields = forbidden_calendar_fields.intersection(google_calendar_status)
+    if exposed_calendar_fields:
+        raise RuntimeError(
+            "Google Calendar status exposed protected token fields: "
+            f"{sorted(exposed_calendar_fields)}"
+        )
+    if google_calendar_status.get("required_scope") != (
+        "https://www.googleapis.com/auth/calendar.events.owned"
+    ):
+        raise RuntimeError(
+            f"Google Calendar returned an invalid OAuth scope: {google_calendar_status}"
+        )
 
     for project in records["projects"]["items"]:
         project_id = project["id"]
@@ -192,7 +215,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
             "mode": "read-only",
             "status": "passed",
             "authenticated_user": current_user["user"]["email"],
-            "tab_paths_checked": 17,
+            "tab_paths_checked": 18,
             "record_counts": record_counts,
         }
 
@@ -291,7 +314,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "project_id": project["id"],
         "rfq_package_id": rfq["id"],
         "drawing_document_id": drawing["source"]["document_id"],
-        "tab_paths_checked": 17,
+        "tab_paths_checked": 18,
         "record_counts": record_counts,
     }
 

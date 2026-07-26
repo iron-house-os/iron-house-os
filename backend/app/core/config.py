@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     openai_api_base_url: str = "https://api.openai.com/v1"
     iron_house_chat_enabled: bool = True
     meeting_minutes_enabled: bool = True
+    google_calendar_enabled: bool = False
+    google_calendar_client_id: str | None = None
+    google_calendar_client_secret: str | None = None
+    google_calendar_redirect_uri: str = (
+        "http://localhost:8000/api/v1/google-calendar/oauth/callback"
+    )
+    google_calendar_frontend_return_url: str = "http://localhost:5173/google-calendar"
+    google_calendar_token_encryption_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
