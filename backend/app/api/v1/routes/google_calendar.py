@@ -15,9 +15,13 @@ from app.models.calendar import GoogleCalendarConnection, GoogleCalendarOAuthSta
 from app.models.project import Project
 from app.schemas.google_calendar import (
     GoogleCalendarAuthorization,
+    GoogleCalendarConflictCheck,
+    GoogleCalendarConflictResult,
     GoogleCalendarDisconnect,
     GoogleCalendarEvent,
+    GoogleCalendarEventCancel,
     GoogleCalendarEventCreate,
+    GoogleCalendarEventUpdate,
     GoogleCalendarStatus,
 )
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
@@ -28,6 +32,7 @@ from app.services.google_calendar import (
     authorization_url,
     calendar_is_configured,
     create_primary_event,
+    delete_primary_event,
     decrypt_token,
     encrypt_token,
     exchange_authorization_code,
@@ -35,6 +40,7 @@ from app.services.google_calendar import (
     refresh_access_token,
     revoke_token,
     state_digest,
+    update_primary_event,
 )
 from app.services.request_context import get_request_audit_context
 
@@ -336,10 +342,130 @@ def create_google_calendar_event(
             "project_id": str(payload.project_id) if payload.project_id else None,
             "start": payload.start.isoformat(),
             "end": payload.end.isoformat(),
-            "send_updates": "none",
+            "attendee_count": len(payload.attendees),
+            "send_updates": "all" if payload.send_invitations else "none",
         },
     )
     return event
+
+
+@router.post("/conflicts", response_model=GoogleCalendarConflictResult)
+def check_google_calendar_conflicts(
+    payload: GoogleCalendarConflictCheck,
+    user: CurrentUser,
+    db: DBSession,
+) -> GoogleCalendarConflictResult:
+    _require_management(user)
+    _require_enabled()
+    connection = _connection(db, user)
+    if connection is None or connection.status != "connected":
+        raise HTTPException(status_code=409, detail="Connect Google Calendar first.")
+    token = _access_token(db, connection)
+    try:
+        events = list_primary_events(
+            token,
+            time_min=payload.start,
+            time_max=payload.end,
+            max_results=100,
+        )
+    except GoogleCalendarUnavailable as exc:
+        connection.last_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    conflicts = [
+        event
+        for event in events
+        if event.id != payload.exclude_event_id and event.status != "cancelled"
+    ]
+    return GoogleCalendarConflictResult(
+        has_conflicts=bool(conflicts),
+        conflicts=conflicts,
+    )
+
+
+@router.put("/events/{event_id}", response_model=GoogleCalendarEvent)
+def update_google_calendar_event(
+    event_id: str,
+    payload: GoogleCalendarEventUpdate,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> GoogleCalendarEvent:
+    _require_management(user)
+    _require_enabled()
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Confirm the event changes.")
+    if payload.project_id and db.get(Project, payload.project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    connection = _connection(db, user)
+    if connection is None or connection.status != "connected":
+        raise HTTPException(status_code=409, detail="Connect Google Calendar first.")
+    token = _access_token(db, connection)
+    try:
+        event = update_primary_event(token, event_id, payload)
+    except GoogleCalendarUnavailable as exc:
+        connection.last_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    connection.last_synced_at = datetime.now(UTC)
+    connection.last_error = None
+    db.commit()
+    _audit(
+        request,
+        action="google_calendar_event_update",
+        outcome="completed",
+        actor=user.email,
+        metadata={
+            "event_id": event.id,
+            "project_id": str(payload.project_id) if payload.project_id else None,
+            "start": payload.start.isoformat(),
+            "end": payload.end.isoformat(),
+            "attendee_count": len(payload.attendees),
+            "send_updates": "all" if payload.send_invitations else "none",
+        },
+    )
+    return event
+
+
+@router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_google_calendar_event(
+    event_id: str,
+    payload: GoogleCalendarEventCancel,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> None:
+    _require_management(user)
+    _require_enabled()
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Confirm event cancellation.")
+    connection = _connection(db, user)
+    if connection is None or connection.status != "connected":
+        raise HTTPException(status_code=409, detail="Connect Google Calendar first.")
+    token = _access_token(db, connection)
+    try:
+        delete_primary_event(
+            token,
+            event_id,
+            notify_attendees=payload.notify_attendees,
+        )
+    except GoogleCalendarUnavailable as exc:
+        connection.last_error = str(exc)[:500]
+        db.commit()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    connection.last_synced_at = datetime.now(UTC)
+    connection.last_error = None
+    db.commit()
+    _audit(
+        request,
+        action="google_calendar_event_cancel",
+        outcome="completed",
+        actor=user.email,
+        metadata={
+            "event_id": event_id,
+            "send_updates": "all" if payload.notify_attendees else "none",
+        },
+    )
 
 
 @router.post("/disconnect", response_model=GoogleCalendarStatus)
