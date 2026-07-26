@@ -171,6 +171,8 @@ def test_events_require_connection_and_explicit_write_confirmation(
         start="2026-07-27T16:00:00Z",
         end="2026-07-27T17:00:00Z",
         status="confirmed",
+        attendees=[],
+        reminder_minutes=[30],
     )
     monkeypatch.setattr(
         google_calendar_routes,
@@ -217,6 +219,25 @@ def test_events_require_connection_and_explicit_write_confirmation(
     )
     assert created.status_code == 201
     assert created.json()["id"] == "google-event-1"
+
+
+def test_attendees_require_explicit_invitation_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    payload = {
+        "title": "Owner coordination",
+        "start": "2026-07-27T09:00:00-07:00",
+        "end": "2026-07-27T10:00:00-07:00",
+        "attendees": ["MAC@ironhousecontracting.com"],
+        "reminder_minutes": [30],
+        "send_invitations": False,
+        "confirmed": True,
+    }
+    blocked = client.post("/api/v1/google-calendar/events", json=payload)
+    assert blocked.status_code == 422
+    assert "Confirm attendee invitations" in str(blocked.json())
 
 
 def test_disconnect_revokes_and_clears_tokens(
