@@ -150,6 +150,18 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
     }
     _json_request(base_url, "/api/v1/auth/me/permissions", opener=opener)
     _json_request(base_url, "/api/v1/estimates/rate-library", opener=opener)
+    meeting_minutes_status = _json_request(
+        base_url,
+        "/api/v1/meeting-minutes/status",
+        opener=opener,
+    )
+    if meeting_minutes_status.get("audio_retained") is not False:
+        raise RuntimeError(
+            f"Meeting Minutes returned an invalid audio-retention policy: {meeting_minutes_status}"
+        )
+    meeting_minutes = _json_request(base_url, "/api/v1/meeting-minutes", opener=opener)
+    if not isinstance(meeting_minutes, list):
+        raise RuntimeError(f"Meeting Minutes returned an invalid list payload: {meeting_minutes}")
 
     for project in records["projects"]["items"]:
         project_id = project["id"]
@@ -180,7 +192,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
             "mode": "read-only",
             "status": "passed",
             "authenticated_user": current_user["user"]["email"],
-            "tab_paths_checked": 16,
+            "tab_paths_checked": 17,
             "record_counts": record_counts,
         }
 
@@ -279,7 +291,7 @@ def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: 
         "project_id": project["id"],
         "rfq_package_id": rfq["id"],
         "drawing_document_id": drawing["source"]["document_id"],
-        "tab_paths_checked": 16,
+        "tab_paths_checked": 17,
         "record_counts": record_counts,
     }
 
