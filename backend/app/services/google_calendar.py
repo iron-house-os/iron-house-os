@@ -6,13 +6,17 @@ import json
 from typing import Any
 from uuid import UUID
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import get_settings
-from app.schemas.google_calendar import GoogleCalendarEvent, GoogleCalendarEventCreate
+from app.schemas.google_calendar import (
+    GoogleCalendarEvent,
+    GoogleCalendarEventCreate,
+    GoogleCalendarEventUpdate,
+)
 
 GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -146,28 +150,7 @@ def list_primary_events(
     for raw in result.get("items", []):
         if not isinstance(raw, dict) or not raw.get("id"):
             continue
-        private = raw.get("extendedProperties", {}).get("private", {})
-        project_id = None
-        if isinstance(private, dict) and private.get("ihos_project_id"):
-            try:
-                project_id = UUID(str(private["ihos_project_id"]))
-            except (TypeError, ValueError):
-                project_id = None
-        start = raw.get("start", {})
-        end = raw.get("end", {})
-        events.append(
-            GoogleCalendarEvent(
-                id=str(raw["id"]),
-                title=str(raw.get("summary") or "Untitled event"),
-                description=raw.get("description"),
-                location=raw.get("location"),
-                start=str(start.get("dateTime") or start.get("date") or ""),
-                end=str(end.get("dateTime") or end.get("date") or ""),
-                html_link=raw.get("htmlLink"),
-                status=str(raw.get("status") or "confirmed"),
-                project_id=project_id,
-            )
-        )
+        events.append(_event_from_raw(raw))
     return events
 
 
@@ -175,36 +158,111 @@ def create_primary_event(
     access_token: str,
     payload: GoogleCalendarEventCreate,
 ) -> GoogleCalendarEvent:
+    raw = _calendar_request(
+        access_token,
+        "POST",
+        "/calendars/primary/events",
+        query={"sendUpdates": "all" if payload.send_invitations else "none"},
+        payload=_event_payload(payload),
+    )
+    return _event_from_raw(raw)
+
+
+def update_primary_event(
+    access_token: str,
+    event_id: str,
+    payload: GoogleCalendarEventUpdate,
+) -> GoogleCalendarEvent:
+    raw = _calendar_request(
+        access_token,
+        "PUT",
+        f"/calendars/primary/events/{quote(event_id, safe='')}",
+        query={"sendUpdates": "all" if payload.send_invitations else "none"},
+        payload=_event_payload(payload),
+    )
+    return _event_from_raw(raw)
+
+
+def delete_primary_event(
+    access_token: str,
+    event_id: str,
+    *,
+    notify_attendees: bool,
+) -> None:
+    _calendar_request(
+        access_token,
+        "DELETE",
+        f"/calendars/primary/events/{quote(event_id, safe='')}",
+        query={"sendUpdates": "all" if notify_attendees else "none"},
+    )
+
+
+def _event_payload(
+    payload: GoogleCalendarEventCreate | GoogleCalendarEventUpdate,
+) -> dict[str, Any]:
     body: dict[str, Any] = {
         "summary": payload.title.strip(),
         "start": {"dateTime": _rfc3339(payload.start)},
         "end": {"dateTime": _rfc3339(payload.end)},
+        "reminders": {
+            "useDefault": not payload.reminder_minutes,
+            **(
+                {"overrides": [{"method": "popup", "minutes": value} for value in payload.reminder_minutes]}
+                if payload.reminder_minutes
+                else {}
+            ),
+        },
     }
     if payload.description and payload.description.strip():
         body["description"] = payload.description.strip()
     if payload.location and payload.location.strip():
         body["location"] = payload.location.strip()
+    if payload.attendees:
+        body["attendees"] = [{"email": email} for email in payload.attendees]
     if payload.project_id:
         body["extendedProperties"] = {
             "private": {"ihos_project_id": str(payload.project_id)}
         }
-    raw = _calendar_request(
-        access_token,
-        "POST",
-        "/calendars/primary/events",
-        query={"sendUpdates": "none"},
-        payload=body,
+    return body
+
+
+def _event_from_raw(raw: dict[str, Any]) -> GoogleCalendarEvent:
+    private = raw.get("extendedProperties", {}).get("private", {})
+    project_id = None
+    if isinstance(private, dict) and private.get("ihos_project_id"):
+        try:
+            project_id = UUID(str(private["ihos_project_id"]))
+        except (TypeError, ValueError):
+            project_id = None
+    start = raw.get("start", {})
+    end = raw.get("end", {})
+    attendees = [
+        str(value["email"]).lower()
+        for value in raw.get("attendees", [])
+        if isinstance(value, dict) and value.get("email")
+    ]
+    reminders = raw.get("reminders", {}).get("overrides", [])
+    reminder_minutes = sorted(
+        {
+            int(value["minutes"])
+            for value in reminders
+            if isinstance(value, dict)
+            and value.get("method") == "popup"
+            and isinstance(value.get("minutes"), int)
+        }
     )
     return GoogleCalendarEvent(
         id=str(raw["id"]),
-        title=str(raw.get("summary") or payload.title),
+        title=str(raw.get("summary") or "Untitled event"),
         description=raw.get("description"),
         location=raw.get("location"),
-        start=str(raw.get("start", {}).get("dateTime") or ""),
-        end=str(raw.get("end", {}).get("dateTime") or ""),
+        start=str(start.get("dateTime") or start.get("date") or ""),
+        end=str(end.get("dateTime") or end.get("date") or ""),
         html_link=raw.get("htmlLink"),
         status=str(raw.get("status") or "confirmed"),
-        project_id=payload.project_id,
+        project_id=project_id,
+        attendees=attendees,
+        reminder_minutes=reminder_minutes,
     )
 
 
@@ -282,7 +340,8 @@ def _calendar_request(
 def _read_json_response(request: Request, *, timeout: int) -> dict:
     try:
         with urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
+            body = response.read()
+            return json.loads(body.decode("utf-8")) if body else {}
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:1000]
         reason = _provider_reason(detail)

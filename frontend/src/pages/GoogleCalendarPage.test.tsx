@@ -26,6 +26,8 @@ const existingEvent = {
   html_link: "https://calendar.google.com/calendar/event?eid=event-1",
   status: "confirmed",
   project_id: null,
+  attendees: [],
+  reminder_minutes: [30],
 };
 
 describe("GoogleCalendarPage", () => {
@@ -55,6 +57,9 @@ describe("GoogleCalendarPage", () => {
         }
         if (url.endsWith("/google-calendar/events") && method === "GET") {
           return Response.json([existingEvent]);
+        }
+        if (url.endsWith("/google-calendar/conflicts") && method === "POST") {
+          return Response.json({ has_conflicts: false, conflicts: [] });
         }
         if (url.endsWith("/google-calendar/events") && method === "POST") {
           return Response.json(
@@ -105,7 +110,9 @@ describe("GoogleCalendarPage", () => {
       expect(request).toBeDefined();
       const body = JSON.parse(String(request?.body));
       expect(body.confirmed).toBe(true);
-      expect(body).not.toHaveProperty("attendees");
+      expect(body.attendees).toEqual([]);
+      expect(body.reminder_minutes).toEqual([30]);
+      expect(body.send_invitations).toBe(false);
     });
   });
 });

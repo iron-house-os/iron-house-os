@@ -1,4 +1,5 @@
 import {
+  Bell,
   CalendarCheck2,
   CalendarDays,
   Clock3,
@@ -6,8 +7,11 @@ import {
   Link2,
   Link2Off,
   MapPin,
+  Pencil,
   Plus,
   ShieldCheck,
+  Trash2,
+  Users,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -57,6 +61,12 @@ export function GoogleCalendarPage() {
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [attendees, setAttendees] = useState("");
+  const [reminderMinutes, setReminderMinutes] = useState("30");
+  const [sendInvitations, setSendInvitations] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<GoogleCalendarEvent[]>([]);
+  const [conflictConfirmed, setConflictConfirmed] = useState(false);
   const defaults = useMemo(initialTimes, []);
   const [start, setStart] = useState(defaults.start);
   const [end, setEnd] = useState(defaults.end);
@@ -65,6 +75,7 @@ export function GoogleCalendarPage() {
   const [connecting, setConnecting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [cancellingEventId, setCancellingEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -106,29 +117,113 @@ export function GoogleCalendarPage() {
     setError(null);
     setNotice(null);
     try {
-      const created = await googleCalendarApi.createEvent({
+      const startIso = new Date(start).toISOString();
+      const endIso = new Date(end).toISOString();
+      const conflictResult = await googleCalendarApi.conflicts(
+        startIso,
+        endIso,
+        editingEventId ?? undefined,
+      );
+      if (conflictResult.has_conflicts && !conflictConfirmed) {
+        setConflicts(conflictResult.conflicts);
+        setError("Scheduling conflict found. Review and confirm the overlap before saving.");
+        return;
+      }
+      const attendeeList = attendees
+        .split(/[,\n;]/)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+      const payload = {
         title: title.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
-        start: new Date(start).toISOString(),
-        end: new Date(end).toISOString(),
+        start: startIso,
+        end: endIso,
         project_id: projectId || null,
+        attendees: attendeeList,
+        reminder_minutes: reminderMinutes ? [Number(reminderMinutes)] : [],
+        send_invitations: attendeeList.length > 0 && sendInvitations,
         confirmed: true,
-      });
+      };
+      const saved = editingEventId
+        ? await googleCalendarApi.updateEvent(editingEventId, payload)
+        : await googleCalendarApi.createEvent(payload);
       setEvents((current) =>
-        [...current, created].sort(
+        [...current.filter((item) => item.id !== editingEventId), saved].sort(
           (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
         ),
       );
-      setTitle("");
-      setDescription("");
-      setLocation("");
-      setEventConfirmed(false);
-      setNotice("Event created on your primary Google Calendar. No invitations were sent.");
+      const wasEditing = Boolean(editingEventId);
+      resetEventForm();
+      setNotice(
+        wasEditing
+          ? "Event updated. Confirmed attendee notifications were sent."
+          : attendeeList.length
+            ? "Event created and invitations sent to the confirmed attendees."
+            : "Event created on your primary Google Calendar. No invitations were sent.",
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to create the calendar event");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function resetEventForm() {
+    const next = initialTimes();
+    setTitle("");
+    setDescription("");
+    setLocation("");
+    setProjectId("");
+    setAttendees("");
+    setReminderMinutes("30");
+    setSendInvitations(false);
+    setStart(next.start);
+    setEnd(next.end);
+    setEditingEventId(null);
+    setConflicts([]);
+    setConflictConfirmed(false);
+    setEventConfirmed(false);
+  }
+
+  function editEvent(calendarEvent: GoogleCalendarEvent) {
+    setEditingEventId(calendarEvent.id);
+    setTitle(calendarEvent.title);
+    setDescription(calendarEvent.description ?? "");
+    setLocation(calendarEvent.location ?? "");
+    setProjectId(calendarEvent.project_id ?? "");
+    setAttendees(calendarEvent.attendees.join(", "));
+    setReminderMinutes(String(calendarEvent.reminder_minutes[0] ?? 30));
+    setSendInvitations(calendarEvent.attendees.length > 0);
+    setStart(localInput(new Date(calendarEvent.start)));
+    setEnd(localInput(new Date(calendarEvent.end)));
+    setConflicts([]);
+    setConflictConfirmed(false);
+    setEventConfirmed(false);
+    setError(null);
+    setNotice("Review the event changes before saving.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function cancelEvent(calendarEvent: GoogleCalendarEvent) {
+    if (
+      !window.confirm(
+        `Cancel “${calendarEvent.title}”? Confirmed attendees will be notified.`,
+      )
+    ) {
+      return;
+    }
+    setCancellingEventId(calendarEvent.id);
+    setError(null);
+    try {
+      await googleCalendarApi.cancelEvent(calendarEvent.id, true);
+      setEvents((current) => current.filter((item) => item.id !== calendarEvent.id));
+      if (editingEventId === calendarEvent.id) resetEventForm();
+      setNotice("Event cancelled and attendee updates sent.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to cancel the event");
+    } finally {
+      setCancellingEventId(null);
     }
   }
 
@@ -175,7 +270,7 @@ export function GoogleCalendarPage() {
           }
         />
         <StatusCard label="Permission" value="Owned events only" />
-        <StatusCard label="Invitations" value="Not sent in Build 240" />
+        <StatusCard label="Operations" value="Invites, changes & conflicts" />
       </div>
 
       {error ? (
@@ -231,7 +326,9 @@ export function GoogleCalendarPage() {
             <div className="flex items-start gap-3">
               <Plus className="mt-0.5 h-5 w-5 text-brand-gold" />
               <div>
-                <h2 className="font-semibold text-iron-950">Create calendar event</h2>
+                <h2 className="font-semibold text-iron-950">
+                  {editingEventId ? "Update calendar event" : "Create calendar event"}
+                </h2>
                 <p className="mt-1 text-sm text-iron-500">
                   Review the commitment before it is written to Google Calendar.
                 </p>
@@ -303,7 +400,68 @@ export function GoogleCalendarPage() {
                   className="mt-1 w-full resize-y rounded-md border border-iron-200 px-3 py-2"
                 />
               </label>
+              <label className="text-sm font-medium text-iron-800 md:col-span-2">
+                Attendee emails (optional)
+                <textarea
+                  value={attendees}
+                  onChange={(event) => {
+                    setAttendees(event.target.value);
+                    if (!event.target.value.trim()) setSendInvitations(false);
+                  }}
+                  rows={2}
+                  placeholder="mac@ironhousecontracting.com"
+                  className="mt-1 w-full resize-y rounded-md border border-iron-200 px-3 py-2"
+                />
+                <span className="mt-1 block text-xs font-normal text-iron-500">
+                  Separate multiple addresses with commas. Recipients must be verified before sending.
+                </span>
+              </label>
+              <label className="text-sm font-medium text-iron-800">
+                Reminder
+                <select
+                  value={reminderMinutes}
+                  onChange={(event) => setReminderMinutes(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-iron-200 px-3 py-2"
+                >
+                  <option value="">Google default</option>
+                  <option value="10">10 minutes before</option>
+                  <option value="30">30 minutes before</option>
+                  <option value="60">1 hour before</option>
+                  <option value="1440">1 day before</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-3 self-end rounded-md border border-iron-200 p-3 text-sm text-iron-800">
+                <input
+                  type="checkbox"
+                  checked={sendInvitations}
+                  disabled={!attendees.trim()}
+                  onChange={(event) => setSendInvitations(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                Send invitations and change notices
+              </label>
             </div>
+            {conflicts.length ? (
+              <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <strong>Scheduling conflict:</strong>
+                <ul className="mt-2 space-y-1">
+                  {conflicts.map((item) => (
+                    <li key={item.id}>
+                      {item.title}: {displayDate(item.start)} – {displayDate(item.end)}
+                    </li>
+                  ))}
+                </ul>
+                <label className="mt-3 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={conflictConfirmed}
+                    onChange={(event) => setConflictConfirmed(event.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  I reviewed the overlap and approve saving this event.
+                </label>
+              </div>
+            ) : null}
             <label className="mt-4 flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
               <input
                 type="checkbox"
@@ -312,25 +470,40 @@ export function GoogleCalendarPage() {
                 className="mt-0.5 h-4 w-4"
               />
               <span>
-                <strong>Event details reviewed.</strong> Create this event on my primary Google
-                Calendar. No attendee invitations will be sent.
+                <strong>Event details reviewed.</strong>{" "}
+                {editingEventId ? "Save these changes" : "Create this event"} on my primary Google
+                Calendar
+                {attendees.trim() ? " and send the confirmed attendee notifications." : "."}
               </span>
             </label>
-            <button
-              type="submit"
-              disabled={
-                creating ||
-                !eventConfirmed ||
-                !title.trim() ||
-                !start ||
-                !end ||
-                new Date(end) <= new Date(start)
-              }
-              className="mt-4 inline-flex items-center gap-2 rounded-md bg-iron-950 px-5 py-2.5 text-sm font-semibold text-white disabled:bg-iron-300"
-            >
-              <CalendarCheck2 className="h-4 w-4" />
-              {creating ? "Creating…" : "Create event"}
-            </button>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={
+                  creating ||
+                  !eventConfirmed ||
+                  (!!attendees.trim() && !sendInvitations) ||
+                  (conflicts.length > 0 && !conflictConfirmed) ||
+                  !title.trim() ||
+                  !start ||
+                  !end ||
+                  new Date(end) <= new Date(start)
+                }
+                className="inline-flex items-center gap-2 rounded-md bg-iron-950 px-5 py-2.5 text-sm font-semibold text-white disabled:bg-iron-300"
+              >
+                <CalendarCheck2 className="h-4 w-4" />
+                {creating ? "Saving…" : editingEventId ? "Save changes" : "Create event"}
+              </button>
+              {editingEventId ? (
+                <button
+                  type="button"
+                  onClick={resetEventForm}
+                  className="rounded-md border border-iron-300 px-4 py-2 text-sm font-semibold text-iron-700"
+                >
+                  Cancel editing
+                </button>
+              ) : null}
+            </div>
           </form>
 
           <div className="rounded-md border border-iron-100 bg-white p-5 shadow-sm">
@@ -360,17 +533,46 @@ export function GoogleCalendarPage() {
                             <MapPin className="h-3.5 w-3.5" /> {event.location}
                           </p>
                         ) : null}
+                        {event.attendees.length ? (
+                          <p className="mt-1 flex items-center gap-1.5 text-sm text-iron-500">
+                            <Users className="h-3.5 w-3.5" /> {event.attendees.length} attendee
+                            {event.attendees.length === 1 ? "" : "s"}
+                          </p>
+                        ) : null}
+                        {event.reminder_minutes.length ? (
+                          <p className="mt-1 flex items-center gap-1.5 text-sm text-iron-500">
+                            <Bell className="h-3.5 w-3.5" /> {event.reminder_minutes[0]} minute reminder
+                          </p>
+                        ) : null}
                       </div>
-                      {event.html_link ? (
-                        <a
-                          href={event.html_link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-sm font-semibold text-iron-700 underline"
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editEvent(event)}
+                          className="inline-flex items-center gap-1 rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold text-iron-700"
                         >
-                          Open in Google <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      ) : null}
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void cancelEvent(event)}
+                          disabled={cancellingEventId === event.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:text-iron-300"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />{" "}
+                          {cancellingEventId === event.id ? "Cancelling…" : "Cancel"}
+                        </button>
+                        {event.html_link ? (
+                          <a
+                            href={event.html_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-2 text-sm font-semibold text-iron-700 underline"
+                          >
+                            Open in Google <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -410,8 +612,8 @@ export function GoogleCalendarPage() {
       )}
 
       <p className="text-xs leading-5 text-iron-500">
-        Management-only. Build 240 does not send invitations, edit events, or delete calendar events.
-        External commitments remain subject to Iron House approval controls.
+        Management-only. Build 241 requires confirmation for invitations, event changes, conflict
+        overrides, cancellations, and external commitments.
       </p>
     </section>
   );
