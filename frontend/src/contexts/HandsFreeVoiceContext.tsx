@@ -57,6 +57,7 @@ type HandsFreeVoiceContextValue = {
 
 const HandsFreeVoiceContext = createContext<HandsFreeVoiceContextValue | null>(null);
 const RESTART_DELAY_MS = 250;
+const SPEECH_WATCHDOG_MS = 5000;
 
 export function interpretVoiceTranscript(transcript: string, awaitingCommand: boolean): VoiceInterpretation {
   const clean = transcript.trim();
@@ -93,6 +94,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const conversationIdRef = useRef<string | undefined>(undefined);
   const restartTimerRef = useRef<number | null>(null);
+  const speechWatchdogTimerRef = useRef<number | null>(null);
   const startRecognitionRef = useRef<() => void>(() => undefined);
   const handleTranscriptRef = useRef<(transcript: string) => void>(() => undefined);
   const lastSpokenRef = useRef<string | null>(null);
@@ -101,6 +103,13 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     if (restartTimerRef.current !== null) {
       window.clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
+    }
+  }, []);
+
+  const clearSpeechWatchdog = useCallback(() => {
+    if (speechWatchdogTimerRef.current !== null) {
+      window.clearTimeout(speechWatchdogTimerRef.current);
+      speechWatchdogTimerRef.current = null;
     }
   }, []);
 
@@ -127,12 +136,13 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
 
   const resumeListening = useCallback(
     (resumePhase: "listening" | "awaiting-command" = "listening") => {
+      clearSpeechWatchdog();
       pausedForSpeechRef.current = false;
       if (!enabledRef.current) return;
       setPhase(resumePhase);
       scheduleRestart();
     },
-    [scheduleRestart],
+    [clearSpeechWatchdog, scheduleRestart],
   );
 
   const speak = useCallback(
@@ -144,6 +154,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       }
 
       clearRestartTimer();
+      clearSpeechWatchdog();
       pausedForSpeechRef.current = true;
       stopRecognition();
       if (enabledRef.current) setPhase("speaking");
@@ -151,11 +162,20 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "en-CA";
-      utterance.onend = () => resumeListening(resumePhase);
-      utterance.onerror = () => resumeListening(resumePhase);
+      let completed = false;
+      const finishSpeech = () => {
+        if (completed) return;
+        completed = true;
+        utterance.onend = null;
+        utterance.onerror = null;
+        resumeListening(resumePhase);
+      };
+      utterance.onend = finishSpeech;
+      utterance.onerror = finishSpeech;
+      speechWatchdogTimerRef.current = window.setTimeout(finishSpeech, SPEECH_WATCHDOG_MS);
       window.speechSynthesis.speak(utterance);
     },
-    [clearRestartTimer, resumeListening, stopRecognition],
+    [clearRestartTimer, clearSpeechWatchdog, resumeListening, stopRecognition],
   );
 
   const submitVoiceCommand = useCallback(
@@ -192,6 +212,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         busyRef.current = false;
         pausedForSpeechRef.current = false;
         clearRestartTimer();
+        clearSpeechWatchdog();
         stopRecognition();
         setEnabled(false);
         setPhase("off");
@@ -232,7 +253,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         busyRef.current = false;
       }
     },
-    [clearRestartTimer, navigate, resumeListening, speak, stopRecognition],
+    [clearRestartTimer, clearSpeechWatchdog, navigate, resumeListening, speak, stopRecognition],
   );
 
   const handleTranscript = useCallback(
@@ -305,12 +326,13 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     busyRef.current = false;
     pausedForSpeechRef.current = false;
     clearRestartTimer();
+    clearSpeechWatchdog();
     stopRecognition();
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setEnabled(false);
     setPhase("off");
     setError(null);
-  }, [clearRestartTimer, stopRecognition]);
+  }, [clearRestartTimer, clearSpeechWatchdog, stopRecognition]);
 
   const enable = useCallback(() => {
     if (!allowed) return;
@@ -338,10 +360,11 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     () => () => {
       enabledRef.current = false;
       clearRestartTimer();
+      clearSpeechWatchdog();
       stopRecognition();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     },
-    [clearRestartTimer, stopRecognition],
+    [clearRestartTimer, clearSpeechWatchdog, stopRecognition],
   );
 
   const value = useMemo(
