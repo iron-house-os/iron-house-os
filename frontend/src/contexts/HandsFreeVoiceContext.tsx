@@ -56,7 +56,8 @@ type HandsFreeVoiceContextValue = {
 };
 
 const HandsFreeVoiceContext = createContext<HandsFreeVoiceContextValue | null>(null);
-const RESTART_DELAY_MS = 250;
+const DEFAULT_RESTART_DELAY_MS = 250;
+const APPLE_RESTART_DELAY_MS = 700;
 const SPEECH_WATCHDOG_MS = 5000;
 
 export function interpretVoiceTranscript(transcript: string, awaitingCommand: boolean): VoiceInterpretation {
@@ -77,9 +78,16 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 }
 
+function isAppleTouchBrowser(): boolean {
+  const platform = navigator.platform ?? "";
+  const userAgent = navigator.userAgent ?? "";
+  return /iPad|iPhone|iPod/i.test(userAgent) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const appleTouchBrowser = useMemo(() => isAppleTouchBrowser(), []);
   const allowed =
     Boolean(user) &&
     !user?.password_reset_required &&
@@ -116,17 +124,20 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const scheduleRestart = useCallback(() => {
     clearRestartTimer();
     if (!enabledRef.current || pausedForSpeechRef.current) return;
+    const delay = appleTouchBrowser ? APPLE_RESTART_DELAY_MS : DEFAULT_RESTART_DELAY_MS;
     restartTimerRef.current = window.setTimeout(() => {
       restartTimerRef.current = null;
       startRecognitionRef.current();
-    }, RESTART_DELAY_MS);
-  }, [clearRestartTimer]);
+    }, delay);
+  }, [appleTouchBrowser, clearRestartTimer]);
 
   const stopRecognition = useCallback(() => {
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
     if (!recognition) return;
     recognition.onend = null;
+    recognition.onerror = null;
+    recognition.onresult = null;
     try {
       recognition.stop();
     } catch {
@@ -178,6 +189,23 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     [clearRestartTimer, clearSpeechWatchdog, resumeListening, stopRecognition],
   );
 
+  const completeNavigation = useCallback(
+    (path: string | number, label: string) => {
+      awaitingCommandRef.current = false;
+      setError(null);
+      if (typeof path === "number") navigate(path);
+      else navigate(path);
+
+      if (appleTouchBrowser) {
+        lastSpokenRef.current = `Opening ${label}.`;
+        resumeListening();
+      } else {
+        speak(`Opening ${label}.`);
+      }
+    },
+    [appleTouchBrowser, navigate, resumeListening, speak],
+  );
+
   const submitVoiceCommand = useCallback(
     async (command: string) => {
       const clean = command.trim();
@@ -189,13 +217,11 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         setError(null);
 
         if (control === "back") {
-          navigate(-1);
-          speak("Going back.");
+          completeNavigation(-1, "the previous page");
           return;
         }
         if (control === "home") {
-          navigate("/dashboard");
-          speak("Opening Dashboard.");
+          completeNavigation("/dashboard", "Dashboard");
           return;
         }
         if (control === "help") {
@@ -216,16 +242,13 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         stopRecognition();
         setEnabled(false);
         setPhase("off");
-        speak("Hey Chat is off.");
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
         return;
       }
 
       const navigation = resolveVoiceNavigation(clean);
       if (navigation) {
-        awaitingCommandRef.current = false;
-        setError(null);
-        navigate(navigation.path);
-        speak(`Opening ${navigation.label}.`);
+        completeNavigation(navigation.path, navigation.label);
         return;
       }
 
@@ -253,7 +276,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         busyRef.current = false;
       }
     },
-    [clearRestartTimer, clearSpeechWatchdog, navigate, resumeListening, speak, stopRecognition],
+    [clearRestartTimer, clearSpeechWatchdog, completeNavigation, resumeListening, speak, stopRecognition],
   );
 
   const handleTranscript = useCallback(
@@ -264,12 +287,17 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       if (interpretation.kind === "wake") {
         awaitingCommandRef.current = true;
         setError(null);
-        speak("I’m listening.", "awaiting-command");
+        if (appleTouchBrowser) {
+          setPhase("awaiting-command");
+          scheduleRestart();
+        } else {
+          speak("I’m listening.", "awaiting-command");
+        }
         return;
       }
       void submitVoiceCommand(interpretation.command);
     },
-    [speak, submitVoiceCommand],
+    [appleTouchBrowser, scheduleRestart, speak, submitVoiceCommand],
   );
   handleTranscriptRef.current = handleTranscript;
 
@@ -285,14 +313,25 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     }
 
     const recognition = new Recognition();
-    recognition.continuous = true;
+    recognition.continuous = !appleTouchBrowser;
     recognition.interimResults = false;
     recognition.lang = "en-CA";
     recognition.onresult = (event) => {
       const result = event.results[event.results.length - 1];
       handleTranscriptRef.current(result[0].transcript);
+      if (appleTouchBrowser && recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        recognition.onend = null;
+        try {
+          recognition.stop();
+        } catch {
+          // Safari may already be ending this single recognition session.
+        }
+        if (enabledRef.current && !pausedForSpeechRef.current) scheduleRestart();
+      }
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         enabledRef.current = false;
         setEnabled(false);
@@ -300,7 +339,10 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         setError("Microphone permission was denied. Allow microphone access in the browser, then enable Hey Chat again.");
         return;
       }
-      setError("Microphone listening was interrupted. Hey Chat will retry while this tab remains open.");
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        setError("Microphone listening was interrupted. Hey Chat will retry while this tab remains open.");
+      }
+      if (enabledRef.current && !pausedForSpeechRef.current) scheduleRestart();
     };
     recognition.onend = () => {
       if (recognitionRef.current === recognition) recognitionRef.current = null;
@@ -317,7 +359,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       setError("Unable to start microphone listening. Hey Chat will retry while this tab remains open.");
       scheduleRestart();
     }
-  }, [scheduleRestart]);
+  }, [appleTouchBrowser, scheduleRestart]);
   startRecognitionRef.current = startRecognition;
 
   const disable = useCallback(() => {
@@ -439,7 +481,7 @@ function HandsFreeVoiceControl({
         ? "Working on your request"
         : phase === "speaking"
           ? "Speaking the answer"
-          : "Listening for “Hey Chat”";
+          : "Listening for ‘Hey Chat’";
   const StatusIcon = phase === "thinking" ? LoaderCircle : phase === "speaking" ? Volume2 : Bot;
 
   return (
