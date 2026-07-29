@@ -1,3 +1,4 @@
+import { Profiler } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
@@ -37,6 +38,10 @@ import { SafetyProgramPage } from "./pages/SafetyProgramPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
+import {
+  isPerformanceObservabilityEnabled,
+  observeCoreRender,
+} from "./observability/performance";
 
 function EmployeePortalRoute() { return <EmployeePortalPage section={useParams().section} />; }
 function ForemanPortalRoute() { return <ForemanPortalPage section={useParams().section} />; }
@@ -113,7 +118,13 @@ export function App() {
   return (
     <AuthProvider>
       <HandsFreeVoiceProvider>
-        <AuthenticatedApp />
+        {isPerformanceObservabilityEnabled() ? (
+          <Profiler id="core-modules" onRender={observeCoreRender}>
+            <AuthenticatedApp />
+          </Profiler>
+        ) : (
+          <AuthenticatedApp />
+        )}
       </HandsFreeVoiceProvider>
     </AuthProvider>
   );

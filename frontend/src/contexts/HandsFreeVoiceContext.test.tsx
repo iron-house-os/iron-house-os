@@ -32,6 +32,10 @@ import {
   interpretVoiceTranscript,
   isHandsFreeVoiceFeatureEnabled,
 } from "./HandsFreeVoiceContext";
+import {
+  getPerformanceSnapshot,
+  resetPerformanceObservabilityForTests,
+} from "../observability/performance";
 import { resolveVoiceControl } from "../utils/voiceControls";
 import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 
@@ -60,6 +64,10 @@ class MockSpeechRecognition {
 
   end() {
     this.onend?.();
+  }
+
+  fail(error: string) {
+    this.onerror?.({ error });
   }
 }
 
@@ -142,6 +150,7 @@ describe("HandsFreeVoiceProvider", () => {
   beforeEach(() => {
     vi.stubEnv("VITE_HEY_CHAT_VOICE_ENABLED", "true");
     testState.role = "admin";
+    resetPerformanceObservabilityForTests();
     testState.send.mockReset();
     testState.send.mockResolvedValue({
       conversation: { id: "conversation-1" },
@@ -362,5 +371,46 @@ describe("HandsFreeVoiceProvider", () => {
     });
 
     expect(spoken).not.toContain("This late answer must not be spoken.");
+  });
+
+  it("releases voice resources when the page moves to the background", () => {
+    const view = renderProvider();
+    fireEvent.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
+    expect(getPerformanceSnapshot().voice.resources.active_recognition_sessions).toBe(1);
+
+    act(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+
+    expect(screen.getByRole("button", { name: "Enable hands-free Hey Chat" })).toBeInTheDocument();
+    expect(MockSpeechRecognition.instances[0].abort).toHaveBeenCalledOnce();
+    expect(getPerformanceSnapshot().voice.resources).toEqual({
+      active_recognition_sessions: 0,
+      active_restart_timers: 0,
+      active_speech_watchdogs: 0,
+      active_requests: 0,
+    });
+    view.unmount();
+  });
+
+  it("bounds repeated recognition retries and never exceeds one active session", () => {
+    vi.useFakeTimers();
+    renderProvider();
+    fireEvent.click(screen.getByRole("button", { name: "Enable hands-free Hey Chat" }));
+
+    const retryDelays = [250, 500, 1000, 2000, 4000];
+    for (const delay of retryDelays) {
+      act(() => MockSpeechRecognition.instances.at(-1)?.end());
+      act(() => vi.advanceTimersByTime(delay));
+    }
+    act(() => MockSpeechRecognition.instances.at(-1)?.end());
+
+    expect(screen.getByText(/stopped after repeated failures/i)).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getPerformanceSnapshot().voice.maximum_active_recognition_sessions).toBe(1);
+    expect(getPerformanceSnapshot().voice.resources).toEqual({
+      active_recognition_sessions: 0,
+      active_restart_timers: 0,
+      active_speech_watchdogs: 0,
+      active_requests: 0,
+    });
   });
 });
