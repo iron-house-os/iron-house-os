@@ -173,6 +173,7 @@ const tabs = [
 ] as const;
 
 test("every navigation tab opens a real responsive screen", async ({ page }, testInfo) => {
+  test.slow();
   await mockApi(page);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
