@@ -26,6 +26,18 @@ export type SupplierQuoteCreate = {
   notes?: string | null;
 };
 
+export type SupplierQuoteRecord = SupplierQuoteCreate & {
+  id: string;
+  project_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupplierQuoteList = {
+  items: SupplierQuoteRecord[];
+  total: number;
+};
+
 export type QuoteComparisonLine = {
   line_item_code?: string | null;
   line_item_description: string;
@@ -95,6 +107,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const quotesApi = {
+  list: (projectId: string) =>
+    request<SupplierQuoteList>(`/quotes?project_id=${encodeURIComponent(projectId)}`),
+  create: (projectId: string, quote: SupplierQuoteCreate) =>
+    request<SupplierQuoteRecord>("/quotes", {
+      method: "POST",
+      body: JSON.stringify({ ...quote, project_id: projectId }),
+    }),
+  update: (quoteId: string, quote: SupplierQuoteCreate) =>
+    request<SupplierQuoteRecord>(`/quotes/${quoteId}`, {
+      method: "PATCH",
+      body: JSON.stringify(quote),
+    }),
   compare: (quotes: SupplierQuoteCreate[]) =>
     request<QuoteComparisonResponse>("/quotes/compare", {
       method: "POST",

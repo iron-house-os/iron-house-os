@@ -36,6 +36,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     tenders = relationship("Tender", back_populates="project")
     rfqs = relationship("RFQ", back_populates="project")
     rfq_packages = relationship("RFQPackage", back_populates="project")
+    quotes = relationship("Quote", back_populates="project")
     bids = relationship("Bid", back_populates="project")
     drawings = relationship("Drawing", back_populates="project")
     takeoffs = relationship("Takeoff", back_populates="project")

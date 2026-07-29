@@ -1,5 +1,5 @@
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -7,6 +7,7 @@ import {
   QuoteEstimateSelectionResponse,
   quotesApi,
   SupplierQuoteCreate,
+  SupplierQuoteRecord,
 } from "../api/quotes";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
 import { readEffectiveProjectContext } from "../utils/projectContext";
@@ -17,7 +18,9 @@ const moneyFormatter = new Intl.NumberFormat("en-CA", {
   maximumFractionDigits: 2,
 });
 
-function blankQuote(): SupplierQuoteCreate {
+type SupplierQuoteDraft = SupplierQuoteCreate & Partial<Pick<SupplierQuoteRecord, "id">>;
+
+function blankQuote(): SupplierQuoteDraft {
   return {
     supplier_name: "",
     line_item_code: "",
@@ -39,7 +42,7 @@ export function QuoteComparisonPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const projectContext = readEffectiveProjectContext(location.search);
-  const [quotes, setQuotes] = useState<SupplierQuoteCreate[]>([blankQuote(), blankQuote()]);
+  const [quotes, setQuotes] = useState<SupplierQuoteDraft[]>([blankQuote(), blankQuote()]);
   const [result, setResult] = useState<QuoteComparisonResponse | null>(null);
   const [selection, setSelection] = useState<QuoteEstimateSelectionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,6 +52,29 @@ export function QuoteComparisonPage() {
     () => quotes.filter((quote) => quote.supplier_name && quote.scope && quote.amount > 0).length,
     [quotes],
   );
+
+  useEffect(() => {
+    if (!projectContext.projectId) return;
+    let active = true;
+    setIsLoading(true);
+    setError(null);
+    void quotesApi
+      .list(projectContext.projectId)
+      .then((list) => {
+        if (active && list.items.length) setQuotes(list.items);
+      })
+      .catch((currentError) => {
+        if (active) {
+          setError(currentError instanceof Error ? currentError.message : "Unable to load project quotes");
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectContext.projectId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,9 +96,19 @@ export function QuoteComparisonPage() {
           selection_reason: quote.selection_reason?.trim() || null,
           notes: quote.notes?.trim() || null,
         }));
+      const comparisonQuotes = projectContext.projectId
+        ? await Promise.all(
+            cleanQuotes.map(({ id, ...quote }) =>
+              id
+                ? quotesApi.update(id, quote)
+                : quotesApi.create(projectContext.projectId as string, quote),
+            ),
+          )
+        : cleanQuotes;
+      if (projectContext.projectId) setQuotes(comparisonQuotes);
       const [comparisonResult, selectionResult] = await Promise.all([
-        quotesApi.compare(cleanQuotes),
-        quotesApi.estimateSelection(cleanQuotes),
+        quotesApi.compare(comparisonQuotes),
+        quotesApi.estimateSelection(comparisonQuotes),
       ]);
       setResult(comparisonResult);
       setSelection(selectionResult);
@@ -83,7 +119,7 @@ export function QuoteComparisonPage() {
     }
   }
 
-  function updateQuote(index: number, patch: Partial<SupplierQuoteCreate>) {
+  function updateQuote(index: number, patch: Partial<SupplierQuoteDraft>) {
     setQuotes((current) => current.map((quote, quoteIndex) => (quoteIndex === index ? { ...quote, ...patch } : quote)));
   }
 
@@ -128,7 +164,13 @@ export function QuoteComparisonPage() {
             <div key={index} className="rounded-md border border-iron-100 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-iron-950">Quote {index + 1}</h2>
-                <button type="button" onClick={() => removeQuote(index)} className="inline-flex items-center gap-2 text-sm text-red-600" disabled={quotes.length <= 1}>
+                <button
+                  type="button"
+                  onClick={() => removeQuote(index)}
+                  className="inline-flex items-center gap-2 text-sm text-red-600"
+                  disabled={quotes.length <= 1 || Boolean(quote.id)}
+                  title={quote.id ? "Saved quotes remain in the project record; mark the quote rejected instead." : undefined}
+                >
                   <Trash2 className="h-4 w-4" />
                   Remove
                 </button>
@@ -184,7 +226,7 @@ export function QuoteComparisonPage() {
         {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
         <button type="submit" className="rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white" disabled={isLoading}>
-          {isLoading ? "Comparing..." : "Compare and qualify quotes"}
+          {isLoading ? "Saving and comparing..." : projectContext.projectId ? "Save and compare quotes" : "Compare and qualify quotes"}
         </button>
       </form>
 
