@@ -87,9 +87,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Build production frontend
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build disposable acceptance frontend
+        env:
+          VITE_HEY_CHAT_VOICE_ENABLED: "true"
+          VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
         run: npm run build
       - name: Run browser release gate
         run: npm run test:e2e
