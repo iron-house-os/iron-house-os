@@ -77,8 +77,21 @@ describe("RFQBuilderPage", () => {
         const body = init?.body ? JSON.parse(String(init.body)) : null;
         requests.push({ url, method, body });
 
+        if (url.endsWith("/rfqs") && method === "POST") {
+          return jsonResponse(
+            {
+              ...packageState,
+              ...body,
+              id: "rfq-created",
+            },
+            201,
+          );
+        }
         if (url.endsWith("/rfqs") && method === "GET") {
           return jsonResponse({ items: [packageState], total: 1 });
+        }
+        if (url.includes("/rfqs?project_id=") && method === "GET") {
+          return jsonResponse({ items: [], total: 0 });
         }
         if (url.endsWith("/rfqs/rfq-1/readiness")) {
           return jsonResponse(readiness());
@@ -371,5 +384,66 @@ describe("RFQBuilderPage", () => {
           && request.method === "POST",
       ),
     ).toBe(true);
+  });
+
+  it("filters and creates RFQs with the routed project id", async () => {
+    const user = userEvent.setup();
+    const projectId = "11111111-1111-4111-8111-111111111111";
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/rfq-builder?projectId=${projectId}&projectName=King%20George%20Utility%20Upgrade`,
+        ]}
+      >
+        <Routes>
+          <Route path="/rfq-builder" element={<RFQBuilderPage />} />
+          <Route path="/rfq-builder/:rfqPackageId" element={<RFQBuilderPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("No RFQ packages yet.");
+    expect(
+      requests.some(
+        (request) =>
+          request.method === "GET"
+          && request.url.endsWith(`/rfqs?project_id=${projectId}`),
+      ),
+    ).toBe(true);
+    expect(screen.getByLabelText("Project name")).toHaveValue(
+      "King George Utility Upgrade",
+    );
+
+    await user.type(
+      screen.getByLabelText("Package title"),
+      "Scoped stormwater RFQ",
+    );
+    await user.type(
+      screen.getByLabelText("Package scope"),
+      "Supply stormwater pipe and fittings.",
+    );
+    await user.click(screen.getByRole("button", { name: "Create package" }));
+
+    await waitFor(() => {
+      expect(
+        requests.some(
+          (request) =>
+            request.method === "POST"
+            && request.url.endsWith("/rfqs")
+            && (request.body as Record<string, unknown>).project_id === projectId,
+        ),
+      ).toBe(true);
+    });
+    expect(
+      requests.find(
+        (request) =>
+          request.method === "POST" && request.url.endsWith("/rfqs"),
+      )?.body,
+    ).toEqual(
+      expect.objectContaining({
+        project_id: projectId,
+        project_name: "King George Utility Upgrade",
+      }),
+    );
   });
 });
