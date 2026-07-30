@@ -11,6 +11,8 @@ DigitalOcean web console.
   Release readiness run ID.
 - The deployment wrapper rejects the wrong host, repository, SHA, dirty
   checkout, missing evidence, and commits not present on `origin/main`.
+- The wrapper discovers and pins the running production Docker Compose project
+  name before cutover, preventing a parallel stack from being created.
 - The runner account has passwordless sudo access only to the validated
   production deployment wrapper.
 - The production workflow uses GitHub's `production` environment as the human
