@@ -54,6 +54,27 @@ def test_staging_nginx_template_cannot_target_production_by_default() -> None:
     assert "os.ironhousecivil.com" not in nginx
 
 
+def test_live_staging_deploy_is_isolated_and_keeps_secrets_on_host() -> None:
+    deploy = (ROOT / "ops/digitalocean/staging-deploy.sh").read_text()
+
+    assert 'staging_host" != "staging.os.ironhousecivil.com"' in deploy
+    assert "docker-compose.production.yml" not in deploy
+    assert "/etc/iron-house-os/production.env" in deploy
+    assert "Refusing to use a production environment file for staging." in deploy
+    assert "com.docker.compose.project=iron-house-os-staging" in deploy
+    assert "Port 8081 is already in use by a non-staging workload." in deploy
+    assert "openssl rand" in deploy
+    assert "chmod 0600" in deploy
+    assert "IRON_HOUSE_CHAT_ENABLED=false" in deploy
+    assert "GOOGLE_CALENDAR_ENABLED=false" in deploy
+    assert "VITE_HEY_CHAT_VOICE_ENABLED=true" in deploy
+    assert "VITE_PERFORMANCE_OBSERVABILITY_ENABLED=true" in deploy
+    assert "certbot certonly --nginx" in deploy
+    assert "--agree-tos" not in deploy
+    assert "production_comparison" in deploy
+    assert "read_only" in deploy
+
+
 def test_release_workflow_uses_disposable_staging_and_immutable_evidence() -> None:
     workflow = (ROOT / ".github/workflows/release-readiness.yml").read_text()
 
