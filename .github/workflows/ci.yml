@@ -3,9 +3,9 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, release/v1-staging]
   pull_request:
-    branches: [main]
+    branches: [main, release/v1-staging]
 
 jobs:
   backend:
@@ -43,6 +43,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Verify OS visual design lock
         run: python ../scripts/check_visual_design_lock.py
+      - name: Verify React Router RSC security boundary
+        run: npm run security:rsc-boundary
       - name: Install frontend dependencies
         run: npm ci
       - name: Lint frontend
@@ -68,9 +70,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Build production frontend
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build disposable acceptance frontend
+        env:
+          VITE_HEY_CHAT_VOICE_ENABLED: "true"
+          VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
         run: npm run build
       - name: Run browser release gate
         run: npm run test:e2e

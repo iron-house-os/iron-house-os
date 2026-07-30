@@ -25,9 +25,10 @@ export const ironHouseChatApi = {
     body.append("export", file);
     return apiFetch(`${API_BASE_URL}/iron-house-chat/brain/import-chatgpt`, { method: "POST", body }).then(read<MemoryImportResult>);
   },
-  send: (message: string, conversationId?: string) => apiFetch(`${API_BASE_URL}/iron-house-chat/messages`, {
+  send: (message: string, conversationId?: string, signal?: AbortSignal) => apiFetch(`${API_BASE_URL}/iron-house-chat/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, conversation_id: conversationId ?? null }),
+    signal,
   }).then(read<ChatReply>),
 };

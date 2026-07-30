@@ -12,6 +12,14 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { ironHouseChatApi } from "../api/ironHouseChat";
+import {
+  observeVoiceCommand,
+  observeVoiceFailure,
+  observeVoiceRecognizerStart,
+  observeVoiceRecognizerStop,
+  observeVoiceRestartScheduled,
+  setVoiceResource,
+} from "../observability/performance";
 import { resolveVoiceControl } from "../utils/voiceControls";
 import { resolveVoiceNavigation } from "../utils/voiceNavigation";
 import { useAuth } from "./AuthContext";
@@ -33,6 +41,7 @@ type SpeechRecognitionLike = {
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
 };
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
@@ -56,8 +65,16 @@ type HandsFreeVoiceContextValue = {
 };
 
 const HandsFreeVoiceContext = createContext<HandsFreeVoiceContextValue | null>(null);
-const RESTART_DELAY_MS = 250;
-const SPEECH_WATCHDOG_MS = 5000;
+const DEFAULT_RESTART_DELAY_MS = 250;
+const APPLE_RESTART_DELAY_MS = 700;
+const MIN_SPEECH_WATCHDOG_MS = 5000;
+const MAX_SPEECH_WATCHDOG_MS = 30000;
+const MAX_RESTART_DELAY_MS = 4000;
+const MAX_CONSECUTIVE_RESTART_FAILURES = 5;
+
+export function isHandsFreeVoiceFeatureEnabled(value = import.meta.env.VITE_HEY_CHAT_VOICE_ENABLED): boolean {
+  return ["true", "1", "on", "yes"].includes(value?.trim().toLowerCase() ?? "");
+}
 
 export function interpretVoiceTranscript(transcript: string, awaitingCommand: boolean): VoiceInterpretation {
   const clean = transcript.trim();
@@ -77,10 +94,25 @@ function recognitionConstructor(): SpeechRecognitionConstructor | undefined {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 }
 
+function isAppleTouchBrowser(): boolean {
+  const platform = navigator.platform ?? "";
+  const userAgent = navigator.userAgent ?? "";
+  return /iPad|iPhone|iPod/i.test(userAgent) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function detachRecognitionHandlers(recognition: SpeechRecognitionLike) {
+  recognition.onend = null;
+  recognition.onerror = null;
+  recognition.onresult = null;
+}
+
 export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const appleTouchBrowser = useMemo(() => isAppleTouchBrowser(), []);
+  const voiceFeatureEnabled = isHandsFreeVoiceFeatureEnabled();
   const allowed =
+    voiceFeatureEnabled &&
     Boolean(user) &&
     !user?.password_reset_required &&
     (user?.role === "admin" || user?.role === "operations_manager");
@@ -95,6 +127,11 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
   const conversationIdRef = useRef<string | undefined>(undefined);
   const restartTimerRef = useRef<number | null>(null);
   const speechWatchdogTimerRef = useRef<number | null>(null);
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechGenerationRef = useRef(0);
+  const requestGenerationRef = useRef(0);
+  const pendingRequestAbortRef = useRef<AbortController | null>(null);
+  const restartFailureCountRef = useRef(0);
   const startRecognitionRef = useRef<() => void>(() => undefined);
   const handleTranscriptRef = useRef<(transcript: string) => void>(() => undefined);
   const lastSpokenRef = useRef<string | null>(null);
@@ -103,6 +140,7 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     if (restartTimerRef.current !== null) {
       window.clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
+      setVoiceResource("active_restart_timers", false);
     }
   }, []);
 
@@ -110,25 +148,67 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     if (speechWatchdogTimerRef.current !== null) {
       window.clearTimeout(speechWatchdogTimerRef.current);
       speechWatchdogTimerRef.current = null;
+      setVoiceResource("active_speech_watchdogs", false);
     }
   }, []);
 
-  const scheduleRestart = useCallback(() => {
+  const cancelPendingRequest = useCallback(() => {
+    requestGenerationRef.current += 1;
+    pendingRequestAbortRef.current?.abort();
+    pendingRequestAbortRef.current = null;
+    setVoiceResource("active_requests", false);
+  }, []);
+
+  const cancelSpeech = useCallback(() => {
+    speechGenerationRef.current += 1;
+    clearSpeechWatchdog();
+    const utterance = activeUtteranceRef.current;
+    activeUtteranceRef.current = null;
+    if (utterance) {
+      utterance.onend = null;
+      utterance.onerror = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, [clearSpeechWatchdog]);
+
+  const scheduleRestart = useCallback((failure = false) => {
     clearRestartTimer();
     if (!enabledRef.current || pausedForSpeechRef.current) return;
+    if (failure) {
+      restartFailureCountRef.current += 1;
+      if (restartFailureCountRef.current > MAX_CONSECUTIVE_RESTART_FAILURES) {
+        enabledRef.current = false;
+        setEnabled(false);
+        setPhase("error");
+        setError("Microphone listening stopped after repeated failures. Enable Hey Chat to try again.");
+        observeVoiceFailure();
+        return;
+      }
+    } else {
+      restartFailureCountRef.current = 0;
+    }
+    const baseDelay = appleTouchBrowser ? APPLE_RESTART_DELAY_MS : DEFAULT_RESTART_DELAY_MS;
+    const delay = failure
+      ? Math.min(MAX_RESTART_DELAY_MS, baseDelay * 2 ** (restartFailureCountRef.current - 1))
+      : baseDelay;
+    observeVoiceRestartScheduled();
+    setVoiceResource("active_restart_timers", true);
     restartTimerRef.current = window.setTimeout(() => {
       restartTimerRef.current = null;
+      setVoiceResource("active_restart_timers", false);
       startRecognitionRef.current();
-    }, RESTART_DELAY_MS);
-  }, [clearRestartTimer]);
+    }, delay);
+  }, [appleTouchBrowser, clearRestartTimer]);
 
   const stopRecognition = useCallback(() => {
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
     if (!recognition) return;
-    recognition.onend = null;
+    observeVoiceRecognizerStop();
+    detachRecognitionHandlers(recognition);
     try {
-      recognition.stop();
+      if (recognition.abort) recognition.abort();
+      else recognition.stop();
     } catch {
       // A browser may already have ended the recognition session.
     }
@@ -154,34 +234,70 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       }
 
       clearRestartTimer();
-      clearSpeechWatchdog();
+      cancelSpeech();
       pausedForSpeechRef.current = true;
       stopRecognition();
       if (enabledRef.current) setPhase("speaking");
 
-      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "en-CA";
+      const speechGeneration = speechGenerationRef.current;
+      activeUtteranceRef.current = utterance;
       let completed = false;
-      const finishSpeech = () => {
-        if (completed) return;
+      const finishSpeech = (watchdogExpired = false) => {
+        if (
+          completed ||
+          speechGenerationRef.current !== speechGeneration ||
+          activeUtteranceRef.current !== utterance
+        ) {
+          return;
+        }
         completed = true;
         utterance.onend = null;
         utterance.onerror = null;
+        activeUtteranceRef.current = null;
+        clearSpeechWatchdog();
+        if (watchdogExpired) window.speechSynthesis.cancel();
         resumeListening(resumePhase);
       };
-      utterance.onend = finishSpeech;
-      utterance.onerror = finishSpeech;
-      speechWatchdogTimerRef.current = window.setTimeout(finishSpeech, SPEECH_WATCHDOG_MS);
+      utterance.onend = () => finishSpeech();
+      utterance.onerror = () => finishSpeech();
+      const watchdogMs = Math.min(
+        MAX_SPEECH_WATCHDOG_MS,
+        Math.max(MIN_SPEECH_WATCHDOG_MS, text.length * 80),
+      );
+      speechWatchdogTimerRef.current = window.setTimeout(() => finishSpeech(true), watchdogMs);
+      setVoiceResource("active_speech_watchdogs", true);
       window.speechSynthesis.speak(utterance);
     },
-    [clearRestartTimer, clearSpeechWatchdog, resumeListening, stopRecognition],
+    [cancelSpeech, clearRestartTimer, clearSpeechWatchdog, resumeListening, stopRecognition],
+  );
+
+  const completeNavigation = useCallback(
+    (path: string | number, label: string) => {
+      awaitingCommandRef.current = false;
+      setError(null);
+      if (typeof path === "number") navigate(path);
+      else navigate(path);
+
+      if (appleTouchBrowser) {
+        lastSpokenRef.current = `Opening ${label}.`;
+        resumeListening();
+      } else {
+        speak(`Opening ${label}.`);
+      }
+    },
+    [appleTouchBrowser, navigate, resumeListening, speak],
   );
 
   const submitVoiceCommand = useCallback(
     async (command: string) => {
       const clean = command.trim();
       if (!clean || busyRef.current) return;
+      const commandStarted = performance.now();
+      const completeCommandObservation = () => {
+        observeVoiceCommand(performance.now() - commandStarted);
+      };
 
       const control = resolveVoiceControl(clean);
       if (control) {
@@ -189,43 +305,45 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
         setError(null);
 
         if (control === "back") {
-          navigate(-1);
-          speak("Going back.");
+          completeNavigation(-1, "the previous page");
+          completeCommandObservation();
           return;
         }
         if (control === "home") {
-          navigate("/dashboard");
-          speak("Opening Dashboard.");
+          completeNavigation("/dashboard", "Dashboard");
+          completeCommandObservation();
           return;
         }
         if (control === "help") {
           speak("You can ask a read-only question, open an OS module, go back, go home, repeat the last answer, or stop listening.");
+          completeCommandObservation();
           return;
         }
         if (control === "repeat") {
           const previous = lastSpokenRef.current;
           speak(previous ?? "There is no previous response to repeat.");
+          completeCommandObservation();
           return;
         }
 
         enabledRef.current = false;
         busyRef.current = false;
         pausedForSpeechRef.current = false;
+        cancelPendingRequest();
         clearRestartTimer();
-        clearSpeechWatchdog();
+        cancelSpeech();
         stopRecognition();
         setEnabled(false);
         setPhase("off");
-        speak("Hey Chat is off.");
+        if (!appleTouchBrowser) speak("Hey Chat is off.");
+        completeCommandObservation();
         return;
       }
 
       const navigation = resolveVoiceNavigation(clean);
       if (navigation) {
-        awaitingCommandRef.current = false;
-        setError(null);
-        navigate(navigation.path);
-        speak(`Opening ${navigation.label}.`);
+        completeNavigation(navigation.path, navigation.label);
+        completeCommandObservation();
         return;
       }
 
@@ -236,9 +354,21 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       stopRecognition();
       setError(null);
       setPhase("thinking");
+      const requestAbort = new AbortController();
+      const requestGeneration = requestGenerationRef.current + 1;
+      requestGenerationRef.current = requestGeneration;
+      pendingRequestAbortRef.current = requestAbort;
+      setVoiceResource("active_requests", true);
 
       try {
-        const reply = await ironHouseChatApi.send(clean, conversationIdRef.current);
+        const reply = await ironHouseChatApi.send(clean, conversationIdRef.current, requestAbort.signal);
+        if (
+          requestAbort.signal.aborted ||
+          !enabledRef.current ||
+          requestGenerationRef.current !== requestGeneration
+        ) {
+          return;
+        }
         conversationIdRef.current = reply.conversation.id;
         if (reply.assistant_message.status === "completed") {
           speak(reply.assistant_message.content);
@@ -246,14 +376,30 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
           resumeListening();
         }
       } catch (reason) {
+        if (requestAbort.signal.aborted || (reason instanceof DOMException && reason.name === "AbortError")) {
+          return;
+        }
         const message = reason instanceof Error ? reason.message : "Unable to reach Iron House Chat.";
+        observeVoiceFailure();
         setError(message);
         speak("I couldn’t complete that request. Check Iron House Chat for details.");
       } finally {
-        busyRef.current = false;
+        if (pendingRequestAbortRef.current === requestAbort) pendingRequestAbortRef.current = null;
+        setVoiceResource("active_requests", false);
+        if (requestGenerationRef.current === requestGeneration) busyRef.current = false;
+        completeCommandObservation();
       }
     },
-    [clearRestartTimer, clearSpeechWatchdog, navigate, resumeListening, speak, stopRecognition],
+    [
+      appleTouchBrowser,
+      cancelPendingRequest,
+      cancelSpeech,
+      clearRestartTimer,
+      completeNavigation,
+      resumeListening,
+      speak,
+      stopRecognition,
+    ],
   );
 
   const handleTranscript = useCallback(
@@ -264,12 +410,17 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
       if (interpretation.kind === "wake") {
         awaitingCommandRef.current = true;
         setError(null);
-        speak("I’m listening.", "awaiting-command");
+        if (appleTouchBrowser) {
+          setPhase("awaiting-command");
+          scheduleRestart();
+        } else {
+          speak("I’m listening.", "awaiting-command");
+        }
         return;
       }
       void submitVoiceCommand(interpretation.command);
     },
-    [speak, submitVoiceCommand],
+    [appleTouchBrowser, scheduleRestart, speak, submitVoiceCommand],
   );
   handleTranscriptRef.current = handleTranscript;
 
@@ -285,39 +436,69 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     }
 
     const recognition = new Recognition();
-    recognition.continuous = true;
+    recognition.continuous = !appleTouchBrowser;
     recognition.interimResults = false;
     recognition.lang = "en-CA";
     recognition.onresult = (event) => {
       const result = event.results[event.results.length - 1];
+      if (appleTouchBrowser && recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        observeVoiceRecognizerStop();
+        detachRecognitionHandlers(recognition);
+        try {
+          if (recognition.abort) recognition.abort();
+          else recognition.stop();
+        } catch {
+          // Safari may already be ending this single recognition session.
+        }
+      }
+      restartFailureCountRef.current = 0;
       handleTranscriptRef.current(result[0].transcript);
+      if (appleTouchBrowser && enabledRef.current && !pausedForSpeechRef.current) scheduleRestart();
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        observeVoiceRecognizerStop();
+      }
+      detachRecognitionHandlers(recognition);
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        observeVoiceFailure();
         enabledRef.current = false;
         setEnabled(false);
         setPhase("error");
         setError("Microphone permission was denied. Allow microphone access in the browser, then enable Hey Chat again.");
         return;
       }
-      setError("Microphone listening was interrupted. Hey Chat will retry while this tab remains open.");
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        observeVoiceFailure();
+        setError("Microphone listening was interrupted. Hey Chat will retry while this tab remains open.");
+      }
+      if (enabledRef.current && !pausedForSpeechRef.current) scheduleRestart(true);
     };
     recognition.onend = () => {
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-      if (enabledRef.current && !pausedForSpeechRef.current) scheduleRestart();
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        observeVoiceRecognizerStop();
+      }
+      detachRecognitionHandlers(recognition);
+      if (enabledRef.current && !pausedForSpeechRef.current) scheduleRestart(true);
     };
     recognitionRef.current = recognition;
 
     try {
       recognition.start();
+      observeVoiceRecognizerStart();
       setError(null);
       setPhase(awaitingCommandRef.current ? "awaiting-command" : "listening");
     } catch {
       recognitionRef.current = null;
+      detachRecognitionHandlers(recognition);
+      observeVoiceFailure();
       setError("Unable to start microphone listening. Hey Chat will retry while this tab remains open.");
-      scheduleRestart();
+      scheduleRestart(true);
     }
-  }, [scheduleRestart]);
+  }, [appleTouchBrowser, scheduleRestart]);
   startRecognitionRef.current = startRecognition;
 
   const disable = useCallback(() => {
@@ -325,14 +506,15 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     awaitingCommandRef.current = false;
     busyRef.current = false;
     pausedForSpeechRef.current = false;
+    restartFailureCountRef.current = 0;
+    cancelPendingRequest();
     clearRestartTimer();
-    clearSpeechWatchdog();
+    cancelSpeech();
     stopRecognition();
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     setEnabled(false);
     setPhase("off");
     setError(null);
-  }, [clearRestartTimer, clearSpeechWatchdog, stopRecognition]);
+  }, [cancelPendingRequest, cancelSpeech, clearRestartTimer, stopRecognition]);
 
   const enable = useCallback(() => {
     if (!allowed) return;
@@ -344,27 +526,48 @@ export function HandsFreeVoiceProvider({ children }: PropsWithChildren) {
     enabledRef.current = true;
     awaitingCommandRef.current = false;
     pausedForSpeechRef.current = false;
+    restartFailureCountRef.current = 0;
     setEnabled(true);
     setError(null);
     setPhase("listening");
     startRecognitionRef.current();
   }, [allowed]);
 
-  const speakAssistantResponse = useCallback((text: string) => speak(text), [speak]);
+  const speakAssistantResponse = useCallback(
+    (text: string) => {
+      if (enabledRef.current && voiceFeatureEnabled) speak(text);
+    },
+    [speak, voiceFeatureEnabled],
+  );
 
   useEffect(() => {
     if (!allowed && enabledRef.current) disable();
   }, [allowed, disable]);
 
+  useEffect(() => {
+    const stopForBackground = () => {
+      if (enabledRef.current) disable();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") stopForBackground();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", stopForBackground);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", stopForBackground);
+    };
+  }, [disable]);
+
   useEffect(
     () => () => {
       enabledRef.current = false;
+      cancelPendingRequest();
       clearRestartTimer();
-      clearSpeechWatchdog();
+      cancelSpeech();
       stopRecognition();
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     },
-    [clearRestartTimer, clearSpeechWatchdog, stopRecognition],
+    [cancelPendingRequest, cancelSpeech, clearRestartTimer, stopRecognition],
   );
 
   const value = useMemo(
@@ -439,7 +642,7 @@ function HandsFreeVoiceControl({
         ? "Working on your request"
         : phase === "speaking"
           ? "Speaking the answer"
-          : "Listening for “Hey Chat”";
+          : "Listening for ‘Hey Chat’";
   const StatusIcon = phase === "thinking" ? LoaderCircle : phase === "speaking" ? Volume2 : Bot;
 
   return (

@@ -1,9 +1,11 @@
 from enum import StrEnum
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.schemas.estimate import EstimateLineItem
+from app.schemas.estimate_workspace import EstimateWorkspaceRead
 
 
 class QuoteStatus(StrEnum):
@@ -46,7 +48,40 @@ class SupplierQuoteCreate(BaseModel):
 
 
 class SupplierQuoteRead(SupplierQuoteCreate):
-    id: UUID | None = None
+    id: UUID
+    project_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierQuoteRecordCreate(SupplierQuoteCreate):
+    project_id: UUID
+
+
+class SupplierQuoteUpdate(BaseModel):
+    rfq_id: UUID | None = None
+    rfq_package_id: UUID | None = None
+    supplier_id: UUID | None = None
+    supplier_name: str | None = Field(default=None, min_length=1)
+    quote_reference: str | None = None
+    revision: int | None = Field(default=None, ge=1)
+    line_item_code: str | None = None
+    line_item_description: str | None = None
+    scope: str | None = Field(default=None, min_length=1)
+    scope_type: QuoteScopeType | None = None
+    status: QuoteStatus | None = None
+    amount: float | None = Field(default=None, ge=0)
+    is_qualified: bool | None = None
+    qualification_notes: list[str] | None = None
+    is_selected: bool | None = None
+    selection_reason: str | None = None
+    exclusions: list[str] | None = None
+    notes: str | None = None
+
+
+class SupplierQuoteList(BaseModel):
+    items: list[SupplierQuoteRead]
+    total: int
 
 
 class QuoteComparisonLine(BaseModel):
@@ -105,6 +140,18 @@ class QuoteEstimateSelectionResponse(BaseModel):
     line_items: list[EstimateLineItem]
     ready_for_estimate: bool
     blockers: list[str] = Field(default_factory=list)
+
+
+class QuoteEstimateHandoffRequest(BaseModel):
+    project_id: UUID
+
+
+class QuoteEstimateHandoffResponse(BaseModel):
+    project_id: UUID
+    workspace: EstimateWorkspaceRead
+    created: bool
+    applied_line_count: int
+    source_quote_ids: list[UUID] = Field(default_factory=list)
 
 
 class QuoteEstimateImportRequest(BaseModel):

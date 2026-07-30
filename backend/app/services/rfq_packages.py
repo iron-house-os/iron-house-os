@@ -74,15 +74,21 @@ def create_rfq_package(db: Session, payload: RFQPackageCreate) -> RFQPackageRead
     return _to_schema(_load_package(db, rfq_package.id))
 
 
-def list_rfq_packages(db: Session) -> list[RFQPackageRead]:
-    packages = db.scalars(
+def list_rfq_packages(
+    db: Session,
+    project_id: UUID | None = None,
+) -> list[RFQPackageRead]:
+    statement = (
         select(RFQPackage)
         .options(
             selectinload(RFQPackage.recipients),
             selectinload(RFQPackage.documents),
         )
         .order_by(RFQPackage.created_at.desc())
-    ).all()
+    )
+    if project_id is not None:
+        statement = statement.where(RFQPackage.project_id == project_id)
+    packages = db.scalars(statement).all()
     return [_to_schema(rfq_package) for rfq_package in packages]
 
 

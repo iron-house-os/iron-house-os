@@ -3,7 +3,10 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
+import { installPerformanceDebugHandle } from "./observability/performance";
 import "./styles.css";
+
+installPerformanceDebugHandle();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
