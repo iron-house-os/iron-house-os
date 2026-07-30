@@ -89,7 +89,7 @@ export function RFQBuilderPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const list = await rfqPackagesApi.list();
+      const list = await rfqPackagesApi.list(projectContext.projectId ?? undefined);
       setPackages(list.items);
       if (rfqPackageId) {
         const [detail, readinessPayload, workflowPayload] = await Promise.all([
@@ -110,7 +110,7 @@ export function RFQBuilderPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [rfqPackageId]);
+  }, [projectContext.projectId, rfqPackageId]);
 
   useEffect(() => {
     void refresh();
@@ -205,6 +205,7 @@ export function RFQBuilderPage() {
       <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
         <div className="space-y-6">
           <CreateRFQPackageForm
+            defaultProjectId={projectContext.projectId}
             defaultProjectName={projectContext.projectName ?? ""}
             isBusy={isMutating}
             onSubmit={(payload) => void createPackage(payload)}
@@ -273,10 +274,12 @@ export function RFQBuilderPage() {
 }
 
 function CreateRFQPackageForm({
+  defaultProjectId,
   defaultProjectName,
   isBusy,
   onSubmit,
 }: {
+  defaultProjectId: string | null;
   defaultProjectName: string;
   isBusy: boolean;
   onSubmit: (payload: RFQPackageCreatePayload) => void;
@@ -292,6 +295,7 @@ function CreateRFQPackageForm({
     if (!title.trim() || !scopeSummary.trim()) return;
     onSubmit({
       title: title.trim(),
+      project_id: defaultProjectId ?? undefined,
       project_name: projectName.trim() || undefined,
       scope_summary: scopeSummary.trim(),
       due_at: dueAt ? new Date(dueAt).toISOString() : undefined,

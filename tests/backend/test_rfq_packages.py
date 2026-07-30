@@ -86,6 +86,44 @@ def test_create_list_and_read_rfq_package() -> None:
     assert detail.json()["id"] == payload["id"]
 
 
+def test_list_rfq_packages_filters_by_project_context() -> None:
+    first_project = client.post(
+        "/api/v1/projects",
+        json={"name": "First scoped project"},
+    ).json()
+    second_project = client.post(
+        "/api/v1/projects",
+        json={"name": "Second scoped project"},
+    ).json()
+    first_rfq = client.post(
+        "/api/v1/rfqs",
+        json={
+            "title": "First project pipe RFQ",
+            "project_id": first_project["id"],
+            "project_name": first_project["name"],
+        },
+    ).json()
+    client.post(
+        "/api/v1/rfqs",
+        json={
+            "title": "Second project aggregate RFQ",
+            "project_id": second_project["id"],
+            "project_name": second_project["name"],
+        },
+    )
+
+    response = client.get(
+        "/api/v1/rfqs",
+        params={"project_id": first_project["id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [first_rfq],
+        "total": 1,
+    }
+
+
 def test_update_rfq_package_status() -> None:
     rfq_package = create_package()
 

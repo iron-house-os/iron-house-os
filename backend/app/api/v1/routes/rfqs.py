@@ -39,8 +39,11 @@ def create_rfq_package(
 
 
 @router.get("", response_model=RFQPackageList)
-def list_rfq_packages(db: DBSession) -> RFQPackageList:
-    items = rfq_packages.list_rfq_packages(db)
+def list_rfq_packages(
+    db: DBSession,
+    project_id: UUID | None = None,
+) -> RFQPackageList:
+    items = rfq_packages.list_rfq_packages(db, project_id=project_id)
     return RFQPackageList(items=items, total=len(items))
 
 

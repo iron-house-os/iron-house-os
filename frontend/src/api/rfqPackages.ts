@@ -179,7 +179,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const rfqPackagesApi = {
-  list: () => request<RFQPackageList>("/rfqs"),
+  list: (projectId?: string) => {
+    const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    return request<RFQPackageList>(`/rfqs${query}`);
+  },
   create: (payload: RFQPackageCreatePayload) =>
     request<RFQPackage>("/rfqs", {
       method: "POST",

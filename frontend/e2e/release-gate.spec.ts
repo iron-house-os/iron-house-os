@@ -124,6 +124,10 @@ async function expectNoSeriousAccessibilityViolations(page: Page) {
   expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
 }
 
+function isMobileProject(projectName: string) {
+  return projectName === "mobile-chromium" || projectName === "ipad-webkit";
+}
+
 test("authenticated core shell is responsive and accessible", async ({ page }, testInfo) => {
   await mockApi(page);
   await signIn(page);
@@ -134,7 +138,7 @@ test("authenticated core shell is responsive and accessible", async ({ page }, t
   );
   expect(hasHorizontalOverflow).toBe(false);
 
-  if (testInfo.project.name === "mobile-chromium") {
+  if (isMobileProject(testInfo.project.name)) {
     const menu = page.getByRole("button", { name: "Open navigation" });
     await expect(menu).toBeVisible();
     await menu.click();
@@ -169,13 +173,14 @@ const tabs = [
 ] as const;
 
 test("every navigation tab opens a real responsive screen", async ({ page }, testInfo) => {
+  test.slow();
   await mockApi(page);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await signIn(page);
 
   for (const [label, heading] of tabs) {
-    if (testInfo.project.name === "mobile-chromium") {
+    if (isMobileProject(testInfo.project.name)) {
       const menu = page.getByRole("button", { name: "Open navigation" });
       if (await menu.isVisible()) await menu.click();
     }

@@ -102,9 +102,7 @@ function jsonResponse(payload: unknown) {
 
 function EstimateHandoffProbe() {
   const location = useLocation();
-  const state = location.state as typeof selectionResponse | { quoteLineItems: typeof selectionResponse.line_items };
-  const lineItems = "quoteLineItems" in state ? state.quoteLineItems : [];
-  return <div>{location.pathname}: {lineItems[0]?.vendor_quotes[0]?.supplier}</div>;
+  return <div>{location.pathname}{location.search}: {location.state ? "state supplied" : "database handoff"}</div>;
 }
 
 describe("QuoteComparisonPage", () => {
@@ -113,10 +111,38 @@ describe("QuoteComparisonPage", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        requestBodies.push(JSON.parse(String(init?.body)));
         const url = String(input);
+        if (url.includes("/quotes?project_id=")) {
+          return jsonResponse({ items: [], total: 0 });
+        }
+        if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
+        if (url.endsWith("/quotes")) {
+          const body = JSON.parse(String(init?.body));
+          return jsonResponse({
+            ...body,
+            id: `saved-${requestBodies.length}`,
+            created_at: "2026-07-29T17:00:00Z",
+            updated_at: "2026-07-29T17:00:00Z",
+          });
+        }
         if (url.endsWith("/quotes/compare")) return jsonResponse(comparisonResponse);
         if (url.endsWith("/quotes/estimate-selection")) return jsonResponse(selectionResponse);
+        if (url.endsWith("/quotes/estimate-handoff")) {
+          return jsonResponse({
+            project_id: "WR26-012",
+            workspace: {
+              id: "handoff-workspace",
+              project_id: "WR26-012",
+              status: "draft",
+              estimate: {},
+              created_at: "2026-07-29T17:00:00Z",
+              updated_at: "2026-07-29T17:00:00Z",
+            },
+            created: true,
+            applied_line_count: 1,
+            source_quote_ids: ["saved-1", "saved-2"],
+          });
+        }
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
@@ -159,14 +185,14 @@ describe("QuoteComparisonPage", () => {
     await user.click(screen.getAllByLabelText("Selected quote")[1]);
     await user.type(reasons[1], "Complete scope and confirmed delivery");
 
-    await user.click(screen.getByRole("button", { name: "Compare and qualify quotes" }));
+    await user.click(screen.getByRole("button", { name: "Save and compare quotes" }));
 
     expect(await screen.findByText("Ready for estimate: every line has one qualified supplier selection.")).toBeInTheDocument();
     expect(screen.getByText("Not lowest")).toBeInTheDocument();
     expect(screen.getByText("Complete scope and confirmed delivery")).toBeInTheDocument();
 
-    await waitFor(() => expect(requestBodies).toHaveLength(2));
-    expect(requestBodies[0]).toEqual(
+    await waitFor(() => expect(requestBodies).toHaveLength(4));
+    expect(requestBodies[2]).toEqual(
       expect.objectContaining({
         quotes: expect.arrayContaining([
           expect.objectContaining({
@@ -180,6 +206,11 @@ describe("QuoteComparisonPage", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Use selected quotes in estimate" }));
-    expect(await screen.findByText("/estimating: Preferred Supplier")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "/estimating?projectId=WR26-012&projectName=Marine%20Drive: database handoff",
+      ),
+    ).toBeInTheDocument();
+    expect(requestBodies[4]).toEqual({ project_id: "WR26-012" });
   });
 });

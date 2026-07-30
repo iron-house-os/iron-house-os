@@ -18,6 +18,7 @@ import {
 } from "../api/estimates";
 import { EstimateWorkspaceRead, estimateWorkspaceApi } from "../api/estimateWorkspace";
 import { Project, projectsApi } from "../api/projects";
+import { EstimateWorkspacePanel } from "../components/EstimateWorkspacePanel";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
 import { buildProjectContextParams, readEffectiveProjectContext, storeActiveProject } from "../utils/projectContext";
 
@@ -57,23 +58,15 @@ const moneyFormatter = new Intl.NumberFormat("en-CA", {
   maximumFractionDigits: 0,
 });
 
-type EstimatingLocationState = {
-  quoteLineItems?: EstimateLineItem[];
-};
-
 export function EstimatingPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const projectContext = readEffectiveProjectContext(location.search);
-  const locationState = location.state as EstimatingLocationState | null;
-  const importedQuoteLineItems = useMemo(() => locationState?.quoteLineItems ?? [], [locationState?.quoteLineItems]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(projectContext.projectId ?? "");
   const [projectName, setProjectName] = useState(projectContext.projectName ?? "");
   const [projectCode, setProjectCode] = useState("");
-  const [lineItems, setLineItems] = useState<EstimateLineItem[]>(
-    () => importedQuoteLineItems.length ? importedQuoteLineItems : [{ ...blankLineItem }],
-  );
+  const [lineItems, setLineItems] = useState<EstimateLineItem[]>([{ ...blankLineItem }]);
   const [contingency, setContingency] = useState(10);
   const [overhead, setOverhead] = useState(5);
   const [profit, setProfit] = useState(10);
@@ -87,6 +80,7 @@ export function EstimatingPage() {
   const [exclusions, setExclusions] = useState(["Permits, bonds, and design fees unless listed"]);
   const [rateLibrary, setRateLibrary] = useState<ProductionRate[]>([]);
   const [summary, setSummary] = useState<EstimateSummary | null>(null);
+  const [loadedQuoteHandoff, setLoadedQuoteHandoff] = useState(false);
   const [isLoadingRates, setIsLoadingRates] = useState(true);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -166,12 +160,6 @@ export function EstimatingPage() {
         setProjectName(selected.name);
         setProjectCode(selected.project_number ?? selected.tender_number ?? "");
 
-        if (importedQuoteLineItems.length) {
-          setLineItems(importedQuoteLineItems);
-          setSummary(null);
-          return;
-        }
-
         const workspaces = await estimateWorkspaceApi.listForProject(selected.id);
         if (cancelled) return;
         const latest = workspaces.items[0];
@@ -193,7 +181,7 @@ export function EstimatingPage() {
       setSelectedProjectId(project?.id ?? "");
       setProjectName(project?.name ?? "");
       setProjectCode(project?.project_number ?? project?.tender_number ?? "");
-      setLineItems(importedQuoteLineItems.length ? importedQuoteLineItems : [{ ...blankLineItem }]);
+      setLineItems([{ ...blankLineItem }]);
       setContingency(10);
       setOverhead(5);
       setProfit(10);
@@ -206,6 +194,7 @@ export function EstimatingPage() {
       setAssumptions(["Normal working hours", "No contaminated soils unless noted"]);
       setExclusions(["Permits, bonds, and design fees unless listed"]);
       setSummary(null);
+      setLoadedQuoteHandoff(false);
     }
 
     function hydrateEstimate(workspace: EstimateWorkspaceRead, project: Project) {
@@ -230,13 +219,14 @@ export function EstimatingPage() {
       setAssumptions(estimate.assumptions);
       setExclusions(estimate.exclusions);
       setSummary(readSavedSummary(workspace));
+      setLoadedQuoteHandoff(workspace.estimate.source === "quote_estimate_handoff");
     }
 
     void loadProject();
     return () => {
       cancelled = true;
     };
-  }, [importedQuoteLineItems, location.search]);
+  }, [location.search]);
 
   function selectProject(projectId: string) {
     const project = projects.find((candidate) => candidate.id === projectId);
@@ -356,9 +346,9 @@ export function EstimatingPage() {
           </select>
         </label>
       </div>
-      {importedQuoteLineItems.length ? (
+      {loadedQuoteHandoff ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Loaded {importedQuoteLineItems.length} estimate line item{importedQuoteLineItems.length === 1 ? "" : "s"} from qualified supplier selections.
+          Loaded supplier pricing from this project&apos;s saved quote register.
         </div>
       ) : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
@@ -416,6 +406,7 @@ export function EstimatingPage() {
             </div>
           </div>
           <SummaryPanel summary={summary} isBusy={isCalculating || isLoadingRates} />
+          <EstimateWorkspacePanel projectId={selectedProjectId || null} estimate={payload} summary={summary} />
         </aside>
       </form>
     </section>

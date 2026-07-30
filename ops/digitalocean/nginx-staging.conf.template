@@ -1,0 +1,31 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${IHOS_STAGING_HOST};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${IHOS_STAGING_HOST};
+
+    ssl_certificate /etc/letsencrypt/live/${IHOS_STAGING_HOST}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${IHOS_STAGING_HOST}/privkey.pem;
+
+    client_max_body_size 100m;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_read_timeout 300s;
+    }
+}

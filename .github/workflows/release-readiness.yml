@@ -3,21 +3,25 @@ name: Release readiness
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, release/v1-staging]
     paths:
       - "backend/**"
       - "frontend/**"
+      - "docker-compose.staging.yml"
       - "docker-compose.production.yml"
+      - ".env.staging.example"
       - ".env.production.example"
       - "scripts/**"
       - "ops/**"
       - ".github/workflows/release-readiness.yml"
   pull_request:
-    branches: [main]
+    branches: [main, release/v1-staging]
     paths:
       - "backend/**"
       - "frontend/**"
+      - "docker-compose.staging.yml"
       - "docker-compose.production.yml"
+      - ".env.staging.example"
       - ".env.production.example"
       - "scripts/**"
       - "ops/**"
@@ -27,6 +31,26 @@ permissions:
   contents: read
 
 jobs:
+  staging-configuration:
+    name: Staging isolation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging shell and Compose configuration
+        run: |
+          bash -n scripts/staging-compose.sh
+          docker compose \
+            --project-name iron-house-os-staging \
+            --env-file .env.staging.example \
+            -f docker-compose.staging.yml \
+            config --quiet
+      - name: Prove staging wrapper rejects production environment files
+        run: |
+          if IHOS_STAGING_ENV_FILE=/tmp/production.env scripts/staging-compose.sh config --quiet; then
+            echo "Staging wrapper accepted a production environment filename." >&2
+            exit 1
+          fi
+
   backend:
     name: Release backend gate
     runs-on: ubuntu-latest
@@ -62,6 +86,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Verify OS visual design lock
         run: python ../scripts/check_visual_design_lock.py
+      - name: Verify React Router RSC security boundary
+        run: npm run security:rsc-boundary
       - name: Install frontend dependencies
         run: npm ci
       - name: Lint frontend
@@ -87,12 +113,133 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Build production frontend
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Build disposable acceptance frontend
+        env:
+          VITE_HEY_CHAT_VOICE_ENABLED: "true"
+          VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
         run: npm run build
       - name: Run browser release gate
         run: npm run test:e2e
+
+  staging-release-evidence:
+    name: Disposable staging smoke, rollback, and evidence
+    runs-on: ubuntu-latest
+    needs: [staging-configuration, backend, frontend, browser-release-gate]
+    timeout-minutes: 25
+    env:
+      POSTGRES_DB: iron_house_os_staging
+      POSTGRES_USER: iron_house_staging
+      POSTGRES_PASSWORD: sprint-1e-ci-database-password
+      SECRET_KEY: sprint-1e-ci-secret-key-at-least-32-characters
+      BOOTSTRAP_ADMIN_EMAIL: sprint1e-staging@ironhousecontracting.com
+      BOOTSTRAP_ADMIN_PASSWORD: sprint-1e-ci-login-password
+      BOOTSTRAP_ADMIN_NAME: Sprint 1E Staging Administrator
+      SESSION_COOKIE_SECURE: "false"
+      IHOS_STAGING_RELEASE_ID: ${{ github.sha }}
+      IHOS_STAGING_PORT: "8081"
+      VITE_HEY_CHAT_VOICE_ENABLED: "true"
+      VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
+      IHOS_STAGING_ENV_FILE: .env.staging.example
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start isolated staging stack
+        run: scripts/staging-compose.sh up -d --build --wait
+      - name: Run anonymous, session, role, and synthetic staging smoke
+        env:
+          WEB_URL: http://127.0.0.1:8081
+          STAGING_EMAIL: ${{ env.BOOTSTRAP_ADMIN_EMAIL }}
+          STAGING_PASSWORD: ${{ env.BOOTSTRAP_ADMIN_PASSWORD }}
+          STAGING_SYNTHETIC_DATA: "true"
+          STAGING_SYNTHETIC_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: scripts/staging-smoke-test.sh
+      - name: Create pre-backup recovery sentinel
+        run: >-
+          python scripts/recovery_probe.py create
+          --base-url http://127.0.0.1:8081
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
+          --output /tmp/ihos-staging-recovery.json
+      - name: Back up isolated staging data
+        env:
+          IHOS_COMPOSE_FILE: docker-compose.staging.yml
+          IHOS_COMPOSE_ENV_FILE: .env.staging.example
+        run: scripts/backup.sh --output /tmp/ihos-staging-backup
+      - name: Create post-backup rollback marker
+        run: >-
+          python scripts/staging_rollback_probe.py create
+          --base-url http://127.0.0.1:8081
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
+          --output /tmp/ihos-staging-rollback.json
+      - name: Restore the isolated staging backup
+        env:
+          IHOS_COMPOSE_FILE: docker-compose.staging.yml
+          IHOS_COMPOSE_ENV_FILE: .env.staging.example
+          IHOS_BASE_URL: http://127.0.0.1:8081
+        run: >-
+          scripts/restore.sh
+          --backup /tmp/ihos-staging-backup
+          --confirm-restore
+          --skip-safety-backup
+      - name: Verify restored data and rollback boundary
+        run: |
+          python scripts/recovery_probe.py verify \
+            --base-url http://127.0.0.1:8081 \
+            --email "$BOOTSTRAP_ADMIN_EMAIL" \
+            --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+            --input /tmp/ihos-staging-recovery.json
+          python scripts/staging_rollback_probe.py verify-absent \
+            --base-url http://127.0.0.1:8081 \
+            --email "$BOOTSTRAP_ADMIN_EMAIL" \
+            --password "$BOOTSTRAP_ADMIN_PASSWORD" \
+            --input /tmp/ihos-staging-rollback.json
+      - name: Build and verify immutable staging evidence
+        run: |
+          backend_image="$(docker image inspect "$(scripts/staging-compose.sh images -q backend)" --format '{{.Id}}')"
+          frontend_image="$(docker image inspect "$(scripts/staging-compose.sh images -q frontend)" --format '{{.Id}}')"
+          postgres_image="$(docker image inspect "$(scripts/staging-compose.sh images -q postgres)" --format '{{.Id}}')"
+          alembic_revision="$(
+            scripts/staging-compose.sh exec -T postgres sh -ceu \
+              'psql -v ON_ERROR_STOP=1 -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version_num FROM alembic_version"'
+          )"
+          python scripts/release_candidate_evidence.py \
+            --output staging-release-evidence \
+            --release-id "$GITHUB_SHA" \
+            --environment staging \
+            --production-baseline 55afaa689603263c1ad415436e90cce6679808c3 \
+            --image "backend=$backend_image" \
+            --image "frontend=$frontend_image" \
+            --image "postgres=$postgres_image" \
+            --migration "alembic=$alembic_revision" \
+            --rollback passed \
+            --gate staging_configuration=passed \
+            --gate staging_smoke=passed \
+            --gate role_denial=passed \
+            --gate synthetic_data=passed \
+            --gate backup_restore=passed \
+            --gate rollback=passed \
+            --known-limitation "Physical iPad Safari acceptance remains pending." \
+            --known-limitation "No shared staging host, DNS name, or staging-only OAuth client was provisioned."
+          python scripts/verify_release_candidate_evidence.py \
+            --root . \
+            --evidence staging-release-evidence/evidence.json \
+            --release "$GITHUB_SHA" \
+            --profile staging
+      - name: Upload staging release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-release-evidence-${{ github.sha }}
+          path: staging-release-evidence
+          if-no-files-found: error
+          retention-days: 30
+      - name: Show staging logs on failure
+        if: failure()
+        run: scripts/staging-compose.sh logs --no-color
+      - name: Stop isolated staging stack
+        if: always()
+        run: scripts/staging-compose.sh down --volumes
 
   production-stack:
     name: Production stack smoke test

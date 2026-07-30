@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -26,13 +26,36 @@ class RFQ(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class Quote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "quotes"
 
-    rfq_id: Mapped[UUID] = mapped_column(ForeignKey("rfqs.id"), nullable=False)
-    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("suppliers.id"), nullable=False)
+    project_id: Mapped[UUID] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=False,
+        index=True,
+    )
+    rfq_id: Mapped[UUID | None] = mapped_column(ForeignKey("rfqs.id"))
+    rfq_package_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("rfq_packages.id"),
+        index=True,
+    )
+    supplier_id: Mapped[UUID | None] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    quote_reference: Mapped[str | None] = mapped_column(String(120))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    line_item_code: Mapped[str | None] = mapped_column(String(120))
+    line_item_description: Mapped[str | None] = mapped_column(String(500))
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(80), default="material")
     status: Mapped[str] = mapped_column(String(80), default="requested")
     amount: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    is_qualified: Mapped[bool] = mapped_column(Boolean, default=True)
+    qualification_notes: Mapped[list[str]] = mapped_column(JSONType, default=list)
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
+    selection_reason: Mapped[str | None] = mapped_column(Text)
+    exclusions: Mapped[list[str]] = mapped_column(JSONType, default=list)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    project = relationship("Project", back_populates="quotes")
     rfq = relationship("RFQ", back_populates="quotes")
+    rfq_package = relationship("RFQPackage", back_populates="quotes")
     supplier = relationship("Supplier", back_populates="quotes")
 
 
@@ -59,6 +82,7 @@ class RFQPackage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="rfq_package",
         cascade="all, delete-orphan",
     )
+    quotes = relationship("Quote", back_populates="rfq_package")
 
 
 class RFQPackageSupplierRecipient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
