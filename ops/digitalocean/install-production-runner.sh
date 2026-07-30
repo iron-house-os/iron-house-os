@@ -57,18 +57,18 @@ case "$(uname -m)" in
 esac
 
 archive="actions-runner-linux-${runner_arch}-${runner_version}.tar.gz"
-download_url="https://github.com/actions/runner/releases/download/v${runner_version}/${archive}"
-checksum_url="https://github.com/actions/runner/releases/download/v${runner_version}/sha256_checksums.txt"
+release_endpoint="repos/actions/runner/releases/tags/v${runner_version}"
+download_url=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .browser_download_url")
+expected_checksum=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .digest | ltrimstr(\"sha256:\")")
+if [[ -z "$download_url" || -z "$expected_checksum" ]]; then
+  echo "Runner archive or SHA-256 digest was not published for $archive." >&2
+  exit 1
+fi
+
 temp_dir=$(mktemp -d)
 trap 'rm -rf "$temp_dir"' EXIT
 
 curl -fsSL "$download_url" -o "$temp_dir/$archive"
-curl -fsSL "$checksum_url" -o "$temp_dir/sha256_checksums.txt"
-expected_checksum=$(awk -v archive="$archive" '$2 == archive {print $1}' "$temp_dir/sha256_checksums.txt")
-if [[ -z "$expected_checksum" ]]; then
-  echo "Runner checksum was not published for $archive." >&2
-  exit 1
-fi
 printf '%s  %s\n' "$expected_checksum" "$temp_dir/$archive" | sha256sum -c -
 
 tar -xzf "$temp_dir/$archive" -C "$runner_root"
