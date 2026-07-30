@@ -1,0 +1,110 @@
+name: Production deploy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-deploy.yml"
+      - "ops/digitalocean/install-production-runner.sh"
+      - "ops/digitalocean/production-deploy-wrapper.sh"
+      - "docs/operations/production-deploy-agent.md"
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact approved 40-character commit SHA on main
+        required: true
+        type: string
+      evidence_run_id:
+        description: Successful Release readiness run containing the release evidence
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: iron-house-os-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Production agent policy validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production agent scripts
+        run: |
+          bash -n \
+            ops/digitalocean/install-production-runner.sh \
+            ops/digitalocean/production-deploy-wrapper.sh
+          if bash ops/digitalocean/production-deploy-wrapper.sh \
+            --release 0000000000000000000000000000000000000000 \
+            --evidence /missing/evidence.json; then
+            echo "Production wrapper accepted an unprivileged invalid request." >&2
+            exit 1
+          fi
+
+  deploy:
+    name: Approved production cutover
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: [self-hosted, linux, ihos-production]
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Validate inputs
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[0-9]+$ ]]
+          run_sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}" --jq .head_sha)
+          run_result=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}" --jq .conclusion)
+          [[ "$run_sha" == "$RELEASE_SHA" ]]
+          [[ "$run_result" == "success" ]]
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          clean: true
+          fetch-depth: 0
+
+      - name: Verify approved main release
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          [[ -z "$(git status --porcelain)" ]]
+
+      - name: Download immutable release evidence
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf "$RUNNER_TEMP/release-evidence"
+          gh run download "$EVIDENCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "release-candidate-evidence-$RELEASE_SHA" \
+            --dir "$RUNNER_TEMP/release-evidence"
+          test -f "$RUNNER_TEMP/release-evidence/evidence.json"
+
+      - name: Execute restricted production cutover
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: >-
+          sudo /usr/local/sbin/ihos-production-deploy
+          --release "$RELEASE_SHA"
+          --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
+
+      - name: Verify public production endpoints
+        run: |
+          curl --fail --silent --show-error https://os.ironhousecivil.com/ >/dev/null
+          curl --fail --silent --show-error https://os.ironhousecivil.com/health >/dev/null
+          curl --fail --silent --show-error https://os.ironhousecivil.com/readiness >/dev/null
+          echo "Production deployment and endpoint verification passed."
