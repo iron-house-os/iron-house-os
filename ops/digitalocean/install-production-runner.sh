@@ -45,46 +45,58 @@ if systemctl list-unit-files --type=service | grep -q '^actions.runner.iron-hous
   exit 0
 fi
 
-runner_version=$(gh api repos/actions/runner/releases/latest --jq '.tag_name | ltrimstr("v")')
-runner_arch=x64
-case "$(uname -m)" in
-  x86_64) runner_arch=x64 ;;
-  aarch64|arm64) runner_arch=arm64 ;;
-  *)
-    echo "Unsupported runner architecture: $(uname -m)" >&2
-    exit 1
-    ;;
-esac
+if [[ ! -x "$runner_root/config.sh" || ! -x "$runner_root/svc.sh" ]]; then
+  runner_version=$(gh api repos/actions/runner/releases/latest --jq '.tag_name | ltrimstr("v")')
+  runner_arch=x64
+  case "$(uname -m)" in
+    x86_64) runner_arch=x64 ;;
+    aarch64|arm64) runner_arch=arm64 ;;
+    *)
+      echo "Unsupported runner architecture: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
 
-archive="actions-runner-linux-${runner_arch}-${runner_version}.tar.gz"
-release_endpoint="repos/actions/runner/releases/tags/v${runner_version}"
-download_url=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .browser_download_url")
-expected_checksum=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .digest | ltrimstr(\"sha256:\")")
-if [[ -z "$download_url" || -z "$expected_checksum" ]]; then
-  echo "Runner archive or SHA-256 digest was not published for $archive." >&2
-  exit 1
+  archive="actions-runner-linux-${runner_arch}-${runner_version}.tar.gz"
+  release_endpoint="repos/actions/runner/releases/tags/v${runner_version}"
+  download_url=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .browser_download_url")
+  expected_checksum=$(gh api "$release_endpoint" --jq ".assets[] | select(.name == \"${archive}\") | .digest | ltrimstr(\"sha256:\")")
+  if [[ -z "$download_url" || -z "$expected_checksum" ]]; then
+    echo "Runner archive or SHA-256 digest was not published for $archive." >&2
+    exit 1
+  fi
+
+  temp_dir=$(mktemp -d)
+  trap 'rm -rf "$temp_dir"' EXIT
+
+  curl -fsSL "$download_url" -o "$temp_dir/$archive"
+  printf '%s  %s\n' "$expected_checksum" "$temp_dir/$archive" | sha256sum -c -
+
+  tar -xzf "$temp_dir/$archive" -C "$runner_root"
+  chown -R "$runner_user:$runner_user" "$runner_root"
 fi
 
-temp_dir=$(mktemp -d)
-trap 'rm -rf "$temp_dir"' EXIT
+if [[ ! -f "$runner_root/.runner" ]]; then
+  registration_token=$(gh api --method POST "repos/$repository/actions/runners/registration-token" --jq .token)
+  (
+    cd "$runner_root"
+    sudo -u "$runner_user" ./config.sh \
+      --unattended \
+      --url "https://github.com/$repository" \
+      --token "$registration_token" \
+      --name "$runner_name" \
+      --labels "$runner_label" \
+      --work _work \
+      --replace
+  )
+else
+  echo "Production deployment runner is already registered."
+fi
 
-curl -fsSL "$download_url" -o "$temp_dir/$archive"
-printf '%s  %s\n' "$expected_checksum" "$temp_dir/$archive" | sha256sum -c -
-
-tar -xzf "$temp_dir/$archive" -C "$runner_root"
-chown -R "$runner_user:$runner_user" "$runner_root"
-registration_token=$(gh api --method POST "repos/$repository/actions/runners/registration-token" --jq .token)
-
-sudo -u "$runner_user" "$runner_root/config.sh" \
-  --unattended \
-  --url "https://github.com/$repository" \
-  --token "$registration_token" \
-  --name "$runner_name" \
-  --labels "$runner_label" \
-  --work _work \
-  --replace
-
-"$runner_root/svc.sh" install "$runner_user"
-"$runner_root/svc.sh" start
-"$runner_root/svc.sh" status
+(
+  cd "$runner_root"
+  ./svc.sh install "$runner_user"
+  ./svc.sh start
+  ./svc.sh status
+)
 echo "Production deployment runner installed: $runner_name [$runner_label]"
