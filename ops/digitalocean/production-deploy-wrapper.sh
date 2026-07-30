@@ -35,15 +35,19 @@ if [[ "$(hostname)" != "iron-house-os-prod-1" ]]; then
   exit 1
 fi
 
-workflow_root=$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)
-if [[ -z "$workflow_root" ]]; then
+workflow_root=$(pwd -P)
+git_workflow() {
+  git -c "safe.directory=$workflow_root" -C "$workflow_root" "$@"
+}
+
+resolved_workflow_root=$(git_workflow rev-parse --show-toplevel 2>/dev/null || true)
+if [[ -z "$resolved_workflow_root" || "$(cd "$resolved_workflow_root" && pwd -P)" != "$workflow_root" ]]; then
   echo "Current directory is not an Iron House OS checkout." >&2
   exit 1
 fi
 
-workflow_root=$(cd "$workflow_root" && pwd -P)
 evidence_file=$(cd "$(dirname "$evidence_file")" && pwd -P)/$(basename "$evidence_file")
-remote_url=$(git -C "$workflow_root" remote get-url origin)
+remote_url=$(git_workflow remote get-url origin)
 
 case "$remote_url" in
   https://github.com/iron-house-os/iron-house-os|https://github.com/iron-house-os/iron-house-os.git|git@github.com:iron-house-os/iron-house-os.git)
@@ -54,17 +58,17 @@ case "$remote_url" in
     ;;
 esac
 
-if [[ "$(git -C "$workflow_root" rev-parse HEAD)" != "$release_sha" ]]; then
+if [[ "$(git_workflow rev-parse HEAD)" != "$release_sha" ]]; then
   echo "Checked-out release does not match the approved SHA." >&2
   exit 1
 fi
-if [[ -n "$(git -C "$workflow_root" status --porcelain)" ]]; then
+if [[ -n "$(git_workflow status --porcelain)" ]]; then
   echo "Refusing deployment from a dirty release checkout." >&2
   exit 1
 fi
 
-git -C "$workflow_root" fetch --quiet origin main
-if ! git -C "$workflow_root" merge-base --is-ancestor "$release_sha" origin/main; then
+git_workflow fetch --quiet origin main
+if ! git_workflow merge-base --is-ancestor "$release_sha" origin/main; then
   echo "Approved release is not present on origin/main." >&2
   exit 1
 fi
@@ -91,7 +95,7 @@ fi
 release_root="/opt/iron-house-os-releases/$release_sha"
 if [[ ! -d "$release_root/.git" ]]; then
   install -d -o root -g root -m 0750 "$(dirname "$release_root")"
-  git clone --quiet --no-checkout --no-local --no-hardlinks "$workflow_root" "$release_root"
+  git -c "safe.directory=$workflow_root" clone --quiet --no-checkout --no-local --no-hardlinks "$workflow_root" "$release_root"
   git -C "$release_root" remote set-url origin https://github.com/iron-house-os/iron-house-os.git
   git -C "$release_root" checkout --quiet --detach "$release_sha"
 fi
