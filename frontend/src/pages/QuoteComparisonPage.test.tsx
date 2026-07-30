@@ -102,9 +102,7 @@ function jsonResponse(payload: unknown) {
 
 function EstimateHandoffProbe() {
   const location = useLocation();
-  const state = location.state as typeof selectionResponse | { quoteLineItems: typeof selectionResponse.line_items };
-  const lineItems = "quoteLineItems" in state ? state.quoteLineItems : [];
-  return <div>{location.pathname}: {lineItems[0]?.vendor_quotes[0]?.supplier}</div>;
+  return <div>{location.pathname}{location.search}: {location.state ? "state supplied" : "database handoff"}</div>;
 }
 
 describe("QuoteComparisonPage", () => {
@@ -129,6 +127,22 @@ describe("QuoteComparisonPage", () => {
         }
         if (url.endsWith("/quotes/compare")) return jsonResponse(comparisonResponse);
         if (url.endsWith("/quotes/estimate-selection")) return jsonResponse(selectionResponse);
+        if (url.endsWith("/quotes/estimate-handoff")) {
+          return jsonResponse({
+            project_id: "WR26-012",
+            workspace: {
+              id: "handoff-workspace",
+              project_id: "WR26-012",
+              status: "draft",
+              estimate: {},
+              created_at: "2026-07-29T17:00:00Z",
+              updated_at: "2026-07-29T17:00:00Z",
+            },
+            created: true,
+            applied_line_count: 1,
+            source_quote_ids: ["saved-1", "saved-2"],
+          });
+        }
         throw new Error(`Unexpected request: ${url}`);
       }),
     );
@@ -192,6 +206,11 @@ describe("QuoteComparisonPage", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Use selected quotes in estimate" }));
-    expect(await screen.findByText("/estimating: Preferred Supplier")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "/estimating?projectId=WR26-012&projectName=Marine%20Drive: database handoff",
+      ),
+    ).toBeInTheDocument();
+    expect(requestBodies[4]).toEqual({ project_id: "WR26-012" });
   });
 });

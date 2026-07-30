@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.estimate import EstimateLineItem
+from app.schemas.estimate_workspace import EstimateWorkspaceRead
 
 
 class QuoteStatus(StrEnum):
@@ -139,6 +140,18 @@ class QuoteEstimateSelectionResponse(BaseModel):
     line_items: list[EstimateLineItem]
     ready_for_estimate: bool
     blockers: list[str] = Field(default_factory=list)
+
+
+class QuoteEstimateHandoffRequest(BaseModel):
+    project_id: UUID
+
+
+class QuoteEstimateHandoffResponse(BaseModel):
+    project_id: UUID
+    workspace: EstimateWorkspaceRead
+    created: bool
+    applied_line_count: int
+    source_quote_ids: list[UUID] = Field(default_factory=list)
 
 
 class QuoteEstimateImportRequest(BaseModel):

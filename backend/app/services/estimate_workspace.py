@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -28,6 +29,8 @@ def save_workspace(db: Session, payload: EstimateWorkspaceSaveRequest) -> Estima
         total_amount=total_amount,
         summary=summary_text,
         bid_json=bid_json,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(bid)
     db.commit()

@@ -127,12 +127,18 @@ export function QuoteComparisonPage() {
     setQuotes((current) => current.filter((_, quoteIndex) => quoteIndex !== index));
   }
 
-  function useSelectedQuotes() {
-    if (!selection?.ready_for_estimate) return;
-    navigate(
-      { pathname: "/estimating", search: location.search },
-      { state: { quoteLineItems: selection.line_items } },
-    );
+  async function useSelectedQuotes() {
+    if (!selection?.ready_for_estimate || !projectContext.projectId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await quotesApi.estimateHandoff(projectContext.projectId);
+      navigate({ pathname: "/estimating", search: location.search });
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to save supplier pricing to the estimate");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -236,8 +242,8 @@ export function QuoteComparisonPage() {
             <h2 className="text-lg font-semibold text-iron-950">Comparison Summary</h2>
             <button
               type="button"
-              onClick={useSelectedQuotes}
-              disabled={!selection.ready_for_estimate}
+              onClick={() => void useSelectedQuotes()}
+              disabled={!selection.ready_for_estimate || !projectContext.projectId || isLoading}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-iron-300"
             >
               Use selected quotes in estimate

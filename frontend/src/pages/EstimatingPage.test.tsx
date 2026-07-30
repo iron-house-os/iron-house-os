@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EstimatingPage } from "./EstimatingPage";
 
 const summaryPayloads: Record<string, unknown>[] = [];
+const workspacePayloads: Record<string, unknown>[] = [];
 
 const testProject = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -85,6 +86,7 @@ function jsonResponse(payload: unknown) {
 describe("EstimatingPage", () => {
   beforeEach(() => {
     summaryPayloads.length = 0;
+    workspacePayloads.length = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -181,61 +183,111 @@ describe("EstimatingPage", () => {
     ]);
   });
 
-  it("loads qualified supplier selections from quote comparison state", async () => {
+  it("loads the durable quote handoff and saves the active estimate from the main page", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter
-        initialEntries={[
-          {
-            pathname: "/estimating",
-            state: {
-              quoteLineItems: [
-                {
-                  code: "PIPE-001",
-                  description: "PVC storm pipe supply",
-                  item_type: "material",
-                  quantity: 1,
-                  unit: "LS",
-                  labour: [],
-                  equipment: [],
-                  materials: [],
-                  disposal: [],
-                  vendor_quotes: [
-                    {
-                      supplier: "Preferred Supplier",
-                      scope: "Supply PVC storm pipe",
-                      amount: 11250,
-                      is_qualified: true,
-                      qualification_notes: [],
-                      is_selected: true,
-                      selection_reason: "Complete scope and confirmed delivery",
-                      notes: "Confirmed delivery",
-                    },
-                    {
-                      supplier: "Lowest Supplier",
-                      scope: "Supply PVC storm pipe",
-                      amount: 10000,
-                      is_qualified: true,
-                      qualification_notes: [],
-                      is_selected: false,
-                      selection_reason: null,
-                      notes: null,
-                    },
-                  ],
-                  direct_unit_cost: null,
-                  notes: "Supplier selection: Complete scope and confirmed delivery",
-                },
-              ],
+    const handoffEstimate = {
+      project_name: testProject.name,
+      project_code: testProject.project_number,
+      line_items: [
+        {
+          code: "PIPE-001",
+          description: "PVC storm pipe supply",
+          item_type: "material",
+          quantity: 1,
+          unit: "LS",
+          labour: [],
+          equipment: [],
+          materials: [],
+          disposal: [],
+          vendor_quotes: [
+            {
+              supplier: "Preferred Supplier",
+              scope: "Supply PVC storm pipe",
+              amount: 11250,
+              is_qualified: true,
+              qualification_notes: [],
+              is_selected: true,
+              selection_reason: "Complete scope and confirmed delivery",
+              notes: "Confirmed delivery",
             },
-          },
-        ]}
-      >
+            {
+              supplier: "Lowest Supplier",
+              scope: "Supply PVC storm pipe",
+              amount: 10000,
+              is_qualified: true,
+              qualification_notes: [],
+              is_selected: false,
+              selection_reason: null,
+              notes: null,
+            },
+          ],
+          direct_unit_cost: null,
+          notes: "Supplier selection: Complete scope and confirmed delivery",
+        },
+      ],
+      indirects: [],
+      risks: [],
+      markup: {
+        contingency_percent: 10,
+        overhead_percent: 5,
+        profit_percent: 10,
+        bonding_percent: 0,
+        insurance_percent: 0,
+      },
+      assumptions: ["Normal working hours"],
+      exclusions: [],
+    };
+
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/projects")) return jsonResponse({ items: [testProject], total: 1 });
+      if (url.endsWith(`/estimates/workspace/project/${testProject.id}`)) {
+        return jsonResponse({
+          items: [
+            {
+              id: "44444444-4444-4444-8444-444444444444",
+              project_id: testProject.id,
+              status: "draft",
+              estimate: {
+                source: "quote_estimate_handoff",
+                estimate: handoffEstimate,
+                summary: null,
+              },
+              created_at: "2026-07-29T17:00:00Z",
+              updated_at: "2026-07-29T17:00:00Z",
+            },
+          ],
+          total: 1,
+        });
+      }
+      if (url.endsWith("/estimates/rate-library")) return jsonResponse(rateLibrary);
+      if (url.endsWith("/estimates/summary")) {
+        summaryPayloads.push(JSON.parse(String(init?.body)));
+        return jsonResponse(estimateSummary);
+      }
+      if (url.endsWith("/estimates/workspace") && init?.method === "POST") {
+        const payload = JSON.parse(String(init.body));
+        workspacePayloads.push(payload);
+        return jsonResponse({
+          id: "55555555-5555-4555-8555-555555555555",
+          project_id: testProject.id,
+          status: "draft",
+          estimate: { source: "estimate_workspace", estimate: payload.estimate, summary: payload.summary },
+          created_at: "2026-07-29T17:01:00Z",
+          updated_at: "2026-07-29T17:01:00Z",
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/estimating?projectId=${testProject.id}&projectName=Test%20Project`]}>
         <EstimatingPage />
       </MemoryRouter>,
     );
 
     expect(
-      await screen.findByText("Loaded 1 estimate line item from qualified supplier selections."),
+      await screen.findByText("Loaded supplier pricing from this project's saved quote register."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Line item 1 quote supplier")).toHaveValue("Preferred Supplier");
     expect(screen.getByLabelText("Line item 1 quote amount")).toHaveValue(11250);
@@ -261,6 +313,27 @@ describe("EstimatingPage", () => {
         is_selected: false,
       }),
     ]);
+
+    await user.click(screen.getByRole("button", { name: "Save workspace" }));
+    await waitFor(() => expect(workspacePayloads).toHaveLength(1));
+    expect(workspacePayloads[0]).toEqual(
+      expect.objectContaining({
+        project_id: testProject.id,
+        status: "draft",
+        estimate: expect.objectContaining({
+          project_name: testProject.name,
+          line_items: [
+            expect.objectContaining({
+              code: "PIPE-001",
+              vendor_quotes: expect.arrayContaining([
+                expect.objectContaining({ supplier: "Preferred Supplier", is_selected: true }),
+              ]),
+            }),
+          ],
+        }),
+        summary: estimateSummary,
+      }),
+    );
   });
 
   it("loads the selected project's latest saved estimate instead of the Marine Drive sample", async () => {

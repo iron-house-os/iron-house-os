@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.schemas.quote_integration import (
     QuoteComparisonRequest,
     QuoteComparisonResponse,
+    QuoteEstimateHandoffRequest,
+    QuoteEstimateHandoffResponse,
     QuoteEstimateImportRequest,
     QuoteEstimateImportResponse,
     QuoteEstimateSelectionRequest,
@@ -19,6 +21,7 @@ from app.schemas.quote_integration import (
 )
 from app.services.quote_comparison import compare_supplier_quotes
 from app.services.quote_estimate import import_quotes_to_estimate
+from app.services.quote_estimate_handoff import handoff_saved_quotes
 from app.services.quote_selection import select_quotes_for_estimate
 from app.services import quotes
 
@@ -38,6 +41,14 @@ def create_project_quote(
     db: DBSession,
 ) -> SupplierQuoteRead:
     return quotes.create_quote(db, payload)
+
+
+@router.post("/estimate-handoff", response_model=QuoteEstimateHandoffResponse)
+def create_estimate_handoff(
+    payload: QuoteEstimateHandoffRequest,
+    db: DBSession,
+) -> QuoteEstimateHandoffResponse:
+    return handoff_saved_quotes(db, payload)
 
 
 @router.patch("/{quote_id}", response_model=SupplierQuoteRead)

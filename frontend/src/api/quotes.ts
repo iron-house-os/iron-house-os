@@ -1,4 +1,5 @@
 import type { EstimateLineItem } from "./estimates";
+import type { EstimateWorkspaceRead } from "./estimateWorkspace";
 import { apiFetch } from "./client";
 
 export type QuoteScopeType = "material" | "subcontract" | "trucking" | "disposal" | "equipment" | "other";
@@ -88,6 +89,14 @@ export type QuoteEstimateSelectionResponse = {
   blockers: string[];
 };
 
+export type QuoteEstimateHandoffResponse = {
+  project_id: string;
+  workspace: EstimateWorkspaceRead;
+  created: boolean;
+  applied_line_count: number;
+  source_quote_ids: string[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -128,5 +137,10 @@ export const quotesApi = {
     request<QuoteEstimateSelectionResponse>("/quotes/estimate-selection", {
       method: "POST",
       body: JSON.stringify({ quotes }),
+    }),
+  estimateHandoff: (projectId: string) =>
+    request<QuoteEstimateHandoffResponse>("/quotes/estimate-handoff", {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId }),
     }),
 };
