@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "tsc --noEmit",
+    "security:rsc-boundary": "python ../scripts/check_react_router_rsc_boundary.py --root ..",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "preview": "vite preview"
