@@ -63,8 +63,10 @@ jobs:
           [[ "$EVIDENCE_RUN_ID" =~ ^[0-9]+$ ]]
           run_sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}" --jq .head_sha)
           run_result=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}" --jq .conclusion)
+          run_name=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}" --jq .name)
           [[ "$run_sha" == "$RELEASE_SHA" ]]
           [[ "$run_result" == "success" ]]
+          [[ "$run_name" == "Release readiness" ]]
 
       - uses: actions/checkout@v4
         with:
