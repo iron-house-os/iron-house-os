@@ -1,8 +1,17 @@
 {
+  "version": 1,
   "workspace": "/srv/iron-house-agents",
+  "state_directory": "/var/lib/iron-house-agent",
+  "worktrees_directory": "/srv/iron-house-agents/worktrees",
+  "max_parallel_jobs": 4,
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
   "production_requires_owner_approval": true,
   "projects": [
     {
+      "key": "ihos",
       "name": "Iron House OS",
       "repository": "iron-house-os/iron-house-os",
       "directory": "iron-house-os",
@@ -11,6 +20,7 @@
       "production_deploy_allowed": false
     },
     {
+      "key": "dumper",
       "name": "Dumper",
       "repository": "iron-house-os/Dumper",
       "directory": "Dumper",
