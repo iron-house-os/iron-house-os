@@ -8,7 +8,7 @@ Run reusable development agents for Iron House OS, Dumper, and future Iron House
 
 - Owner: Iron House development operations
 - Priority: High
-- Status: Ready for build-workspace installation after review
+- Status: Active on the shared non-production build workspace
 - Approval gate: Jeremie Peters must explicitly approve any production deployment; the agent platform cannot grant that approval
 - System of record: `ops/agent/projects.json`, the SQLite job database, GitHub issues, and draft pull requests
 - Production systems: out of scope
@@ -22,7 +22,8 @@ Run reusable development agents for Iron House OS, Dumper, and future Iron House
 | Logs | One private JSONL log per Codex job | `/var/lib/iron-house-agent/logs/` |
 | Worktrees | One isolated feature branch checkout per job | `/srv/iron-house-agents/worktrees/` |
 | Dashboard | Read-only queue, worker, history, and repository health | `http://127.0.0.1:8787` |
-| Service | Four concurrent worker loops plus dashboard | `iron-house-agent.service` |
+| GitHub intake | Explicitly labelled issue discovery and duplicate suppression | `iron-house-agent.service` |
+| Service | Four concurrent worker loops, issue intake, and dashboard | `iron-house-agent.service` |
 
 The dashboard binds to loopback and exposes no write endpoint. Access it remotely through an SSH tunnel rather than a public listener.
 
@@ -94,6 +95,33 @@ Supported roles:
 
 Standard jobs instruct Codex to work only on the generated feature branch, run relevant checks, commit and push the scoped change, and open a draft pull request. The agent is explicitly prohibited from merging or deploying production.
 
+## Queue work from GitHub
+
+The service polls registered repositories every 30 seconds without opening a public webhook. To approve an issue for intake, keep the issue open and apply:
+
+1. `agent:ready`
+2. exactly one role label:
+   - `agent:build`
+   - `agent:ci-repair`
+   - `agent:code-review`
+   - `agent:qa-browser`
+   - `agent:security-audit`
+   - `agent:dependency-update`
+   - `agent:documentation`
+   - `agent:issue-planning`
+
+The issue title becomes the job title and the body becomes the task prompt. Adding `agent:ready` authorizes feature-branch work only; it never authorizes merge, production deployment, payment, invitation, or owner-only actions.
+
+Each repository, issue number, and GitHub update revision is accepted at most once. Removing `agent:ready` stops new intake. To queue a corrected revision after a blocked or completed run, edit the issue and retain the required labels. The new GitHub update timestamp creates one new intake revision.
+
+Run one immediate check without waiting for the service interval:
+
+```bash
+sudo -u ih-agent -H iron-house-agent intake-once
+```
+
+Ambiguous roles, missing repository policy, secret-like issue text, prohibited production actions, and GitHub authentication failures are recorded as blocked. Issue bodies and job prompts never appear in dashboard JSON.
+
 ## Register a future project
 
 Before enrollment, the GitHub repository must contain an `AGENTS.md` file declaring its build/test commands, protected environments, forbidden actions, approval gates, staging instructions, and priorities.
@@ -130,6 +158,7 @@ Then open `http://127.0.0.1:8787`. The dashboard shows:
 - queued work;
 - completed and failed build history;
 - clean, dirty, blocked, missing, or unhealthy repository checkouts.
+- GitHub intake source health, accepted revisions, and blocked reasons.
 
 ## Recovery and controls
 
@@ -158,6 +187,9 @@ Key controls:
 | --- | --- | --- |
 | Codex or GitHub login expires | Workers report `blocked`; queued jobs remain queued | Re-authenticate as `ih-agent`, run `preflight`, restart service |
 | Repository lacks `AGENTS.md` | Job or registration fails closed | Add and review the project policy before retrying |
+| GitHub intake is blocked | No issue is enqueued from the affected repository | Review the dashboard reason, repair authentication or labels, then edit the issue to create a new revision |
+| Issue has no role or multiple roles | The issue revision is retained as `blocked` | Apply exactly one supported role label and edit the issue before retrying |
+| Issue contains secret-like or prohibited production text | The issue revision is retained as `blocked` | Remove the sensitive or prohibited instruction; use saved credentials and the separate owner-approved production workflow |
 | Worker task fails | Job is retained as `failed` with branch and log path | Inspect evidence and queue a narrow follow-up issue-linked job |
 | Checkout is dirty | Dashboard reports `dirty` | Review ownership of the changes; do not discard them automatically |
 | Dashboard unavailable | Workers may continue; health endpoint fails | Check service status and journal; dashboard has no job-control authority |

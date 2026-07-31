@@ -54,7 +54,7 @@ _DASHBOARD_HTML = """<!doctype html>
     tr:last-child td { border-bottom:0; }
     .pill { display:inline-flex; border:1px solid var(--line); border-radius:999px;
       padding:3px 8px; font-size:11px; font-weight:700; text-transform:uppercase; }
-    .succeeded,.healthy,.running { color:var(--green); }
+    .succeeded,.healthy,.running,.accepted,.ready { color:var(--green); }
     .failed,.error,.blocked,.missing { color:var(--red); }
     .queued,.dirty { color:var(--gold); }
     .role-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
@@ -92,6 +92,7 @@ _DASHBOARD_HTML = """<!doctype html>
     <aside>
       <div class="panel"><h2>Agent roles</h2><div class="panel-body role-grid" id="roles"></div></div>
       <div class="panel"><h2>Repository health</h2><div class="panel-body" id="repos"></div></div>
+      <div class="panel"><h2>GitHub intake</h2><div class="panel-body" id="intake"></div></div>
     </aside>
   </section>
 </main>
@@ -105,6 +106,18 @@ function jobsTable(rows) {
     <tbody>${rows.map(job => `<tr><td><strong>${esc(job.title)}</strong><br><code>${shortId(job.id)} · #${esc(job.issue_number)}</code></td>
     <td>${esc(job.project_key)}</td><td>${esc(job.role)}</td><td><span class="pill ${esc(job.status)}">${esc(job.status)}</span></td>
     <td><code>${esc(job.branch || 'pending')}</code></td></tr>`).join('')}</tbody></table>`;
+}
+function intakePanel(state) {
+  const sources = state.intake_sources || [];
+  const history = state.intake_history || [];
+  const sourceRows = sources.map(source => `<div class="repo"><div class="repo-head">
+    <strong>${esc(source.project_key)}</strong><span class="pill ${esc(source.state)}">${esc(source.state)}</span></div>
+    <div class="muted">${esc(source.detail)}</div></div>`).join('');
+  const historyRows = history.slice(0, 8).map(item => `<div class="repo"><div class="repo-head">
+    <strong>${esc(item.project_key)} #${esc(item.issue_number)}</strong>
+    <span class="pill ${esc(item.status)}">${esc(item.status)}</span></div>
+    <div class="muted">${esc(item.role || 'no role')} · ${esc(item.detail)}</div></div>`).join('');
+  return sourceRows + historyRows || '<div class="empty">Waiting for first intake check</div>';
 }
 function render(state) {
   document.getElementById('active').textContent = state.current_jobs.length;
@@ -120,6 +133,7 @@ function render(state) {
     `<div class="repo"><div class="repo-head"><strong>${esc(repo.name)}</strong>
     <span class="pill ${esc(repo.status)}">${esc(repo.status)}</span></div>
     <div class="muted">${esc(repo.detail)}</div><code>${esc(repo.branch || '—')} · ${esc(repo.commit || '—')}</code></div>`).join('');
+  document.getElementById('intake').innerHTML = intakePanel(state);
   document.getElementById('updated').textContent = `Updated ${new Date(state.generated_at).toLocaleString()}`;
 }
 async function refresh() {

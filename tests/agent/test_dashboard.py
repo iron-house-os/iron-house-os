@@ -40,6 +40,8 @@ def test_dashboard_is_read_only_and_does_not_expose_prompts(settings) -> None:
             payload = json.load(response)
         assert payload["production_locked"] is True
         assert "prompt" not in payload["queue"][0]
+        assert payload["intake_sources"] == []
+        assert payload["intake_history"] == []
 
         request = urllib.request.Request(f"{base_url}/api/state", method="POST")
         try:
