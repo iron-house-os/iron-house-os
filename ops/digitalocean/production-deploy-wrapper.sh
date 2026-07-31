@@ -111,7 +111,7 @@ fi
 
 export COMPOSE_PROJECT_NAME="$production_project"
 cd "$release_root"
-exec "$release_root/ops/digitalocean/cutover.sh" \
+exec /bin/bash "$release_root/ops/digitalocean/cutover.sh" \
   --release "$release_sha" \
   --evidence "$evidence_file" \
   --confirm-go

@@ -1,3 +1,4 @@
+import stat
 from pathlib import Path
 
 
@@ -22,3 +23,12 @@ def test_deploy_agent_timer_is_bounded_and_persistent() -> None:
     assert "Persistent=true" in timer
     assert "TimeoutStartSec=45min" in service
     assert "ExecStart=/bin/bash" in service
+
+def test_production_cutover_handoff_is_permission_safe() -> None:
+    wrapper = (ROOT / "ops/digitalocean/production-deploy-wrapper.sh").read_text(
+        encoding="utf-8"
+    )
+    cutover = ROOT / "ops/digitalocean/cutover.sh"
+
+    assert 'exec /bin/bash "$release_root/ops/digitalocean/cutover.sh"' in wrapper
+    assert cutover.stat().st_mode & stat.S_IXUSR
