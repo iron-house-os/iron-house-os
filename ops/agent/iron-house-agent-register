@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${EUID}" -ne 0 ]; then
+  echo "Run as root: sudo iron-house-agent-register [registration options]" >&2
+  exit 1
+fi
+
+DRY_RUN="false"
+PROJECT_KEY=""
+ARGUMENTS=("$@")
+for ((index = 0; index < ${#ARGUMENTS[@]}; index++)); do
+  argument="${ARGUMENTS[index]}"
+  if [ "${argument}" = "--dry-run" ]; then
+    DRY_RUN="true"
+  elif [ "${argument}" = "--key" ] && [ $((index + 1)) -lt ${#ARGUMENTS[@]} ]; then
+    PROJECT_KEY="${ARGUMENTS[index + 1]}"
+  elif [[ "${argument}" == --key=* ]]; then
+    PROJECT_KEY="${argument#--key=}"
+  fi
+done
+
+sudo -u ih-agent -H /usr/local/bin/iron-house-agent register "$@"
+
+if [ "${DRY_RUN}" = "false" ]; then
+  systemctl restart iron-house-agent.service
+  systemctl is-active --quiet iron-house-agent.service
+  STATE=""
+  for _attempt in $(seq 1 20); do
+    if STATE="$(curl --fail --silent http://127.0.0.1:8787/api/state 2>/dev/null)"; then
+      break
+    fi
+    sleep 0.25
+  done
+  if [ -z "${STATE}" ]; then
+    echo "Agent dashboard did not become healthy after registration" >&2
+    exit 1
+  fi
+  jq -e --arg key "${PROJECT_KEY}" '
+    any(.repositories[]; .key == $key) and
+    any(.intake_sources[]; .project_key == $key and .state == "ready") and
+    .production_locked == true
+  ' <<<"${STATE}" >/dev/null
+  jq -cn --arg project "${PROJECT_KEY}" \
+    '{status:"active", project:$project, intake:"ready", production_locked:true}'
+fi

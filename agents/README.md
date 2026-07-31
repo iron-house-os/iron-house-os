@@ -72,6 +72,8 @@ documented in [`docs/agent-platform.md`](../docs/agent-platform.md).
 iron-house-agent preflight
 iron-house-agent status
 iron-house-agent intake-once
+sudo iron-house-agent-register --dry-run --key future-project --name "Future Project" \
+  --repository iron-house-os/future-project --directory future-project
 iron-house-agent smoke --project ihos --issue <issue-number>
 iron-house-agent enqueue --project ihos --role build --issue <issue-number> \
   --title "Approved task" --prompt-file /path/to/task.txt

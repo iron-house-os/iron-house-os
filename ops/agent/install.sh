@@ -38,6 +38,8 @@ if [ ! -f "${RUNTIME_REGISTRY}" ]; then
     "${AGENT_REPOSITORY}/ops/agent/projects.json" "${RUNTIME_REGISTRY}"
 fi
 install -m 0755 "${AGENT_REPOSITORY}/ops/agent/iron-house-agent" /usr/local/bin/iron-house-agent
+install -m 0755 "${AGENT_REPOSITORY}/ops/agent/iron-house-agent-register" \
+  /usr/local/bin/iron-house-agent-register
 install -m 0644 "${AGENT_REPOSITORY}/ops/agent/iron-house-agent.service" \
   /etc/systemd/system/iron-house-agent.service
 
@@ -46,7 +48,8 @@ systemctl daemon-reload
 
 if [ "${START_SERVICE}" = "true" ]; then
   sudo -u "${AGENT_USER}" /usr/local/bin/iron-house-agent preflight
-  systemctl enable --now iron-house-agent.service
+  systemctl enable iron-house-agent.service
+  systemctl restart iron-house-agent.service
   systemctl --no-pager --full status iron-house-agent.service
 else
   echo "Installed but not started. Authenticate Codex for ih-agent, run preflight, then:"

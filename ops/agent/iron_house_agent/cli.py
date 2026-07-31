@@ -7,9 +7,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .config import Project, load_settings, register_project
+from .config import Project, load_settings
 from .dashboard import build_state, create_dashboard_server, start_dashboard_thread
 from .intake import GitHubIssueIntake, IssueIntakePoller
+from .registration import ProjectRegistrar
 from .runtime import AgentRuntime, WorkerPool, supported_roles
 from .store import JobStore
 
@@ -58,6 +59,7 @@ def _parser() -> argparse.ArgumentParser:
     register.add_argument("--repository", required=True, help="GitHub owner/name")
     register.add_argument("--directory", required=True)
     register.add_argument("--default-branch", default="main")
+    register.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -83,6 +85,28 @@ def _print(payload: Any) -> None:
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
+        if arguments.command == "register":
+            settings = load_settings(arguments.registry)
+            if arguments.state_directory:
+                settings = replace(
+                    settings, state_directory=Path(arguments.state_directory).resolve()
+                )
+            database = (
+                Path(arguments.database).resolve() if arguments.database else settings.database_path
+            )
+            project = Project(
+                key=arguments.key,
+                name=arguments.name,
+                repository=arguments.repository,
+                directory=arguments.directory,
+                default_branch=arguments.default_branch,
+            )
+            result = ProjectRegistrar(settings, JobStore(database)).register(
+                project, dry_run=arguments.dry_run
+            )
+            _print(result)
+            return 0
+
         runtime = _runtime(arguments)
         if arguments.command == "init":
             _print({"status": "initialized", "database": runtime.store.database_path})
@@ -164,27 +188,6 @@ def main(argv: list[str] | None = None) -> int:
                 pool.stop()
                 server.shutdown()
                 dashboard_thread.join(timeout=5)
-            return 0
-        if arguments.command == "register":
-            project = Project(
-                key=arguments.key,
-                name=arguments.name,
-                repository=arguments.repository,
-                directory=arguments.directory,
-                default_branch=arguments.default_branch,
-            )
-            project.validate()
-            checkout = runtime.clone_registered_project(project)
-            updated = register_project(runtime.settings.registry_path, project)
-            _print(
-                {
-                    "status": "registered",
-                    "project": project.key,
-                    "checkout": checkout,
-                    "project_count": len(updated.projects),
-                    "production_deploy_allowed": False,
-                }
-            )
             return 0
     except (OSError, RuntimeError, ValueError, KeyError) as error:
         print(f"error: {error}", file=sys.stderr)
