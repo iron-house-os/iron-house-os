@@ -207,7 +207,17 @@ class AgentRuntime:
             raise RuntimeError(f"Registration staging directory already exists: {temporary}")
         try:
             subprocess.run(
-                ["git", "clone", f"https://github.com/{project.repository}.git", str(temporary)],
+                [
+                    "gh",
+                    "repo",
+                    "clone",
+                    project.repository,
+                    str(temporary),
+                    "--",
+                    "--branch",
+                    project.default_branch,
+                    "--single-branch",
+                ],
                 check=True,
                 timeout=300,
                 env=self._safe_environment(),
@@ -215,6 +225,10 @@ class AgentRuntime:
             if not (temporary / "AGENTS.md").is_file():
                 raise RuntimeError("Repository must contain AGENTS.md before enrollment")
             temporary.rename(destination)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if temporary.exists() and temporary.parent == self.settings.workspace.resolve():
+                shutil.rmtree(temporary)
+            raise RuntimeError("GitHub repository clone failed") from error
         except Exception:
             if temporary.exists() and temporary.parent == self.settings.workspace.resolve():
                 shutil.rmtree(temporary)

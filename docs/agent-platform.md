@@ -126,8 +126,10 @@ Ambiguous roles, missing repository policy, secret-like issue text, prohibited p
 
 Before enrollment, the GitHub repository must contain an `AGENTS.md` file declaring its build/test commands, protected environments, forbidden actions, approval gates, staging instructions, and priorities.
 
+Preview every validation without cloning, editing the registry, creating labels, or restarting the service:
+
 ```bash
-sudo -u ih-agent -H iron-house-agent register \
+sudo iron-house-agent-register --dry-run \
   --key future-project \
   --name "Future Project" \
   --repository iron-house-os/future-project \
@@ -135,13 +137,24 @@ sudo -u ih-agent -H iron-house-agent register \
   --default-branch main
 ```
 
-Registration clones the repository into the existing shared workspace, verifies `AGENTS.md`, and atomically adds it to the runtime registry. Re-running the exact same registration is safe. Production deployment is always recorded as disabled. The tracked `ops/agent/projects.json` file is an installation seed; runtime registration never dirties the central repository checkout.
-
-Restart the service after a successful registration so every worker loads the new registry:
+Run the same command without `--dry-run` to enroll and activate the project:
 
 ```bash
-sudo systemctl restart iron-house-agent.service
+sudo iron-house-agent-register \
+  --key future-project \
+  --name "Future Project" \
+  --repository iron-house-os/future-project \
+  --directory future-project \
+  --default-branch main
 ```
+
+The single registration command verifies saved GitHub access, repository identity, default branch,
+and the remote `AGENTS.md` before mutation. It clones through GitHub CLI, verifies the checkout
+origin, creates the standard intake labels, atomically updates the private runtime registry, marks
+intake health ready, restarts the non-production service, and checks the loopback health endpoint.
+Re-running the exact registration is safe. Production deployment is always disabled. The tracked
+`ops/agent/projects.json` remains an installation seed; runtime registration never dirties the
+central repository checkout.
 
 ## Dashboard access
 
