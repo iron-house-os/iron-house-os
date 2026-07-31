@@ -9,6 +9,7 @@ from typing import Any
 
 from .config import Project, load_settings, register_project
 from .dashboard import build_state, create_dashboard_server, start_dashboard_thread
+from .intake import GitHubIssueIntake, IssueIntakePoller
 from .runtime import AgentRuntime, WorkerPool, supported_roles
 from .store import JobStore
 
@@ -29,6 +30,7 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("run-once", help="Run the next queued job").add_argument(
         "--worker-id", default="manual-worker"
     )
+    subparsers.add_parser("intake-once", help="Poll explicitly labelled GitHub issues once")
 
     enqueue = subparsers.add_parser("enqueue", help="Add an issue-linked job to the queue")
     enqueue.add_argument("--project", required=True)
@@ -115,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
                 else {k: v for k, v in job.items() if k != "prompt"}
             )
             return 0 if job is None or job["status"] == "succeeded" else 1
+        if arguments.command == "intake-once":
+            summary = GitHubIssueIntake(runtime.settings, runtime.store).poll_once()
+            _print(summary)
+            return 0 if summary["sources_blocked"] == 0 else 1
         if arguments.command == "smoke":
             runtime.preflight()
             queued = runtime.enqueue_smoke_test(arguments.project, arguments.issue)
@@ -144,7 +150,9 @@ def main(argv: list[str] | None = None) -> int:
             workers = arguments.workers or runtime.settings.max_parallel_jobs
             server, dashboard_thread = start_dashboard_thread(runtime.settings, runtime.store)
             pool = WorkerPool(runtime, workers)
+            intake_poller = IssueIntakePoller(GitHubIssueIntake(runtime.settings, runtime.store))
             pool.start()
+            intake_poller.start()
             print(
                 f"Workers: {workers}; dashboard: http://{runtime.settings.dashboard_host}:"
                 f"{runtime.settings.dashboard_port}"
@@ -152,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 pool.wait()
             finally:
+                intake_poller.stop()
                 pool.stop()
                 server.shutdown()
                 dashboard_thread.join(timeout=5)

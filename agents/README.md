@@ -71,14 +71,16 @@ documented in [`docs/agent-platform.md`](../docs/agent-platform.md).
 ```bash
 iron-house-agent preflight
 iron-house-agent status
+iron-house-agent intake-once
 iron-house-agent smoke --project ihos --issue <issue-number>
 iron-house-agent enqueue --project ihos --role build --issue <issue-number> \
   --title "Approved task" --prompt-file /path/to/task.txt
 ```
 
 The default service runs four workers concurrently. SQLite provides atomic job claiming, and every
-job is prepared in a separate worktree before Codex starts. The dashboard listens only on
-`127.0.0.1:8787` and has no mutation routes.
+job is prepared in a separate worktree before Codex starts. Open GitHub issues labelled
+`agent:ready` plus exactly one supported `agent:<role>` label are ingested once per issue revision.
+The dashboard listens only on `127.0.0.1:8787` and has no mutation routes.
 
 ## Branch naming
 

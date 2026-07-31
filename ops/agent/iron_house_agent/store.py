@@ -88,19 +88,34 @@ class JobStore:
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(job_id) REFERENCES jobs(id)
                 );
+                CREATE TABLE IF NOT EXISTS intake_sources (
+                    project_key TEXT PRIMARY KEY,
+                    state TEXT NOT NULL CHECK (state IN ('ready', 'blocked')),
+                    detail TEXT NOT NULL,
+                    checked_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS issue_intake (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    project_key TEXT NOT NULL,
+                    repository TEXT NOT NULL,
+                    issue_number INTEGER NOT NULL CHECK (issue_number > 0),
+                    revision TEXT NOT NULL,
+                    role TEXT,
+                    status TEXT NOT NULL CHECK (status IN ('accepted', 'blocked')),
+                    detail TEXT NOT NULL,
+                    job_id TEXT,
+                    discovered_at TEXT NOT NULL,
+                    UNIQUE(source, repository, issue_number, revision),
+                    FOREIGN KEY(job_id) REFERENCES jobs(id)
+                );
+                CREATE INDEX IF NOT EXISTS issue_intake_recent_idx
+                    ON issue_intake(discovered_at DESC);
                 """
             )
 
-    def enqueue(
-        self,
-        *,
-        project_key: str,
-        role: str,
-        issue_number: int,
-        title: str,
-        prompt: str,
-        mode: str = "standard",
-    ) -> dict[str, Any]:
+    @staticmethod
+    def _validate_job(*, role: str, issue_number: int, title: str, prompt: str, mode: str) -> None:
         if role not in AGENT_ROLES:
             raise ValueError(f"Unsupported agent role: {role}")
         if issue_number <= 0:
@@ -113,6 +128,24 @@ class JobStore:
             raise ValueError(f"Unsupported job mode: {mode}")
         reject_embedded_secrets(title)
         reject_embedded_secrets(prompt)
+
+    def enqueue(
+        self,
+        *,
+        project_key: str,
+        role: str,
+        issue_number: int,
+        title: str,
+        prompt: str,
+        mode: str = "standard",
+    ) -> dict[str, Any]:
+        self._validate_job(
+            role=role,
+            issue_number=issue_number,
+            title=title,
+            prompt=prompt,
+            mode=mode,
+        )
         job_id = str(uuid.uuid4())
         queued_at = utc_now()
         with self.connect() as connection:
@@ -135,6 +168,111 @@ class JobStore:
             )
             self._event(connection, job_id, "queued", f"role={role}")
         return self.get_job(job_id)
+
+    def record_issue_intake(
+        self,
+        *,
+        source: str,
+        project_key: str,
+        repository: str,
+        issue_number: int,
+        revision: str,
+        title: str,
+        prompt: str,
+        role: str | None,
+        block_reason: str | None = None,
+    ) -> dict[str, Any]:
+        if not source.strip() or not repository.strip() or not revision.strip():
+            raise ValueError("Issue intake source, repository, and revision are required")
+        if issue_number <= 0:
+            raise ValueError("Issue intake requires a positive issue number")
+        if block_reason is None:
+            if role is None:
+                raise ValueError("Accepted issue intake requires an agent role")
+            self._validate_job(
+                role=role,
+                issue_number=issue_number,
+                title=title,
+                prompt=prompt,
+                mode="standard",
+            )
+        discovered_at = utc_now()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT * FROM issue_intake
+                WHERE source = ? AND repository = ? AND issue_number = ? AND revision = ?
+                """,
+                (source, repository, issue_number, revision),
+            ).fetchone()
+            if existing is not None:
+                connection.execute("COMMIT")
+                return {**dict(existing), "duplicate": True}
+
+            job_id = None
+            status = "blocked" if block_reason else "accepted"
+            detail = (block_reason or "Queued from explicitly labelled GitHub issue")[:1000]
+            if block_reason is None:
+                job_id = str(uuid.uuid4())
+                connection.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, project_key, role, issue_number, title, prompt, mode, status, queued_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'standard', 'queued', ?)
+                    """,
+                    (
+                        job_id,
+                        project_key,
+                        role,
+                        issue_number,
+                        title.strip(),
+                        prompt.strip(),
+                        discovered_at,
+                    ),
+                )
+                self._event(connection, job_id, "queued", f"role={role}; source=github-intake")
+            cursor = connection.execute(
+                """
+                INSERT INTO issue_intake (
+                    source, project_key, repository, issue_number, revision, role,
+                    status, detail, job_id, discovered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source,
+                    project_key,
+                    repository,
+                    issue_number,
+                    revision,
+                    role,
+                    status,
+                    detail,
+                    job_id,
+                    discovered_at,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM issue_intake WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            connection.execute("COMMIT")
+        return {**dict(row), "duplicate": False}
+
+    def update_intake_source(self, project_key: str, state: str, detail: str) -> None:
+        if state not in {"ready", "blocked"}:
+            raise ValueError(f"Unsupported intake source state: {state}")
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO intake_sources (project_key, state, detail, checked_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(project_key) DO UPDATE SET
+                    state = excluded.state,
+                    detail = excluded.detail,
+                    checked_at = excluded.checked_at
+                """,
+                (project_key, state, detail[:1000], utc_now()),
+            )
 
     def claim_next(self, worker_id: str) -> dict[str, Any] | None:
         now = utc_now()
@@ -245,11 +383,30 @@ class JobStore:
                 dict(row)
                 for row in connection.execute("SELECT * FROM workers ORDER BY id").fetchall()
             ]
+            intake_sources = [
+                dict(row)
+                for row in connection.execute(
+                    "SELECT * FROM intake_sources ORDER BY project_key"
+                ).fetchall()
+            ]
+            intake_history = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT project_key, repository, issue_number, revision, role, status,
+                           detail, job_id, discovered_at
+                    FROM issue_intake ORDER BY discovered_at DESC, id DESC LIMIT ?
+                    """,
+                    (history_limit,),
+                ).fetchall()
+            ]
         return {
             "workers": workers,
             "current_jobs": running,
             "queue": queued,
             "history": history,
+            "intake_sources": intake_sources,
+            "intake_history": intake_history,
         }
 
     @staticmethod
