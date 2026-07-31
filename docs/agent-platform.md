@@ -52,6 +52,14 @@ sudo -u ih-agent -H iron-house-agent smoke --project ihos --issue 107
 
 The smoke command creates an isolated local feature branch, runs read-only repository inspection through `codex exec`, and records the result. It does not change files, commit, push, open a pull request, install dependencies, or contact production.
 
+To validate an unmerged feature branch from a detached review worktree without installing the service, run:
+
+```bash
+sudo -u ih-agent -H bash ops/agent/smoke-pr.sh
+```
+
+The wrapper uses private state and worktree directories under the `ih-agent` home directory. Optional positional arguments select another registered project and issue number.
+
 Start the service only after preflight and the smoke test pass:
 
 ```bash
