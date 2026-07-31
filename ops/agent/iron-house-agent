@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+
+AGENT_REPOSITORY=/srv/iron-house-agents/iron-house-os
+AGENT_REGISTRY="${IH_AGENT_REGISTRY:-/var/lib/iron-house-agent/projects.json}"
+export PYTHONPATH="${AGENT_REPOSITORY}${PYTHONPATH:+:${PYTHONPATH}}"
+exec python3 -m ops.agent.iron_house_agent.cli --registry "${AGENT_REGISTRY}" "$@"

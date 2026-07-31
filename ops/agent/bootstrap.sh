@@ -68,10 +68,12 @@ cat <<EOF
 Bootstrap complete.
 
 Next required secure steps:
-1. Create /etc/iron-house-agent.env from the example and add repository-limited credentials.
-2. Run: sudo -u ${AGENT_USER} gh auth status
-3. Authenticate Codex with an API key or supported login flow.
+1. Run: sudo -u ${AGENT_USER} -H gh auth status
+2. Run: sudo -u ${AGENT_USER} -H codex login --device-auth
+3. Run: sudo -u ${AGENT_USER} -H codex login status
 4. Run: iron-house-agent-check
+5. Review docs/agent-platform.md, then install the service without starting it:
+   sudo bash ${WORKSPACE}/iron-house-os/ops/agent/install.sh
 
 Workspace: ${WORKSPACE}
 User: ${AGENT_USER}

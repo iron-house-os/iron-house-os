@@ -1,0 +1,24 @@
+[Unit]
+Description=Iron House shared autonomous development agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ih-agent
+Group=ih-agent
+WorkingDirectory=/srv/iron-house-agents/iron-house-os
+Environment=PYTHONPATH=/srv/iron-house-agents/iron-house-os
+ExecStart=/usr/bin/python3 -m ops.agent.iron_house_agent.cli --registry /var/lib/iron-house-agent/projects.json serve --workers 4
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/iron-house-agents /var/lib/iron-house-agent -/home/ih-agent/.codex -/home/ih-agent/.config/gh
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -55,14 +55,30 @@ Recommended checkout layout:
 
 ```text
 /srv/iron-house-agents/
-  projects/
-    iron-house-os/
-    Dumper/
-  logs/
-    iron-house-os/
-    Dumper/
-  config/
+  iron-house-os/
+  Dumper/
+  worktrees/
+    ihos/
+    dumper/
 ```
+
+Runtime registry, state, and private job logs live in `/var/lib/iron-house-agent`. The shared queue,
+isolated worker runtime, read-only dashboard, installation steps, and recovery procedure are
+documented in [`docs/agent-platform.md`](../docs/agent-platform.md).
+
+## Runtime commands
+
+```bash
+iron-house-agent preflight
+iron-house-agent status
+iron-house-agent smoke --project ihos --issue <issue-number>
+iron-house-agent enqueue --project ihos --role build --issue <issue-number> \
+  --title "Approved task" --prompt-file /path/to/task.txt
+```
+
+The default service runs four workers concurrently. SQLite provides atomic job claiming, and every
+job is prepared in a separate worktree before Codex starts. The dashboard listens only on
+`127.0.0.1:8787` and has no mutation routes.
 
 ## Branch naming
 

@@ -1,0 +1,160 @@
+# Iron House autonomous development platform
+
+## Objective
+
+Run reusable development agents for Iron House OS, Dumper, and future Iron House repositories from the shared non-production DigitalOcean workspace. Every job is issue-linked, isolated in its own Git worktree, and prevented from deploying production.
+
+## Current operating state
+
+- Owner: Iron House development operations
+- Priority: High
+- Status: Ready for build-workspace installation after review
+- Approval gate: Jeremie Peters must explicitly approve any production deployment; the agent platform cannot grant that approval
+- System of record: `ops/agent/projects.json`, the SQLite job database, GitHub issues, and draft pull requests
+- Production systems: out of scope
+
+## Components
+
+| Component | Purpose | Default location |
+| --- | --- | --- |
+| Project registry | Enrolled repositories and immutable production gate | `/var/lib/iron-house-agent/projects.json` |
+| Job store | Queue, workers, timestamps, outcomes, and history | `/var/lib/iron-house-agent/jobs.sqlite3` |
+| Logs | One private JSONL log per Codex job | `/var/lib/iron-house-agent/logs/` |
+| Worktrees | One isolated feature branch checkout per job | `/srv/iron-house-agents/worktrees/` |
+| Dashboard | Read-only queue, worker, history, and repository health | `http://127.0.0.1:8787` |
+| Service | Four concurrent worker loops plus dashboard | `iron-house-agent.service` |
+
+The dashboard binds to loopback and exposes no write endpoint. Access it remotely through an SSH tunnel rather than a public listener.
+
+## One-time authentication checkpoint
+
+Run device-code authentication as the unprivileged agent user. Open the URL printed by Codex in a browser, enter the one-time code, and complete the account flow. Never paste the code or cached credential into Git, a ticket, or chat.
+
+```bash
+sudo -u ih-agent -H codex login --device-auth
+sudo -u ih-agent -H codex login status
+sudo -u ih-agent -H gh auth status
+```
+
+Codex authentication is stored under the `ih-agent` account and reused by non-interactive jobs. The worker environment intentionally removes `OPENAI_API_KEY`, `CODEX_API_KEY`, and `GH_TOKEN`; use the saved Codex and GitHub CLI sessions. Standard jobs enable network access inside the workspace-write sandbox so they can fetch dependencies, push feature branches, and open draft pull requests. Non-destructive smoke jobs explicitly disable sandbox network access.
+
+## Install and verify
+
+From `/srv/iron-house-agents/iron-house-os` on the build droplet:
+
+```bash
+git switch main
+git pull --ff-only
+sudo bash ops/agent/install.sh
+sudo -u ih-agent -H iron-house-agent preflight
+sudo -u ih-agent -H iron-house-agent smoke --project ihos --issue 107
+```
+
+The smoke command creates an isolated local feature branch, runs read-only repository inspection through `codex exec`, and records the result. It does not change files, commit, push, open a pull request, install dependencies, or contact production.
+
+Start the service only after preflight and the smoke test pass:
+
+```bash
+sudo systemctl enable --now iron-house-agent.service
+systemctl --no-pager --full status iron-house-agent.service
+curl --fail http://127.0.0.1:8787/healthz
+```
+
+## Queue work
+
+Every job requires an existing GitHub issue number and an enrolled project. Prompts containing common API-key or token forms are rejected.
+
+```bash
+sudo -u ih-agent -H iron-house-agent enqueue \
+  --project ihos \
+  --role build \
+  --issue 107 \
+  --title "Complete issue 107 acceptance criteria" \
+  --prompt-file /path/to/approved-task.txt
+```
+
+Supported roles:
+
+- `build`
+- `ci-repair`
+- `code-review`
+- `qa-browser`
+- `security-audit`
+- `dependency-update`
+- `documentation`
+- `issue-planning`
+
+Standard jobs instruct Codex to work only on the generated feature branch, run relevant checks, commit and push the scoped change, and open a draft pull request. The agent is explicitly prohibited from merging or deploying production.
+
+## Register a future project
+
+Before enrollment, the GitHub repository must contain an `AGENTS.md` file declaring its build/test commands, protected environments, forbidden actions, approval gates, staging instructions, and priorities.
+
+```bash
+sudo -u ih-agent -H iron-house-agent register \
+  --key future-project \
+  --name "Future Project" \
+  --repository iron-house-os/future-project \
+  --directory future-project \
+  --default-branch main
+```
+
+Registration clones the repository into the existing shared workspace, verifies `AGENTS.md`, and atomically adds it to the runtime registry. Re-running the exact same registration is safe. Production deployment is always recorded as disabled. The tracked `ops/agent/projects.json` file is an installation seed; runtime registration never dirties the central repository checkout.
+
+Restart the service after a successful registration so every worker loads the new registry:
+
+```bash
+sudo systemctl restart iron-house-agent.service
+```
+
+## Dashboard access
+
+From a trusted workstation with SSH access to the build droplet:
+
+```bash
+ssh -L 8787:127.0.0.1:8787 ih-agent@178.128.231.173
+```
+
+Then open `http://127.0.0.1:8787`. The dashboard shows:
+
+- configured agent roles and active workers;
+- current jobs and feature branches;
+- queued work;
+- completed and failed build history;
+- clean, dirty, blocked, missing, or unhealthy repository checkouts.
+
+## Recovery and controls
+
+```bash
+sudo systemctl stop iron-house-agent.service
+sudo -u ih-agent -H iron-house-agent status
+journalctl -u iron-house-agent.service --since today --no-pager
+sudo systemctl start iron-house-agent.service
+```
+
+Do not delete the job database or worktrees during incident review. Stop the service first, preserve `/var/lib/iron-house-agent`, and record the affected job ID and branch.
+
+Key controls:
+
+- The service runs as `ih-agent`, not root.
+- The dashboard is loopback-only and read-only.
+- Each job receives a separate worktree and issue-linked branch.
+- Worker subprocesses receive a restricted environment rather than inherited secret variables.
+- Production deployment is rejected by registry validation.
+- Dumper payment, invitation, owner-only, qualification, and live-load gates remain outside autonomous scope.
+- No agent may approve or merge its own pull request.
+
+## Failure modes
+
+| Failure | Result | Recovery |
+| --- | --- | --- |
+| Codex or GitHub login expires | Workers report `blocked`; queued jobs remain queued | Re-authenticate as `ih-agent`, run `preflight`, restart service |
+| Repository lacks `AGENTS.md` | Job or registration fails closed | Add and review the project policy before retrying |
+| Worker task fails | Job is retained as `failed` with branch and log path | Inspect evidence and queue a narrow follow-up issue-linked job |
+| Checkout is dirty | Dashboard reports `dirty` | Review ownership of the changes; do not discard them automatically |
+| Dashboard unavailable | Workers may continue; health endpoint fails | Check service status and journal; dashboard has no job-control authority |
+| Production request enters a prompt | Agent policy forbids the action | Stop and require explicit owner-approved production workflow outside this platform |
+
+## Build note
+
+The next durable improvement should add authenticated notifications for failed or blocked jobs after the local service and smoke test are verified. Notifications must not include prompts, logs, tokens, or other sensitive content.
