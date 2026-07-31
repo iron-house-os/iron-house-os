@@ -1,0 +1,22 @@
+{
+  "workspace": "/srv/iron-house-agents",
+  "production_requires_owner_approval": true,
+  "projects": [
+    {
+      "name": "Iron House OS",
+      "repository": "iron-house-os/iron-house-os",
+      "directory": "iron-house-os",
+      "default_branch": "main",
+      "staging_allowed_after_ci": true,
+      "production_deploy_allowed": false
+    },
+    {
+      "name": "Dumper",
+      "repository": "iron-house-os/Dumper",
+      "directory": "Dumper",
+      "default_branch": "main",
+      "staging_allowed_after_ci": true,
+      "production_deploy_allowed": false
+    }
+  ]
+}
