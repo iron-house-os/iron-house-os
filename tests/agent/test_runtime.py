@@ -119,6 +119,7 @@ def test_codex_command_is_noninteractive_and_disables_smoke_network() -> None:
     smoke = AgentRuntime._codex_command("smoke", network_access=False)
     standard = AgentRuntime._codex_command("standard", network_access=True)
 
-    assert ["--ask-for-approval", "never"] == smoke[smoke.index("--ask-for-approval") :][:2]
+    assert 'approval_policy="never"' in smoke
+    assert "--ask-for-approval" not in smoke
     assert "sandbox_workspace_write.network_access=false" in smoke
     assert "sandbox_workspace_write.network_access=true" in standard
