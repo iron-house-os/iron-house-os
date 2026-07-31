@@ -24,6 +24,7 @@ def test_deploy_agent_timer_is_bounded_and_persistent() -> None:
     assert "TimeoutStartSec=45min" in service
     assert "ExecStart=/bin/bash" in service
 
+
 def test_production_cutover_handoff_is_permission_safe() -> None:
     wrapper = (ROOT / "ops/digitalocean/production-deploy-wrapper.sh").read_text(
         encoding="utf-8"
