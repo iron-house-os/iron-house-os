@@ -83,7 +83,11 @@ if [ ! -f "${AGENT_REPOSITORY}/ops/agent/projects.json" ]; then
   exit 1
 fi
 
-if [ "${START_SERVICE}" = "true" ] && systemctl is-active --quiet iron-house-agent.service; then
+if systemctl is-active --quiet iron-house-agent.service; then
+  if [ "${START_SERVICE}" != "true" ]; then
+    echo "Agent service is active; rerun with --start to update it safely." >&2
+    exit 1
+  fi
   # Fail closed: an old worker must not keep claiming jobs if repair or preflight fails.
   systemctl stop iron-house-agent.service
 fi
