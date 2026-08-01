@@ -48,11 +48,21 @@ install_codex_sandbox_prerequisites() {
 
   local source_profile="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
   local installed_profile="/etc/apparmor.d/bwrap-userns-restrict"
+  local disabled_profile="/etc/apparmor.d/disable/bwrap-userns-restrict"
   if [ ! -f "${source_profile}" ]; then
     echo "Ubuntu 24.04 Bubblewrap AppArmor profile is unavailable: ${source_profile}" >&2
     exit 1
   fi
-  install -m 0644 "${source_profile}" "${installed_profile}"
+  local prepared_profile
+  prepared_profile="$(mktemp)"
+  if ! python3 "${AGENT_REPOSITORY}/ops/agent/iron_house_agent/apparmor.py" \
+    "${source_profile}" "${prepared_profile}"; then
+    rm -f "${prepared_profile}"
+    exit 1
+  fi
+  install -m 0644 "${prepared_profile}" "${installed_profile}"
+  rm -f "${prepared_profile}"
+  rm -f "${disabled_profile}"
   apparmor_parser -r "${installed_profile}"
 }
 
@@ -71,6 +81,11 @@ fi
 if [ ! -f "${AGENT_REPOSITORY}/ops/agent/projects.json" ]; then
   echo "Missing agent repository at ${AGENT_REPOSITORY}" >&2
   exit 1
+fi
+
+if [ "${START_SERVICE}" = "true" ] && systemctl is-active --quiet iron-house-agent.service; then
+  # Fail closed: an old worker must not keep claiming jobs if repair or preflight fails.
+  systemctl stop iron-house-agent.service
 fi
 
 install_codex_sandbox_prerequisites

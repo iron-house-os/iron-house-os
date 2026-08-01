@@ -198,18 +198,21 @@ Key controls:
 ### Ubuntu 24.04 Codex sandbox support
 
 The installer uses the distribution `bubblewrap` package. On Ubuntu 24.04 it also installs
-`apparmor-profiles` and `apparmor-utils`, copies the packaged `bwrap-userns-restrict` profile into
-`/etc/apparmor.d`, and loads it with `apparmor_parser`. This allows Bubblewrap to create the
+`apparmor-profiles` and `apparmor-utils`, prepares the packaged `bwrap-userns-restrict` profile with
+deleted-dentry mediation required by real temporary-file workloads, clears any stale disable marker,
+copies the validated profile into `/etc/apparmor.d`, and loads it with `apparmor_parser`. This allows Bubblewrap to create the
 unprivileged user namespace required by Codex without disabling Ubuntu's AppArmor restriction
 globally. The agent preflight executes a minimal Bubblewrap user-namespace probe and fails with a
 specific recovery instruction before any job is claimed when the profile is missing or inactive.
+During `--start` activation, an existing worker is stopped before the repair begins and remains
+stopped if profile setup or preflight fails, preventing the old process from claiming more jobs.
 
 To repair or verify the supported configuration on the non-production build droplet, update the
 repository and rerun `sudo bash ops/agent/install.sh --start`. Do not set
 `kernel.apparmor_restrict_unprivileged_userns=0`; the packaged executable-specific profile keeps the
-exception limited to Bubblewrap. If rollback is required, stop the service, remove
-`/etc/apparmor.d/bwrap-userns-restrict`, reload AppArmor, and reinstall the last approved agent
-revision before restarting the service.
+exception limited to Bubblewrap. If rollback is required, stop the service, run
+`apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict`, remove the profile file, reload AppArmor,
+and reinstall the last approved agent revision before restarting the service.
 
 - The service runs as `ih-agent`, not root.
 - The dashboard is loopback-only and read-only.

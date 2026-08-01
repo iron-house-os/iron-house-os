@@ -19,7 +19,19 @@ def test_installer_configures_ubuntu_2404_bubblewrap_apparmor_profile() -> None:
     assert "apparmor-utils" in installer
     assert "/usr/share/apparmor/extra-profiles/bwrap-userns-restrict" in installer
     assert 'apparmor_parser -r "${installed_profile}"' in installer
+    assert 'rm -f "${disabled_profile}"' in installer
     assert "kernel.apparmor_restrict_unprivileged_userns=0" not in installer
+
+
+def test_start_activation_stops_old_worker_before_repair_and_preflight() -> None:
+    installer = Path("ops/agent/install.sh").read_text(encoding="utf-8")
+
+    stop = installer.index("systemctl stop iron-house-agent.service")
+    sandbox_setup = installer.index("install_codex_sandbox_prerequisites", stop)
+    preflight = installer.index("/usr/local/bin/iron-house-agent preflight", sandbox_setup)
+    restart = installer.index("systemctl restart iron-house-agent.service", preflight)
+
+    assert stop < sandbox_setup < preflight < restart
 
 
 def test_service_allows_codex_sandbox_without_removing_filesystem_hardening() -> None:

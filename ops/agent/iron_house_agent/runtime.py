@@ -113,7 +113,15 @@ class AgentRuntime:
                 "--ro-bind",
                 "/",
                 "/",
-                "/usr/bin/true",
+                "--tmpfs",
+                "/tmp",
+                "/usr/bin/python3",
+                "-c",
+                (
+                    "import os; "
+                    "fd = os.open('/tmp', os.O_TMPFILE | os.O_RDWR, 0o600); "
+                    "os.write(fd, b'codex-sandbox-probe'); os.close(fd)"
+                ),
             ],
         }
         results: dict[str, str] = {}
