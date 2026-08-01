@@ -11,6 +11,17 @@ def test_start_installation_restarts_already_active_service() -> None:
     assert 'sudo -u "${AGENT_USER}" -H gh auth setup-git' in commands
 
 
+def test_installer_configures_ubuntu_2404_bubblewrap_apparmor_profile() -> None:
+    installer = Path("ops/agent/install.sh").read_text(encoding="utf-8")
+
+    assert "bubblewrap" in installer
+    assert "apparmor-profiles" in installer
+    assert "apparmor-utils" in installer
+    assert "/usr/share/apparmor/extra-profiles/bwrap-userns-restrict" in installer
+    assert 'apparmor_parser -r "${installed_profile}"' in installer
+    assert "kernel.apparmor_restrict_unprivileged_userns=0" not in installer
+
+
 def test_service_allows_codex_sandbox_without_removing_filesystem_hardening() -> None:
     unit = Path("ops/agent/iron-house-agent.service").read_text(encoding="utf-8")
 

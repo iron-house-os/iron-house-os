@@ -14,6 +14,51 @@ from ops.agent.iron_house_agent.store import JobStore
 from tests.agent.conftest import create_test_repository
 
 
+def test_preflight_verifies_bubblewrap_user_namespace(settings, monkeypatch) -> None:
+    store = JobStore(settings.database_path)
+    runtime = AgentRuntime(settings, store)
+    commands: list[list[str]] = []
+
+    def command_runner(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", command_runner)
+
+    checks = runtime.preflight()
+
+    assert checks["codex_sandbox"] == "ok"
+    assert [
+        "bwrap",
+        "--unshare-user",
+        "--uid",
+        "0",
+        "--gid",
+        "0",
+        "--ro-bind",
+        "/",
+        "/",
+        "/usr/bin/true",
+    ] in commands
+
+
+def test_preflight_explains_bubblewrap_failure(settings, monkeypatch) -> None:
+    store = JobStore(settings.database_path)
+    runtime = AgentRuntime(settings, store)
+
+    def command_runner(command, **kwargs):
+        if command[0] == "bwrap":
+            raise subprocess.CalledProcessError(
+                1, command, stderr="bwrap: setting up uid map: Permission denied"
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", command_runner)
+
+    with pytest.raises(RuntimeError, match="Re-run the agent installer as root"):
+        runtime.preflight()
+
+
 def test_job_runs_in_issue_linked_isolated_worktree(settings) -> None:
     create_test_repository(settings)
     store = JobStore(settings.database_path)

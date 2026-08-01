@@ -195,6 +195,22 @@ Key controls:
   a pushed issue-linked branch, and a verifiable open draft pull request exist. An explicit blocked
   Codex response fails the job even when the CLI exits zero.
 
+### Ubuntu 24.04 Codex sandbox support
+
+The installer uses the distribution `bubblewrap` package. On Ubuntu 24.04 it also installs
+`apparmor-profiles` and `apparmor-utils`, copies the packaged `bwrap-userns-restrict` profile into
+`/etc/apparmor.d`, and loads it with `apparmor_parser`. This allows Bubblewrap to create the
+unprivileged user namespace required by Codex without disabling Ubuntu's AppArmor restriction
+globally. The agent preflight executes a minimal Bubblewrap user-namespace probe and fails with a
+specific recovery instruction before any job is claimed when the profile is missing or inactive.
+
+To repair or verify the supported configuration on the non-production build droplet, update the
+repository and rerun `sudo bash ops/agent/install.sh --start`. Do not set
+`kernel.apparmor_restrict_unprivileged_userns=0`; the packaged executable-specific profile keeps the
+exception limited to Bubblewrap. If rollback is required, stop the service, remove
+`/etc/apparmor.d/bwrap-userns-restrict`, reload AppArmor, and reinstall the last approved agent
+revision before restarting the service.
+
 - The service runs as `ih-agent`, not root.
 - The dashboard is loopback-only and read-only.
 - Each job receives a separate worktree and issue-linked branch.

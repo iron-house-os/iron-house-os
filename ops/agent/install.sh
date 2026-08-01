@@ -13,6 +13,49 @@ WORKTREES_DIRECTORY="/srv/iron-house-agents/worktrees"
 RUNTIME_REGISTRY="${STATE_DIRECTORY}/projects.json"
 START_SERVICE="false"
 
+install_codex_sandbox_prerequisites() {
+  if [ ! -r /etc/os-release ]; then
+    echo "Cannot identify the operating system required for Codex sandbox setup" >&2
+    exit 1
+  fi
+
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  if [ "${ID:-}" != "ubuntu" ]; then
+    if ! command -v bwrap >/dev/null 2>&1; then
+      echo "Missing Bubblewrap. Install the distribution package before starting the agent." >&2
+      exit 1
+    fi
+    return
+  fi
+
+  local packages=(bubblewrap)
+  if [ "${VERSION_ID:-}" = "24.04" ]; then
+    packages+=(apparmor-profiles apparmor-utils)
+  fi
+  if ! dpkg -s "${packages[@]}" >/dev/null 2>&1; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+  fi
+
+  if [ "${VERSION_ID:-}" != "24.04" ]; then
+    return
+  fi
+  if [ ! -r /sys/module/apparmor/parameters/enabled ] || \
+    ! grep -q '^Y' /sys/module/apparmor/parameters/enabled; then
+    return
+  fi
+
+  local source_profile="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
+  local installed_profile="/etc/apparmor.d/bwrap-userns-restrict"
+  if [ ! -f "${source_profile}" ]; then
+    echo "Ubuntu 24.04 Bubblewrap AppArmor profile is unavailable: ${source_profile}" >&2
+    exit 1
+  fi
+  install -m 0644 "${source_profile}" "${installed_profile}"
+  apparmor_parser -r "${installed_profile}"
+}
+
 if [ "${1:-}" = "--start" ]; then
   START_SERVICE="true"
 elif [ "$#" -gt 0 ]; then
@@ -29,6 +72,8 @@ if [ ! -f "${AGENT_REPOSITORY}/ops/agent/projects.json" ]; then
   echo "Missing agent repository at ${AGENT_REPOSITORY}" >&2
   exit 1
 fi
+
+install_codex_sandbox_prerequisites
 
 install -d -m 0700 -o "${AGENT_USER}" -g "${AGENT_USER}" "${STATE_DIRECTORY}"
 install -d -m 0700 -o "${AGENT_USER}" -g "${AGENT_USER}" "${STATE_DIRECTORY}/logs"
