@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.workflow_values import workflow_enum
 from app.models.document import Document
+from app.models.media import MediaAsset, MediaVersion
 from app.schemas.document import (
     DocumentCategory,
     DocumentCreate,
@@ -186,6 +187,8 @@ def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttac
 def update_document(db: Session, document_id: UUID, payload: DocumentUpdate) -> DocumentRead:
     document = _load_document(db, document_id)
     update_data = payload.model_dump(exclude_unset=True)
+    if {"storage_uri", "metadata"}.intersection(update_data) and _is_media_evidence(db, document.id):
+        raise AppError("Photo evidence files and integrity metadata are immutable; create a media version instead.", status_code=409)
     drawing = update_data.pop("drawing", None)
     metadata = update_data.pop("metadata", None)
 
@@ -213,6 +216,13 @@ def update_document_status(
     document.status = payload.status.value
     db.commit()
     return _to_schema(_load_document(db, document_id))
+
+
+def _is_media_evidence(db: Session, document_id: UUID) -> bool:
+    return bool(
+        db.scalar(select(MediaAsset.id).where(MediaAsset.original_document_id == document_id))
+        or db.scalar(select(MediaVersion.id).where(MediaVersion.document_id == document_id))
+    )
 
 
 def _load_document(db: Session, document_id: UUID) -> Document:
