@@ -11,6 +11,38 @@ def test_start_installation_restarts_already_active_service() -> None:
     assert 'sudo -u "${AGENT_USER}" -H gh auth setup-git' in commands
 
 
+def test_installer_configures_ubuntu_2404_bubblewrap_apparmor_profile() -> None:
+    installer = Path("ops/agent/install.sh").read_text(encoding="utf-8")
+
+    assert "bubblewrap" in installer
+    assert "apparmor-profiles" in installer
+    assert "apparmor-utils" in installer
+    assert "/usr/share/apparmor/extra-profiles/bwrap-userns-restrict" in installer
+    assert 'apparmor_parser -r "${installed_profile}"' in installer
+    assert 'rm -f "${disabled_profile}"' in installer
+    assert "kernel.apparmor_restrict_unprivileged_userns=0" not in installer
+
+
+def test_start_activation_stops_old_worker_before_repair_and_preflight() -> None:
+    installer = Path("ops/agent/install.sh").read_text(encoding="utf-8")
+
+    stop = installer.index("systemctl stop iron-house-agent.service")
+    sandbox_setup = installer.index("install_codex_sandbox_prerequisites", stop)
+    preflight = installer.index("/usr/local/bin/iron-house-agent preflight", sandbox_setup)
+    restart = installer.index("systemctl restart iron-house-agent.service", preflight)
+
+    assert stop < sandbox_setup < preflight < restart
+
+
+def test_installer_rejects_partial_update_while_worker_is_active() -> None:
+    installer = Path("ops/agent/install.sh").read_text(encoding="utf-8")
+
+    assert "Agent service is active; rerun with --start to update it safely." in installer
+    assert installer.index('if [ "${START_SERVICE}" != "true" ]') < installer.index(
+        "systemctl stop iron-house-agent.service"
+    )
+
+
 def test_service_allows_codex_sandbox_without_removing_filesystem_hardening() -> None:
     unit = Path("ops/agent/iron-house-agent.service").read_text(encoding="utf-8")
 

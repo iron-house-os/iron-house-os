@@ -103,6 +103,26 @@ class AgentRuntime:
             "codex_auth": ["codex", "login", "status"],
             "git": ["git", "--version"],
             "github_auth": ["gh", "auth", "status"],
+            "codex_sandbox": [
+                "bwrap",
+                "--unshare-user",
+                "--uid",
+                "0",
+                "--gid",
+                "0",
+                "--ro-bind",
+                "/",
+                "/",
+                "--tmpfs",
+                "/tmp",
+                "/usr/bin/python3",
+                "-c",
+                (
+                    "import os; "
+                    "fd = os.open('/tmp', os.O_TMPFILE | os.O_RDWR, 0o600); "
+                    "os.write(fd, b'codex-sandbox-probe'); os.close(fd)"
+                ),
+            ],
         }
         results: dict[str, str] = {}
         for name, command in checks.items():
@@ -119,8 +139,14 @@ class AgentRuntime:
                 raise RuntimeError(f"Required command is missing: {command[0]}") from error
             except subprocess.CalledProcessError as error:
                 detail = (error.stdout or error.stderr or "authentication failed").strip()
+                if name == "codex_sandbox":
+                    raise RuntimeError(
+                        "codex_sandbox preflight failed: Bubblewrap cannot create its user "
+                        f"namespace ({detail}). Re-run the agent installer as root."
+                    ) from error
                 raise RuntimeError(f"{name} preflight failed: {detail}") from error
-            results[name] = (completed.stdout or completed.stderr).strip().splitlines()[0]
+            output = (completed.stdout or completed.stderr).strip().splitlines()
+            results[name] = output[0] if output else "ok"
         return results
 
     def enqueue_smoke_test(self, project_key: str, issue_number: int) -> dict[str, Any]:
