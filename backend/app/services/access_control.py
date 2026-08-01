@@ -31,6 +31,7 @@ BUSINESS_MODULES = (
     "equipment",
     "field-operations",
     "finance",
+    "media",
 )
 ALL_MODULES = (*BUSINESS_MODULES, "users", "operations")
 
@@ -86,6 +87,8 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
     if normalized_role == "viewer":
         permissions = {ModulePermission.READ}
         if module == "field-operations":
+            permissions.add(ModulePermission.WRITE)
+        if module == "media":
             permissions.add(ModulePermission.WRITE)
         return frozenset(permissions)
     return frozenset()

@@ -16,6 +16,7 @@ from app.api.v1.routes import (
     finance,
     google_calendar,
     estimates,
+    media,
     municipality,
     meeting_minutes,
     operations,
@@ -57,6 +58,7 @@ protected_router.include_router(tenders.router, prefix="/tenders", tags=["tender
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
+protected_router.include_router(media.router, prefix="/media", tags=["media"])
 protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
 protected_router.include_router(
     meeting_minutes.router,
