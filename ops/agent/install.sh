@@ -43,11 +43,12 @@ install -m 0755 "${AGENT_REPOSITORY}/ops/agent/iron-house-agent-register" \
 install -m 0644 "${AGENT_REPOSITORY}/ops/agent/iron-house-agent.service" \
   /etc/systemd/system/iron-house-agent.service
 
-sudo -u "${AGENT_USER}" /usr/local/bin/iron-house-agent init
+sudo -u "${AGENT_USER}" -H /usr/local/bin/iron-house-agent init
 systemctl daemon-reload
 
 if [ "${START_SERVICE}" = "true" ]; then
-  sudo -u "${AGENT_USER}" /usr/local/bin/iron-house-agent preflight
+  sudo -u "${AGENT_USER}" -H gh auth setup-git
+  sudo -u "${AGENT_USER}" -H /usr/local/bin/iron-house-agent preflight
   systemctl enable iron-house-agent.service
   systemctl restart iron-house-agent.service
   systemctl --no-pager --full status iron-house-agent.service

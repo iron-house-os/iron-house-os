@@ -9,11 +9,14 @@ User=ih-agent
 Group=ih-agent
 WorkingDirectory=/srv/iron-house-agents/iron-house-os
 Environment=PYTHONPATH=/srv/iron-house-agents/iron-house-os
+Environment=HOME=/home/ih-agent
 ExecStart=/usr/bin/python3 -m ops.agent.iron_house_agent.cli --registry /var/lib/iron-house-agent/projects.json serve --workers 4
 Restart=on-failure
 RestartSec=10
 UMask=0077
-NoNewPrivileges=true
+# Codex uses Bubblewrap user namespaces. The service remains an unprivileged user with a strict
+# read-only system view and explicit writable paths, but must be allowed to construct that sandbox.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only

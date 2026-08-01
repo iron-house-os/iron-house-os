@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 import time
@@ -123,3 +124,113 @@ def test_codex_command_is_noninteractive_and_disables_smoke_network() -> None:
     assert "--ask-for-approval" not in smoke
     assert "sandbox_workspace_write.network_access=false" in smoke
     assert "sandbox_workspace_write.network_access=true" in standard
+
+
+def test_zero_exit_blocked_agent_message_fails_managed_job(settings, monkeypatch) -> None:
+    create_test_repository(settings)
+    store = JobStore(settings.database_path)
+    runtime = AgentRuntime(settings, store)
+    runtime.initialize()
+    store.enqueue(
+        project_key="test-project",
+        role="build",
+        issue_number=112,
+        title="Blocked autonomous build",
+        prompt="Build the approved feature.",
+    )
+    monkeypatch.setattr(runtime, "preflight", dict)
+
+    def blocked_executor(job: dict, worktree: Path, branch: str, log_path: Path) -> int:
+        log_path.write_text(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "type": "agent_message",
+                        "text": "Blocked by the execution sandbox before repository access.",
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(runtime, "_execute_codex", blocked_executor)
+
+    completed = runtime.run_once("managed-worker")
+
+    assert completed is not None
+    assert completed["status"] == "failed"
+    assert completed["exit_code"] == 2
+    assert "reported the task blocked" in completed["result_summary"]
+
+
+def test_build_outcome_rejects_no_commit(settings) -> None:
+    create_test_repository(settings)
+    store = JobStore(settings.database_path)
+    runtime = AgentRuntime(settings, store)
+    runtime.initialize()
+    job = store.enqueue(
+        project_key="test-project",
+        role="build",
+        issue_number=112,
+        title="No-op build",
+        prompt="Build the approved feature.",
+    )
+    branch, worktree = runtime.prepare_worktree(settings.project("test-project"), job)
+    log_path = settings.state_directory / "logs" / "noop.jsonl"
+    log_path.write_text('{"type":"turn.completed"}\n', encoding="utf-8")
+
+    error = runtime._validate_codex_outcome(
+        settings.project("test-project"), job, worktree, branch, log_path
+    )
+
+    assert error == "Codex did not create a new commit"
+
+
+def test_build_outcome_accepts_pushed_branch_and_draft_pr(settings, monkeypatch) -> None:
+    create_test_repository(settings)
+    store = JobStore(settings.database_path)
+    runtime = AgentRuntime(settings, store)
+    runtime.initialize()
+    job = store.enqueue(
+        project_key="test-project",
+        role="build",
+        issue_number=112,
+        title="Published build",
+        prompt="Build the approved feature.",
+    )
+    project = settings.project("test-project")
+    branch, worktree = runtime.prepare_worktree(project, job)
+    (worktree / "FEATURE.md").write_text("# Feature\n", encoding="utf-8")
+    subprocess.run(["git", "add", "FEATURE.md"], cwd=worktree, check=True)
+    subprocess.run(["git", "commit", "-m", "Add feature"], cwd=worktree, check=True)
+    subprocess.run(["git", "push", "-u", "origin", branch], cwd=worktree, check=True)
+    log_path = settings.state_directory / "logs" / "published.jsonl"
+    log_path.write_text('{"type":"turn.completed"}\n', encoding="utf-8")
+    original_run = subprocess.run
+
+    def command_runner(command, **kwargs):
+        if command[:3] == ["gh", "pr", "view"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    {
+                        "isDraft": True,
+                        "state": "OPEN",
+                        "headRefName": branch,
+                        "baseRefName": "main",
+                        "url": "https://github.com/iron-house-os/test-project/pull/1",
+                    }
+                ),
+                stderr="",
+            )
+        return original_run(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", command_runner)
+
+    error = runtime._validate_codex_outcome(project, job, worktree, branch, log_path)
+
+    assert error is None

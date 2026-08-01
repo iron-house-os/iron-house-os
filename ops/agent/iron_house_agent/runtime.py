@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -61,6 +62,12 @@ _ROLE_WORKFLOWS = {
         "Convert only the approved plan or findings into prioritized GitHub issues with acceptance "
         "criteria, risks, dependencies, and approval gates. Do not implement or merge the issues."
     ),
+}
+_PUBLISH_REQUIRED_ROLES = {
+    "build",
+    "ci-repair",
+    "dependency-update",
+    "documentation",
 }
 _SAFE_ENVIRONMENT_KEYS = {
     "HOME",
@@ -132,7 +139,8 @@ class AgentRuntime:
         )
 
     def run_once(self, worker_id: str, executor: Executor | None = None) -> dict[str, Any] | None:
-        if executor is None:
+        managed_execution = executor is None
+        if managed_execution:
             self.preflight()
         job = self.store.claim_next(worker_id)
         if job is None:
@@ -147,15 +155,102 @@ class AgentRuntime:
             )
             run = executor or self._execute_codex
             exit_code = run(job, worktree, branch, log_path)
-            summary = (
-                "Codex task completed"
-                if exit_code == 0
-                else "Codex task failed; inspect the job log"
-            )
-            self.store.finish(job["id"], exit_code=exit_code, summary=summary)
+            validation_error = None
+            if exit_code == 0 and managed_execution:
+                validation_error = self._validate_codex_outcome(
+                    project, job, worktree, branch, log_path
+                )
+            if validation_error:
+                self.store.fail(job["id"], validation_error, exit_code=2)
+            else:
+                summary = (
+                    "Codex task completed"
+                    if exit_code == 0
+                    else "Codex task failed; inspect the job log"
+                )
+                self.store.finish(job["id"], exit_code=exit_code, summary=summary)
         except Exception as error:  # noqa: BLE001 - a worker records task failures instead of dying
             self.store.fail(job["id"], f"{type(error).__name__}: {error}")
         return self.store.get_job(job["id"])
+
+    def _validate_codex_outcome(
+        self,
+        project: Project,
+        job: dict[str, Any],
+        worktree: Path,
+        branch: str,
+        log_path: Path,
+    ) -> str | None:
+        message = self._last_agent_message(log_path)
+        normalized = message.strip().casefold()
+        if normalized.startswith(("blocked", "i am blocked", "i'm blocked")):
+            return "Codex reported the task blocked; inspect the job log"
+        if job["mode"] == "smoke" or job["role"] not in _PUBLISH_REQUIRED_ROLES:
+            return None
+
+        if self._git_output(worktree, "status", "--porcelain"):
+            return "Codex left uncommitted changes; inspect the job worktree"
+        head = self._git_output(worktree, "rev-parse", "HEAD")
+        base = self._git_output(worktree, "rev-parse", f"origin/{project.default_branch}")
+        if head == base:
+            return "Codex did not create a new commit"
+        try:
+            remote_ref = self._git_output(
+                worktree,
+                "ls-remote",
+                "--exit-code",
+                "origin",
+                f"refs/heads/{branch}",
+            )
+        except subprocess.CalledProcessError:
+            return "Codex did not push the issue-linked feature branch"
+        remote_head = remote_ref.partition("\t")[0]
+        if remote_head != head:
+            return "Codex pushed branch does not contain the completed local commit"
+
+        try:
+            completed = subprocess.run(
+                [
+                    "gh",
+                    "pr",
+                    "view",
+                    branch,
+                    "--repo",
+                    project.repository,
+                    "--json",
+                    "isDraft,state,headRefName,baseRefName,url",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=self._safe_environment(),
+            )
+            pull_request = json.loads(completed.stdout)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return "Codex did not open a verifiable draft pull request"
+        if (
+            pull_request.get("state") != "OPEN"
+            or pull_request.get("isDraft") is not True
+            or pull_request.get("headRefName") != branch
+            or pull_request.get("baseRefName") != project.default_branch
+        ):
+            return "Codex pull request does not match the required open draft workflow"
+        return None
+
+    @staticmethod
+    def _last_agent_message(log_path: Path) -> str:
+        last_message = ""
+        with log_path.open(encoding="utf-8") as log:
+            for line in log:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                item = event.get("item") or {}
+                if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+                    last_message = str(item.get("text") or "")
+        return last_message
 
     def prepare_worktree(self, project: Project, job: dict[str, Any]) -> tuple[str, Path]:
         checkout = (self.settings.workspace / project.directory).resolve()
@@ -290,7 +385,11 @@ class AgentRuntime:
 
     @staticmethod
     def _git(checkout: Path, *arguments: str) -> None:
-        subprocess.run(
+        AgentRuntime._git_output(checkout, *arguments)
+
+    @staticmethod
+    def _git_output(checkout: Path, *arguments: str) -> str:
+        completed = subprocess.run(
             ["git", "-C", str(checkout), *arguments],
             check=True,
             capture_output=True,
@@ -298,6 +397,7 @@ class AgentRuntime:
             timeout=120,
             env=AgentRuntime._safe_environment(),
         )
+        return completed.stdout.strip()
 
     @contextmanager
     def _project_lock(self, project_key: str):
