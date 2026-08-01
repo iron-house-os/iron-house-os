@@ -186,6 +186,15 @@ Do not delete the job database or worktrees during incident review. Stop the ser
 
 Key controls:
 
+- The service runs as the dedicated unprivileged `ih-agent` user with `ProtectSystem=strict`,
+  a private temporary directory, a restrictive umask, and only the agent workspace, state,
+  Codex configuration, and GitHub CLI configuration writable. `NoNewPrivileges` is deliberately
+  disabled because Codex must create its Bubblewrap user namespace; the service has no sudo access
+  or added Linux capabilities.
+- Build, CI repair, dependency, and documentation jobs are successful only after a new clean commit,
+  a pushed issue-linked branch, and a verifiable open draft pull request exist. An explicit blocked
+  Codex response fails the job even when the CLI exits zero.
+
 - The service runs as `ih-agent`, not root.
 - The dashboard is loopback-only and read-only.
 - Each job receives a separate worktree and issue-linked branch.
