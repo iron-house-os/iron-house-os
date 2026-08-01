@@ -24,11 +24,14 @@ from app.schemas.document import (
     RFQAttachmentManifest,
     RFQAttachmentManifestItem,
 )
+from app.services.auth import AuthenticatedUser
 from app.services.file_storage import resolve_storage_path, store_upload
+from app.services.media_access import can_access_document, require_document_access
 
 
 async def upload_document(
     db: Session,
+    user: AuthenticatedUser | None,
     file: UploadFile,
     title: str | None,
     category: str,
@@ -37,7 +40,7 @@ async def upload_document(
     revision: str | None = None,
 ) -> DocumentUploadResponse:
     stored = await store_upload(file, project_id=str(project_id) if project_id else None)
-    duplicates = _duplicate_document_ids(db, stored.sha256_hash)
+    duplicates = _duplicate_document_ids(db, stored.sha256_hash, user=user)
     metadata = {
         "original_filename": stored.original_filename,
         "safe_filename": stored.safe_filename,
@@ -83,6 +86,7 @@ def create_document(db: Session, payload: DocumentCreate) -> DocumentRead:
 
 def list_documents(
     db: Session,
+    user: AuthenticatedUser,
     category: str | None = None,
     status: str | None = None,
     project_id: UUID | None = None,
@@ -100,22 +104,29 @@ def list_documents(
         statement = statement.where(Document.rfq_package_id == rfq_package_id)
     if tender_id:
         statement = statement.where(Document.tender_id == tender_id)
-    items = [_to_schema(document) for document in db.scalars(statement).all()]
+    items = [
+        _to_schema(document)
+        for document in db.scalars(statement).all()
+        if can_access_document(db, document.id, user)
+    ]
     return DocumentList(items=items, total=len(items))
 
 
-def get_document(db: Session, document_id: UUID) -> DocumentRead:
+def get_document(db: Session, document_id: UUID, user: AuthenticatedUser) -> DocumentRead:
+    require_document_access(db, document_id, user)
     return _to_schema(_load_document(db, document_id))
 
 
-def get_document_file_path(db: Session, document_id: UUID) -> Path:
+def get_document_file_path(db: Session, document_id: UUID, user: AuthenticatedUser) -> Path:
+    require_document_access(db, document_id, user)
     document = _load_document(db, document_id)
     if not document.storage_uri:
         raise AppError("Document has no stored file", status_code=404)
     return resolve_storage_path(document.storage_uri)
 
 
-def document_integrity(db: Session, document_id: UUID) -> DocumentIntegrity:
+def document_integrity(db: Session, document_id: UUID, user: AuthenticatedUser) -> DocumentIntegrity:
+    require_document_access(db, document_id, user)
     document = _load_document(db, document_id)
     metadata = document.metadata_json or {}
     file_exists = False
@@ -139,6 +150,7 @@ def document_integrity(db: Session, document_id: UUID) -> DocumentIntegrity:
         db,
         metadata.get("sha256_hash"),
         exclude_id=document.id,
+        user=user,
     )
     return DocumentIntegrity(
         document_id=document.id,
@@ -150,11 +162,16 @@ def document_integrity(db: Session, document_id: UUID) -> DocumentIntegrity:
     )
 
 
-def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttachmentManifest:
+def build_attachment_manifest(
+    db: Session,
+    document_ids: list[UUID],
+    user: AuthenticatedUser,
+) -> RFQAttachmentManifest:
     items: list[RFQAttachmentManifestItem] = []
     warnings: list[str] = []
     total_size = 0
     for document_id in document_ids:
+        require_document_access(db, document_id, user)
         document = _load_document(db, document_id)
         metadata = document.metadata_json or {}
         size = metadata.get("size_bytes")
@@ -184,7 +201,13 @@ def build_attachment_manifest(db: Session, document_ids: list[UUID]) -> RFQAttac
     )
 
 
-def update_document(db: Session, document_id: UUID, payload: DocumentUpdate) -> DocumentRead:
+def update_document(
+    db: Session,
+    document_id: UUID,
+    payload: DocumentUpdate,
+    user: AuthenticatedUser,
+) -> DocumentRead:
+    require_document_access(db, document_id, user)
     document = _load_document(db, document_id)
     update_data = payload.model_dump(exclude_unset=True)
     if {"storage_uri", "metadata"}.intersection(update_data) and _is_media_evidence(db, document.id):
@@ -211,7 +234,9 @@ def update_document_status(
     db: Session,
     document_id: UUID,
     payload: DocumentUpdateStatus,
+    user: AuthenticatedUser,
 ) -> DocumentRead:
+    require_document_access(db, document_id, user)
     document = _load_document(db, document_id)
     document.status = payload.status.value
     db.commit()
@@ -236,6 +261,7 @@ def _duplicate_document_ids(
     db: Session,
     sha256_hash: str | None,
     exclude_id: UUID | None = None,
+    user: AuthenticatedUser | None = None,
 ) -> list[UUID]:
     if not sha256_hash:
         return []
@@ -243,6 +269,11 @@ def _duplicate_document_ids(
     duplicate_ids: list[UUID] = []
     for row in rows:
         if exclude_id and row.id == exclude_id:
+            continue
+        if user is None:
+            if _is_media_evidence(db, row.id):
+                continue
+        elif not can_access_document(db, row.id, user):
             continue
         metadata = row.metadata_json or {}
         if metadata.get("sha256_hash") == sha256_hash:

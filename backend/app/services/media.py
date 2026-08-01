@@ -24,6 +24,7 @@ from app.schemas.media import (
 )
 from app.services import documents
 from app.services.auth import AuthenticatedUser
+from app.services.media_access import MANAGEMENT_ROLES, can_access_asset
 
 
 CONTROLLED_CATEGORIES = {
@@ -32,7 +33,6 @@ CONTROLLED_CATEGORIES = {
     MediaCategory.expense.value,
     MediaCategory.receipt.value,
 }
-MANAGEMENT_ROLES = {"admin", "operations_manager"}
 RECORD_MODELS = {
     "field_record": FieldRecord,
     "vehicle_log": VehicleLog,
@@ -51,15 +51,9 @@ PROJECT_SCOPED_RECORD_TYPES = {
 }
 
 
-def _can_access_asset(asset: MediaAsset, user: AuthenticatedUser) -> bool:
-    # Project membership is not modelled yet. Until it is, ownership is the
-    # safest non-disclosing project boundary for non-management principals.
-    return user.role in MANAGEMENT_ROLES or asset.created_by_id == user.id
-
-
 def _require_asset(db: Session, asset_id: UUID, user: AuthenticatedUser) -> MediaAsset:
     asset = db.get(MediaAsset, asset_id)
-    if asset is None or not _can_access_asset(asset, user):
+    if asset is None or not can_access_asset(asset, user):
         raise AppError("Photo asset not found", status_code=404)
     return asset
 
@@ -150,6 +144,7 @@ async def create_assets(
     for file in files:
         upload = await documents.upload_document(
             db,
+            user=user,
             file=file,
             title=caption,
             category="photo",
@@ -297,6 +292,7 @@ async def create_version(
     next_version = _next_version_number(db, asset.id)
     upload = await documents.upload_document(
         db,
+        user=user,
         file=file,
         title=asset.caption,
         category="photo",
