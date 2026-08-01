@@ -7,7 +7,31 @@
 
 ## Purpose
 
-This standard defines the default labour charge-out calculation and small-job pricing treatment for Iron House estimates. It applies unless a project-specific written approval overrides it.
+This standard defines the default labour charge-out calculation, regional market classification and small-job pricing treatment for Iron House estimates. It applies unless a project-specific written approval overrides it.
+
+## Source and Evidence Limitation
+
+Public wage sources generally report the entire **Lower Mainland-Southwest Region** as one labour market. They do not provide reliable civil-construction charge-out rates separately for Vancouver and the Fraser Valley.
+
+The Iron House 2.1 labour multiplier and small-job premiums are internal estimating decisions. They are not represented as published Fraser Valley contractor averages. Public Job Bank and WorkBC wage information may be used as a reasonableness check for employee wage inputs, but contractor charge-out rates must be validated using Iron House actual payroll burden, overhead, project results and competitive bid feedback.
+
+## Regional Estimating Markets
+
+Every estimate must select one regional market.
+
+### Vancouver / Metro West
+
+Use this market for work in Vancouver, Richmond, Burnaby, New Westminster, the North Shore, and other Metro Vancouver locations west or north of the Surrey boundary.
+
+### Surrey and Fraser Valley East
+
+Use this market for Surrey and locations east through Langley, Abbotsford, Mission, Chilliwack, Hope and the surrounding Fraser Valley.
+
+Surrey is included in the **Surrey and Fraser Valley East** market. Do not label Vancouver-market information as Fraser Valley information.
+
+Regional classification is separate from travel, mobilization, parking, accommodation, toll, congestion, restricted-hours and site-access costs. Those costs must remain visible estimate lines.
+
+Until Iron House has verified regional project data, both markets use the same approved base labour multiplier. Any Vancouver market premium must be visible, separately approved and supported by project conditions or actual cost history rather than assumed automatically.
 
 ## Standard Labour Charge-Out
 
@@ -64,12 +88,15 @@ Example for a labourer earning $32.00/hour:
 5. Overtime, night work, weekends, remote work and living-out allowances are separate adjustments and are not absorbed by this premium.
 6. Change-order and emergency work may use a higher approved rate, but the estimator must record the reason.
 7. Existing client agreements, tender schedules and stipulated force-account rates override this standard.
-8. The estimate summary must show the selected duration tier and resulting premium.
+8. The estimate summary must show the selected regional market, duration tier and resulting premium.
 
 ## Estimate Model Fields
 
 The estimating model should include:
 
+- `regional_market`, required: `vancouver_metro_west` or `surrey_fraser_valley_east`
+- `regional_adjustment_percent`, default `0`
+- `regional_adjustment_reason`, required when adjustment is not zero
 - `base_hourly_wage`
 - `labour_chargeout_multiplier`, default `2.1`
 - `target_margin_percent`, default `10`
@@ -81,7 +108,7 @@ The estimating model should include:
 
 ## Approval Control
 
-Any estimate using a labour multiplier below 2.1, a target margin below 10%, or a waived small-job premium requires explicit estimator or executive approval and a written reason in the estimate record.
+Any estimate using a labour multiplier below 2.1, a target margin below 10%, a waived small-job premium, or a non-zero regional adjustment requires explicit estimator or executive approval and a written reason in the estimate record.
 
 ## Exclusions
 
