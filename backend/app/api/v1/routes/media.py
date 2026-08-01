@@ -132,11 +132,12 @@ def restore_photo_version(
 @router.get("/{asset_id}/content")
 def view_photo(
     asset_id: UUID,
+    user: CurrentUser,
     db: DBSession,
     version_id: UUID | None = Query(default=None),
     download: bool = Query(default=False),
 ) -> FileResponse:
-    document = media.version_file_document(db, asset_id, version_id)
+    document = media.version_file_document(db, asset_id, user, version_id)
     path = resolve_storage_path(document.storage_uri or "")
     metadata = document.metadata_json or {}
     return FileResponse(

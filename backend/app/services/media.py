@@ -32,6 +32,7 @@ CONTROLLED_CATEGORIES = {
     MediaCategory.expense.value,
     MediaCategory.receipt.value,
 }
+MANAGEMENT_ROLES = {"admin", "operations_manager"}
 RECORD_MODELS = {
     "field_record": FieldRecord,
     "vehicle_log": VehicleLog,
@@ -41,11 +42,24 @@ RECORD_MODELS = {
     "document": Document,
     "project": Project,
 }
+PROJECT_SCOPED_RECORD_TYPES = {
+    "field_record",
+    "vehicle_log",
+    "financial_entry",
+    "document",
+    "project",
+}
 
 
-def _require_asset(db: Session, asset_id: UUID) -> MediaAsset:
+def _can_access_asset(asset: MediaAsset, user: AuthenticatedUser) -> bool:
+    # Project membership is not modelled yet. Until it is, ownership is the
+    # safest non-disclosing project boundary for non-management principals.
+    return user.role in MANAGEMENT_ROLES or asset.created_by_id == user.id
+
+
+def _require_asset(db: Session, asset_id: UUID, user: AuthenticatedUser) -> MediaAsset:
     asset = db.get(MediaAsset, asset_id)
-    if asset is None:
+    if asset is None or not _can_access_asset(asset, user):
         raise AppError("Photo asset not found", status_code=404)
     return asset
 
@@ -56,6 +70,39 @@ def _require_editor(asset: MediaAsset, user: AuthenticatedUser) -> None:
     if user.role == "viewer" and asset.created_by_id == user.id:
         return
     raise AppError("You do not have permission to change this photo.", status_code=403)
+
+
+def _record_project_id(record_type: str, record: object) -> UUID | None:
+    if record_type == "project":
+        return record.id
+    return getattr(record, "project_id", None)
+
+
+def _require_link_target(db: Session, payload: MediaLinkCreate) -> object:
+    model = RECORD_MODELS.get(payload.record_type)
+    if model is None:
+        raise AppError("Unsupported photo record link.", status_code=422)
+    record = db.get(model, payload.record_id)
+    if record is None:
+        raise AppError("Linked record not found.", status_code=404)
+    return record
+
+
+def _validate_record_project(asset: MediaAsset, record_type: str, record: object) -> None:
+    if record_type not in PROJECT_SCOPED_RECORD_TYPES:
+        return
+    if _record_project_id(record_type, record) != asset.project_id:
+        raise AppError("Photo and linked record must belong to the same project.", status_code=422)
+
+
+def _validate_existing_link_projects(db: Session, asset: MediaAsset) -> None:
+    links = db.scalars(select(MediaRecordLink).where(MediaRecordLink.asset_id == asset.id)).all()
+    for link in links:
+        model = RECORD_MODELS.get(link.record_type)
+        record = db.get(model, link.record_id) if model is not None else None
+        if record is None:
+            raise AppError("Existing photo record link is no longer valid.", status_code=409)
+        _validate_record_project(asset, link.record_type, record)
 
 
 def _validate_amendment(asset: MediaAsset, action: MediaAction, reason: str | None) -> None:
@@ -182,6 +229,8 @@ def list_assets(
     document_ids: list[UUID] | None = None,
 ) -> list[MediaAssetRead]:
     statement = select(MediaAsset).order_by(MediaAsset.created_at.desc())
+    if user.role not in MANAGEMENT_ROLES:
+        statement = statement.where(MediaAsset.created_by_id == user.id)
     if project_id:
         statement = statement.where(MediaAsset.project_id == project_id)
     if document_ids:
@@ -197,7 +246,7 @@ def list_assets(
 
 
 def get_asset(db: Session, asset_id: UUID, user: AuthenticatedUser) -> MediaAssetRead:
-    return _to_schema(db, _require_asset(db, asset_id), user)
+    return _to_schema(db, _require_asset(db, asset_id, user), user)
 
 
 def link_asset(
@@ -206,13 +255,10 @@ def link_asset(
     payload: MediaLinkCreate,
     user: AuthenticatedUser,
 ) -> MediaAssetRead:
-    asset = _require_asset(db, asset_id)
+    asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
-    model = RECORD_MODELS.get(payload.record_type)
-    if model is None:
-        raise AppError("Unsupported photo record link.", status_code=422)
-    if db.get(model, payload.record_id) is None:
-        raise AppError("Linked record not found.", status_code=404)
+    record = _require_link_target(db, payload)
+    _validate_record_project(asset, payload.record_type, record)
     exists = db.scalar(
         select(MediaRecordLink).where(
             MediaRecordLink.asset_id == asset.id,
@@ -237,7 +283,7 @@ async def create_version(
     change_summary: str | None,
     amendment_reason: str | None,
 ) -> MediaAssetRead:
-    asset = _require_asset(db, asset_id)
+    asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
     if action not in {MediaAction.edit, MediaAction.replacement}:
         raise AppError("Only edit or replacement versions can upload a file.", status_code=422)
@@ -285,7 +331,7 @@ def restore_version(
     user: AuthenticatedUser,
     amendment_reason: str | None,
 ) -> MediaAssetRead:
-    asset = _require_asset(db, asset_id)
+    asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
     _validate_amendment(asset, MediaAction.restore, amendment_reason)
     target = db.get(MediaVersion, version_id)
@@ -317,15 +363,20 @@ def update_metadata(
     payload: MediaMetadataUpdate,
     user: AuthenticatedUser,
 ) -> MediaAssetRead:
-    asset = _require_asset(db, asset_id)
+    asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
     changes = payload.model_dump(exclude_unset=True)
     if user.role not in {"admin", "operations_manager"} and ({"location", "project_id"} & changes.keys()):
         raise AppError("Only management can change restricted location or project metadata.", status_code=403)
+    if "project_id" in changes and changes["project_id"] is not None:
+        if db.get(Project, changes["project_id"]) is None:
+            raise AppError("Project not found.", status_code=404)
     if "category" in changes and changes["category"] is not None:
         changes["category"] = changes["category"].value
     for key, value in changes.items():
         setattr(asset, key, value)
+    if "project_id" in changes:
+        _validate_existing_link_projects(db, asset)
     if asset.category in CONTROLLED_CATEGORIES:
         asset.controlled = True
     current = db.get(MediaVersion, asset.current_version_id)
@@ -347,8 +398,13 @@ def update_metadata(
     return get_asset(db, asset.id, user)
 
 
-def version_file_document(db: Session, asset_id: UUID, version_id: UUID | None = None) -> Document:
-    asset = _require_asset(db, asset_id)
+def version_file_document(
+    db: Session,
+    asset_id: UUID,
+    user: AuthenticatedUser,
+    version_id: UUID | None = None,
+) -> Document:
+    asset = _require_asset(db, asset_id, user)
     selected_id = version_id or asset.current_version_id
     version = db.get(MediaVersion, selected_id)
     if version is None or version.asset_id != asset.id:
