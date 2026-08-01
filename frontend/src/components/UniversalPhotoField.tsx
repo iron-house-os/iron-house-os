@@ -196,11 +196,13 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
     if (!editOperations.length) return;
     setSaving(true); setError(null);
     try {
-      onChange(await mediaApi.addVersion(asset.id, await renderEdit(), {
+      const updated = await mediaApi.addVersion(asset.id, await renderEdit(), {
         action: "edit",
         operations: editOperations,
         changeSummary: "Photo correction and annotation",
-      }));
+      });
+      onChange(updated);
+      setVersionId(updated.current_version_id);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save photo version."); }
     finally { setSaving(false); }
   }
@@ -217,7 +219,11 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
     const reason = asset.controlled ? window.prompt("Reason for controlled amendment") ?? "" : undefined;
     if (asset.controlled && !reason) return;
     setSaving(true); setError(null);
-    try { onChange(await mediaApi.restore(asset.id, targetId, reason)); setVersionId(targetId); }
+    try {
+      const updated = await mediaApi.restore(asset.id, targetId, reason);
+      onChange(updated);
+      setVersionId(updated.current_version_id);
+    }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to restore version."); }
     finally { setSaving(false); }
   }
@@ -227,9 +233,11 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
     if (asset.controlled && !reason) return;
     setSaving(true); setError(null);
     try {
-      onChange(await mediaApi.addVersion(asset.id, file, {
+      const updated = await mediaApi.addVersion(asset.id, file, {
         action: "replacement", operations: [], changeSummary: "Incorrect upload replaced", amendmentReason: reason,
-      }));
+      });
+      onChange(updated);
+      setVersionId(updated.current_version_id);
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to replace photo."); }
     finally { setSaving(false); }
   }
@@ -237,7 +245,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
   return (
     <div role="dialog" aria-modal="true" aria-label="Photo viewer and editor" className="fixed inset-0 z-[100] flex flex-col bg-iron-950 text-white">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
-        <div><div className="font-semibold">{asset.caption ?? "Photo evidence"}</div><div className="text-xs text-white/60">Version {currentVersion?.version_number} · original always retained</div></div>
+        <div><div className="font-semibold">{asset.caption ?? "Photo evidence"}</div><div className="text-xs text-iron-100">Version {currentVersion?.version_number} · original always retained</div></div>
         <div className="flex gap-2">
           <a href={mediaApi.contentUrl(asset.id, versionId, true)} className="rounded-md border border-white/20 p-2" aria-label="Download permitted photo"><Download className="h-4 w-4" /></a>
           {navigator.share ? <button type="button" onClick={() => void navigator.share({ title: asset.caption ?? "IHOS photo evidence", url: mediaApi.contentUrl(asset.id, versionId) })} className="rounded-md border border-white/20 p-2" aria-label="Share permitted photo"><Share2 className="h-4 w-4" /></button> : null}
@@ -285,7 +293,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
               <Range label="Contrast" value={contrast} min={50} max={150} onChange={setContrast} />
               <Range label="Clarity" value={clarity} min={0} max={100} onChange={setClarity} />
               <div>
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">Annotations</div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-iron-100">Annotations</div>
                 <div className="grid grid-cols-5 gap-1">
                   <Tool icon={<Pencil />} label="Draw" onClick={() => setAnnotations([...annotations, { type: "draw" }])} />
                   <Tool icon={<ArrowRight />} label="Arrow" onClick={() => setAnnotations([...annotations, { type: "arrow" }])} />
@@ -303,7 +311,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
             <div className="mt-4 grid gap-3">
               <Field label="Caption" value={caption} onChange={setCaption} />
               <Field label="Photo date" value={capturedDate} onChange={setCapturedDate} type="date" />
-              <div className="text-xs text-white/60">Project: {asset.project_id ?? "Not linked"}</div>
+              <div className="text-xs text-iron-100">Project: {asset.project_id ?? "Not linked"}</div>
               <Field label="Location (restricted)" value={location} onChange={setLocation} />
               <label className="grid gap-1 text-sm"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value as MediaCategory)} className="rounded border border-white/20 bg-black px-3 py-2">{["job_photo","production_photo","inspection","equipment","flha","incident","deficiency","expense","receipt"].map((item) => <option key={item}>{item}</option>)}</select></label>
               <button type="button" disabled={saving} onClick={() => void saveMetadata()} className="rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black">Save metadata version</button>
@@ -314,8 +322,8 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
               {asset.versions.map((version) => (
                 <article key={version.id} className={"rounded-md border p-3 " + (version.id === asset.current_version_id ? "border-brand-gold" : "border-white/10")}>
                   <button type="button" onClick={() => setVersionId(version.id)} className="w-full text-left">
-                    <div className="flex items-center justify-between"><span className="font-semibold">Version {version.version_number}</span><span className="text-xs capitalize text-white/60">{version.action}</span></div>
-                    <div className="mt-1 text-xs text-white/60">{version.editor_email} · {new Date(version.created_at).toLocaleString()}</div>
+                    <div className="flex items-center justify-between"><span className="font-semibold">Version {version.version_number}</span><span className="text-xs capitalize text-iron-100">{version.action}</span></div>
+                    <div className="mt-1 text-xs text-iron-100">{version.editor_email} · {new Date(version.created_at).toLocaleString()}</div>
                     <div className="mt-1 text-xs">{version.change_summary}</div>
                   </button>
                   {version.id !== asset.current_version_id ? <button type="button" disabled={saving} onClick={() => void restore(version.id)} className="mt-2 flex items-center gap-1 text-xs font-semibold text-brand-gold"><History className="h-3 w-3" />Restore as new version</button> : null}

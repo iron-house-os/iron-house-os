@@ -21,10 +21,18 @@ def photo(name: str = "evidence.jpg") -> tuple[str, BytesIO, str]:
     return (name, BytesIO(b"immutable-original-photo"), "image/jpeg")
 
 
-def upload_asset(*, category: str = "job_photo", location: str = "Restricted GPS") -> dict:
+def upload_asset(
+    *,
+    category: str = "job_photo",
+    location: str = "Restricted GPS",
+    project_id: str | None = None,
+) -> dict:
+    data = {"category": category, "caption": "Pipe installation", "location": location}
+    if project_id:
+        data["project_id"] = project_id
     response = client.post(
         "/api/v1/media",
-        data={"category": category, "caption": "Pipe installation", "location": location},
+        data=data,
         files=[("files", photo())],
     )
     assert response.status_code == 201, response.text
@@ -109,7 +117,7 @@ def test_replacement_and_restore_require_reasons_for_controlled_records(
     assert replaced.json()["versions"][0]["amendment_reason"]
 
 
-def test_record_links_and_content_are_authorized_and_location_is_role_restricted(
+def test_record_links_and_content_are_authorized(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -131,6 +139,13 @@ def test_record_links_and_content_are_authorized_and_location_is_role_restricted
     assert linked.json()[0]["links"][0]["record_id"] == equipment["id"]
     assert client.get(f"/api/v1/media/{asset['id']}/content").content == b"immutable-original-photo"
 
+
+def test_non_management_owner_can_edit_but_cannot_expose_restricted_location(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(file_storage, "storage_provider", LocalFileStorageProvider(tmp_path))
+
     def viewer(request: Request) -> AuthenticatedUser:
         user = AuthenticatedUser(
             id=UUID("00000000-0000-0000-0000-000000000002"),
@@ -143,11 +158,85 @@ def test_record_links_and_content_are_authorized_and_location_is_role_restricted
         return user
 
     app.dependency_overrides[require_authenticated_user] = viewer
-    restricted = client.get(f"/api/v1/media/{asset['id']}")
-    assert restricted.status_code == 200
-    assert restricted.json()["location"] is None
-    denied_edit = client.patch(f"/api/v1/media/{asset['id']}", json={"caption": "Changed"})
-    assert denied_edit.status_code == 403
+    asset = upload_asset()
+    assert asset["location"] is None
+    edited = client.patch(f"/api/v1/media/{asset['id']}", json={"caption": "Changed"})
+    assert edited.status_code == 200
+    denied_location = client.patch(
+        f"/api/v1/media/{asset['id']}",
+        json={"location": "Sensitive coordinates"},
+    )
+    assert denied_location.status_code == 403
+
+
+def test_non_management_principal_cannot_enumerate_or_read_another_users_media(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(file_storage, "storage_provider", LocalFileStorageProvider(tmp_path))
+    project = client.post("/api/v1/projects", json={"name": "Owner-only project"}).json()
+    asset = upload_asset(project_id=project["id"])
+    original_version_id = asset["versions"][0]["id"]
+    linked = client.post(
+        f"/api/v1/media/{asset['id']}/links",
+        json={"record_type": "project", "record_id": project["id"]},
+    )
+    assert linked.status_code == 200
+    edited = client.post(
+        f"/api/v1/media/{asset['id']}/versions",
+        data={
+            "action": "edit",
+            "operations": json.dumps([{"type": "rotate", "values": {"degrees": 90}}]),
+        },
+        files={"file": ("edit.png", BytesIO(b"edited-version"), "image/png")},
+    )
+    assert edited.status_code == 200
+
+    def other_viewer(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000099"),
+            email="other-viewer@ironhousecontracting.com",
+            display_name="Other Viewer",
+            role="viewer",
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = other_viewer
+    assert client.get("/api/v1/media").json() == []
+    assert client.get(f"/api/v1/media?project_id={project['id']}").json() == []
+    assert client.get(
+        f"/api/v1/media?document_ids={asset['original_document_id']}"
+    ).json() == []
+    assert client.get(
+        f"/api/v1/media?record_type=project&record_id={project['id']}"
+    ).json() == []
+    assert client.get(f"/api/v1/media/{asset['id']}").status_code == 404
+    assert client.get(f"/api/v1/media/{asset['id']}/content").status_code == 404
+    assert client.get(f"/api/v1/media/{asset['id']}/content?download=true").status_code == 404
+    assert client.get(
+        f"/api/v1/media/{asset['id']}/content?version_id={original_version_id}&download=true"
+    ).status_code == 404
+
+
+def test_cross_project_record_link_is_rejected(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(file_storage, "storage_provider", LocalFileStorageProvider(tmp_path))
+    project_a = client.post("/api/v1/projects", json={"name": "Project A"}).json()
+    project_b = client.post("/api/v1/projects", json={"name": "Project B"}).json()
+    asset = upload_asset(project_id=project_a["id"])
+
+    matching = client.post(
+        f"/api/v1/media/{asset['id']}/links",
+        json={"record_type": "project", "record_id": project_a["id"]},
+    )
+    assert matching.status_code == 200
+    rejected = client.post(
+        f"/api/v1/media/{asset['id']}/links",
+        json={"record_type": "project", "record_id": project_b["id"]},
+    )
+    assert rejected.status_code == 422
+    assert "same project" in rejected.json()["error"]["message"]
 
 
 def test_annotation_and_transform_validation_rejects_unsafe_payloads(
