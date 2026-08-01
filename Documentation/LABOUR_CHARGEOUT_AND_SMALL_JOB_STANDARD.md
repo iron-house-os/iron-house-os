@@ -7,13 +7,19 @@
 
 ## Purpose
 
-This standard defines the default labour charge-out calculation, regional market classification and small-job pricing treatment for Iron House estimates. It applies unless a project-specific written approval overrides it.
+This standard defines the default labour wage basis, labour charge-out calculation, regional market classification and small-job pricing treatment for Iron House estimates.
 
 ## Source and Evidence Limitation
 
-Public wage sources generally report the entire **Lower Mainland-Southwest Region** as one labour market. They do not provide reliable civil-construction charge-out rates separately for Vancouver and the Fraser Valley.
+Government of Canada Job Bank wage information updated November 19, 2025 reports the Lower Mainland-Southwest Region as one labour market. The published upper hourly wages used as primary anchors are:
 
-The Iron House 2.1 labour multiplier and small-job premiums are internal estimating decisions. They are not represented as published Fraser Valley contractor averages. Public Job Bank and WorkBC wage information may be used as a reasonableness check for employee wage inputs, but contractor charge-out rates must be validated using Iron House actual payroll burden, overhead, project results and competitive bid feedback.
+- Construction labourer/helper: **$39.00/hour**.
+- Heavy-equipment operator: **$50.00/hour**.
+- Construction site supervisor: **$46.00/hour**.
+
+The source does not publish separate civil-construction wage tables for Vancouver and the Fraser Valley. Iron House will therefore keep the markets separate in every estimate, but both markets initially use the same upper-market wage library. Future Iron House payroll, recruiting, project-cost and bid-result data may support separate regional wage libraries.
+
+The 2.1 labour multiplier and small-job premiums are internal Iron House estimating decisions, not published contractor averages.
 
 ## Regional Estimating Markets
 
@@ -21,82 +27,88 @@ Every estimate must select one regional market.
 
 ### Vancouver / Metro West
 
-Use this market for work in Vancouver, Richmond, Burnaby, New Westminster, the North Shore, and other Metro Vancouver locations west or north of the Surrey boundary.
+Vancouver, Richmond, Burnaby, New Westminster, the North Shore and other Metro Vancouver locations west or north of the Surrey boundary.
 
 ### Surrey and Fraser Valley East
 
-Use this market for Surrey and locations east through Langley, Abbotsford, Mission, Chilliwack, Hope and the surrounding Fraser Valley.
+Surrey, Langley, Abbotsford, Mission, Chilliwack, Hope and surrounding Fraser Valley communities.
 
-Surrey is included in the **Surrey and Fraser Valley East** market. Do not label Vancouver-market information as Fraser Valley information.
+Surrey belongs to the **Surrey and Fraser Valley East** market.
 
-Regional classification is separate from travel, mobilization, parking, accommodation, toll, congestion, restricted-hours and site-access costs. Those costs must remain visible estimate lines.
+Regional classification is separate from travel, mobilization, parking, accommodation, toll, congestion, restricted-hours and site-access costs. Those costs remain visible estimate lines.
 
-Until Iron House has verified regional project data, both markets use the same approved base labour multiplier. Any Vancouver market premium must be visible, separately approved and supported by project conditions or actual cost history rather than assumed automatically.
+## Upper-Market Wage Library
+
+Use the following base hourly wages for budget and tender estimates unless actual employee wage, collective agreement, prevailing-wage requirement or approved project-specific rate is known.
+
+| Civil role | Default base wage | Basis |
+|---|---:|---|
+| General labourer | $39.00 | Published regional upper wage anchor |
+| Skilled labourer | $43.00 | Internal role mapping above labourer anchor |
+| Pipe layer | $47.00 | Internal civil trade mapping |
+| Equipment operator | $50.00 | Published regional upper wage anchor |
+| Senior operator / grader operator | $55.00 | Internal senior-skill mapping |
+| Civil / pipe foreman | $55.00 | Internal leadership mapping above published supervisor anchor |
+| General foreman | $62.00 | Internal senior-leadership mapping |
+
+The estimate must identify whether each wage is `published_anchor`, `internal_role_mapping`, or `actual_employee_rate`.
 
 ## Standard Labour Charge-Out
 
-For regular-time labour-only pricing:
-
 ```text
-Base labour charge-out rate = employee base hourly wage x 2.1
+Regular labour charge-out rate = base hourly wage x 2.1
 ```
 
-The 2.1 multiplier is intended to recover payroll burden, statutory costs, benefits where applicable, non-productive time, PPE, training, administration, supervision allocation, company overhead and a target final margin of 10%.
+The 2.1 multiplier is intended to recover employment burden, non-productive time, PPE, training, administration, supervision allocation, company overhead and a target final margin of 10%.
 
-The 10% target is a final estimate margin target. It is not an additional automatic 10% markup on top of the 2.1 labour multiplier.
+The 10% target is not an additional automatic markup on top of the 2.1 multiplier.
 
-Round customer-facing hourly labour rates to the nearest whole dollar unless a contract or bid form requires another convention.
+### Standard Regular-Time Charge-Out Library
 
-## Small-Job Definition
+| Civil role | Base wage | Calculated rate | Customer rate |
+|---|---:|---:|---:|
+| General labourer | $39.00 | $81.90 | **$82/hour** |
+| Skilled labourer | $43.00 | $90.30 | **$90/hour** |
+| Pipe layer | $47.00 | $98.70 | **$99/hour** |
+| Equipment operator | $50.00 | $105.00 | **$105/hour** |
+| Senior operator / grader | $55.00 | $115.50 | **$116/hour** |
+| Civil / pipe foreman | $55.00 | $115.50 | **$116/hour** |
+| General foreman | $62.00 | $130.20 | **$130/hour** |
 
-A small job is work planned for **five field shifts or fewer**, excluding weather shutdowns and owner-caused delays.
+Round customer-facing labour rates to the nearest whole dollar.
 
-Small-job status is determined from the planned field duration at estimate review. It must be recalculated if the planned duration changes materially before submission.
+## Small-Job Definition and Premium
 
-## Small-Job Labour Premium
+A small job is work planned for five field shifts or fewer.
 
-Apply the following premium to the standard labour charge-out rate:
-
-| Planned field duration | Small-job premium | Effective wage multiplier |
+| Planned duration | Premium | Effective multiplier |
 |---|---:|---:|
 | 1 field shift | 25% | 2.625x |
 | 2-3 field shifts | 20% | 2.520x |
 | 4-5 field shifts | 15% | 2.415x |
-| More than 5 field shifts | 0% | 2.100x |
-
-Calculation:
+| More than 5 shifts | 0% | 2.100x |
 
 ```text
 Small-job labour rate = base hourly wage x 2.1 x (1 + small-job premium)
 ```
 
-Example for a labourer earning $32.00/hour:
-
-| Planned duration | Calculation | Charge-out rate |
-|---|---:|---:|
-| Regular job | $32 x 2.1 | $67.20 -> $68/hour |
-| 1 shift | $32 x 2.1 x 1.25 | $84.00/hour |
-| 2-3 shifts | $32 x 2.1 x 1.20 | $80.64 -> $81/hour |
-| 4-5 shifts | $32 x 2.1 x 1.15 | $77.28 -> $78/hour |
+The premium applies only to labour. Mobilization, equipment, rentals, fuel, trucking, disposal, materials and subcontractors remain separate.
 
 ## Pricing Rules
 
-1. Apply the small-job premium to labour charge-out only.
-2. Price mobilization and demobilization as separate visible estimate lines.
-3. Price equipment, rentals, fuel, trucking, disposal, materials and subcontractors separately.
-4. Do not use the small-job premium to hide known scope, access, schedule or risk costs.
-5. Overtime, night work, weekends, remote work and living-out allowances are separate adjustments and are not absorbed by this premium.
-6. Change-order and emergency work may use a higher approved rate, but the estimator must record the reason.
-7. Existing client agreements, tender schedules and stipulated force-account rates override this standard.
-8. The estimate summary must show the selected regional market, duration tier and resulting premium.
+1. Use the selected regional market and upper-market wage library by default.
+2. Replace a library wage with a known actual wage when the assigned employee or collective requirement is confirmed.
+3. Keep Vancouver congestion, parking, restricted-hour and access costs separate from wage rates.
+4. Apply the small-job premium only to labour.
+5. Existing client agreements, tender schedules and stipulated force-account rates override this standard.
+6. Overtime, night work, weekends, remote work and living-out allowances are separate adjustments.
+7. Show all overrides and supporting reasons in the estimate summary.
 
 ## Estimate Model Fields
 
-The estimating model should include:
-
-- `regional_market`, required: `vancouver_metro_west` or `surrey_fraser_valley_east`
-- `regional_adjustment_percent`, default `0`
-- `regional_adjustment_reason`, required when adjustment is not zero
+- `regional_market`: `vancouver_metro_west` or `surrey_fraser_valley_east`
+- `civil_role`
+- `wage_basis_type`: `published_anchor`, `internal_role_mapping`, or `actual_employee_rate`
 - `base_hourly_wage`
 - `labour_chargeout_multiplier`, default `2.1`
 - `target_margin_percent`, default `10`
@@ -104,12 +116,16 @@ The estimating model should include:
 - `small_job_tier`
 - `small_job_premium_percent`
 - `calculated_labour_chargeout_rate`
-- `override_reason`, required when defaults are changed
+- `override_reason`
 
 ## Approval Control
 
-Any estimate using a labour multiplier below 2.1, a target margin below 10%, a waived small-job premium, or a non-zero regional adjustment requires explicit estimator or executive approval and a written reason in the estimate record.
+A multiplier below 2.1, target margin below 10%, waived small-job premium, or base wage below the approved library requires a written reason and estimator or executive approval.
+
+## Review Cycle
+
+Review wage anchors quarterly and whenever reliable new Job Bank data, union schedules, payroll information, recruiting results or completed-project cost data becomes available.
 
 ## Exclusions
 
-This standard does not determine employee compensation, payroll policy, union rates, prevailing wage obligations, equipment charge-out rates, subcontractor markups, taxes, bonding, contingency or project-specific risk allowances.
+This standard does not determine employee compensation, payroll policy, union obligations, prevailing-wage requirements, equipment rates, subcontractor markups, taxes, bonding, contingency or project-specific risk allowances.
