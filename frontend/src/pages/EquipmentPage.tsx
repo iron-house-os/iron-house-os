@@ -1,6 +1,8 @@
 import { Plus, RefreshCw, Truck } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { UniversalPhotoField } from "../components/UniversalPhotoField";
+
 import {
   Equipment,
   EquipmentCreate,
@@ -98,6 +100,7 @@ export function EquipmentPage() {
               <select aria-label={`Status for ${item.name}`} value={item.status} onChange={(event) => void updateStatus(item, event.target.value as EquipmentStatus)} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
                 {equipmentStatuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
               </select>
+              <div className="md:col-span-3"><UniversalPhotoField recordType="equipment" recordId={item.id} category="equipment" label="Equipment photos and records" /></div>
             </div>
           ))}
           {!isLoading && !items.length ? <div className="rounded-md bg-iron-50 p-5 text-sm text-iron-500">No equipment records match this filter.</div> : null}

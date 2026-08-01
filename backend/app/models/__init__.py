@@ -6,6 +6,7 @@ from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.finance import FinancialEntry, StartupExpense
+from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
 from app.models.municipality import Municipality
 from app.models.project import Project, ProjectSupplier
 from app.models.rfq import (
@@ -37,6 +38,9 @@ __all__ = [
     "FinancialEntry",
     "StartupExpense",
     "LoginThrottle",
+    "MediaAsset",
+    "MediaRecordLink",
+    "MediaVersion",
     "Municipality",
     "Project",
     "ProjectSupplier",

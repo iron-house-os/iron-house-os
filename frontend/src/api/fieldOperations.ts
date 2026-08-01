@@ -28,6 +28,16 @@ export type Vehicle = SelectRecord & {
   status: string;
   service_status: "current" | "due_soon" | "overdue";
 };
+export type VehicleLog = {
+  id: string;
+  vehicle_id: string;
+  project_id: string | null;
+  log_type: string;
+  entry_date: string;
+  vendor: string | null;
+  details: string | null;
+  document_ids: string[];
+};
 export type FieldRecord = {
   id: string;
   record_type: string;
@@ -94,7 +104,7 @@ export type FieldOperationsBootstrap = {
   }>;
   paperwork_recognitions: Array<{ employee_id: string; employee_name: string; on_time_days: number }>;
   vehicles: Vehicle[];
-  vehicle_logs: Array<Record<string, unknown>>;
+  vehicle_logs: VehicleLog[];
   time_entries: Array<Record<string, unknown>>;
   records: FieldRecord[];
   certifications: Array<Record<string, unknown>>;
@@ -126,7 +136,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const fieldOperationsApi = {
   bootstrap: () => request<FieldOperationsBootstrap>("/field-operations/bootstrap"),
   createVehicleLog: (payload: Record<string, unknown>) =>
-    request("/field-operations/vehicle-logs", { method: "POST", body: JSON.stringify(payload) }),
+    request<{ id: string }>("/field-operations/vehicle-logs", { method: "POST", body: JSON.stringify(payload) }),
   updateVehicle: (id: string, payload: Record<string, unknown>) =>
     request("/field-operations/vehicles/" + id, { method: "PATCH", body: JSON.stringify(payload) }),
   createTimeEntry: (payload: Record<string, unknown>) =>

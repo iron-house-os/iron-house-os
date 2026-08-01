@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.document import (
     DocumentCategory,
@@ -18,7 +19,7 @@ from app.schemas.document import (
     RFQAttachmentManifest,
     RFQAttachmentManifestRequest,
 )
-from app.services import documents
+from app.services import documents, media
 from app.services.document_audit import (
     DocumentAuditEvent,
     emit_document_audit_event,
@@ -51,6 +52,7 @@ def create_document(payload: DocumentCreate, db: DBSession) -> DocumentRead:
 async def upload_document(
     request: Request,
     db: DBSession,
+    user: CurrentUser,
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
     category: DocumentCategory = Form(default=DocumentCategory.other),
@@ -78,6 +80,8 @@ async def upload_document(
             metadata={"filename": response.original_filename, "size_bytes": response.size_bytes},
         )
     )
+    if category == DocumentCategory.photo:
+        media.register_document(db, response.document.id, user=user)
     return response
 
 

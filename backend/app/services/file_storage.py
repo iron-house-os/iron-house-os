@@ -24,6 +24,9 @@ ALLOWED_EXTENSIONS = {
     ".png",
     ".jpg",
     ".jpeg",
+    ".heic",
+    ".heif",
+    ".webp",
 }
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 DEFAULT_STORAGE_ROOT = Path("/app/data/uploads")
