@@ -459,3 +459,164 @@ def test_time_off_request_rejects_reversed_dates() -> None:
         json={"record_type": "time_off_request", "employee_id": employee["id"], "work_date": str(date.today()), "title": "Invalid dates", "details": {"start_date": "2026-08-10", "end_date": "2026-08-09"}},
     )
     assert response.status_code == 422
+
+
+FLHA_SCREENINGS = {
+    "first_aid_equipment": "yes",
+    "overhead_hazards": "na",
+    "underground_utilities_locates": "yes",
+    "mobile_equipment": "yes",
+    "confined_space": "na",
+    "excavation_protection_access": "yes",
+    "additional_ppe": "no",
+    "traffic_control": "na",
+    "subcontractors": "no",
+    "basic_ppe_review": "yes",
+}
+
+
+def _valid_flha_details(employee: dict) -> dict:
+    return {
+        "site_location": "North work area",
+        "supervisor": "Test Foreperson",
+        "first_aid_attendant": "Test Attendant",
+        "crew": [{"employee_id": employee["id"], "name": "Crew Member"}],
+        "weather": "Clear, 18 C",
+        "screenings": FLHA_SCREENINGS,
+        "tasks": [{
+            "task": "Install storm pipe",
+            "hazard": "Excavation collapse",
+            "control": "Engineered shoring installed and inspected",
+            "control_type": "engineering",
+            "responsible_person": "Test Foreperson",
+            "critical": True,
+            "control_accepted": True,
+            "evidence_required": True,
+            "evidence": "Photo reference 001",
+        }],
+        "emergency": {
+            "muster_point": "Site entrance",
+            "first_aid": "Attendant and kit in site truck",
+            "communication": "Radio channel 1; call 911",
+            "stop_work_triggers": "Control failure or changing conditions",
+        },
+    }
+
+
+def test_flha_create_edit_sign_release_audit_and_pdf() -> None:
+    employee = _employee()
+    project = _project()
+    created = client.post("/api/v1/field-operations/records", json={
+        "record_type": "daily_hazard_assessment",
+        "project_id": project["id"],
+        "work_date": str(date.today()),
+        "title": "Storm installation FLHA",
+        "severity": "critical",
+        "details": _valid_flha_details(employee),
+    })
+    assert created.status_code == 201
+    assert created.json()["status"] == "draft"
+    assert created.json()["details"]["audit"][0]["action"] == "created"
+    record_id = created.json()["id"]
+
+    edited = client.patch(f"/api/v1/field-operations/records/{record_id}", json={
+        "details": {"weather": "Light rain, 14 C"},
+    })
+    assert edited.status_code == 200
+    assert edited.json()["details"]["weather"] == "Light rain, 14 C"
+    assert edited.json()["details"]["audit"][-1]["action"] == "edited"
+
+    signed = client.post(f"/api/v1/field-operations/records/{record_id}/sign", json={
+        "employee_id": employee["id"],
+        "employee_name": "Crew Member",
+        "acknowledgement": "I reviewed this FLHA and understand the controls and stop-work duty.",
+        "signing_mode": "supervised_shared_device",
+    })
+    assert signed.status_code == 200
+    assert signed.json()["details"]["audit"][-1]["action"] == "worker_signed"
+
+    immutable = client.patch(f"/api/v1/field-operations/records/{record_id}", json={"title": "Changed"})
+    assert immutable.status_code == 409
+
+    released = client.post(f"/api/v1/field-operations/records/{record_id}/release", json={
+        "field_conditions_verified": True,
+        "supervisor_name": "Test Foreperson",
+        "acknowledgement": "I verified actual field conditions and crew acknowledgement at the work location.",
+    })
+    assert released.status_code == 200
+    assert released.json()["status"] == "released"
+    assert len(released.json()["details"]["frozen_sha256"]) == 64
+    assert released.json()["details"]["audit"][-1]["action"] == "supervisor_released"
+
+    pdf = client.get(f"/api/v1/field-operations/records/{record_id}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF-1.4")
+    assert b"/Count 1" in pdf.content
+
+
+def test_flha_critical_hazard_blocks_signing_and_release() -> None:
+    employee = _employee()
+    project = _project()
+    details = _valid_flha_details(employee)
+    details["tasks"][0]["control_accepted"] = False
+    details["tasks"][0]["evidence"] = ""
+    created = client.post("/api/v1/field-operations/records", json={
+        "record_type": "daily_hazard_assessment", "project_id": project["id"],
+        "work_date": str(date.today()), "title": "Blocked FLHA", "details": details,
+    })
+    assert created.status_code == 201
+    assert created.json()["status"] == "blocked"
+    assert any("uncontrolled" in blocker for blocker in created.json()["details"]["blockers"])
+    signed = client.post(f"/api/v1/field-operations/records/{created.json()['id']}/sign", json={
+        "employee_id": employee["id"], "employee_name": "Crew Member",
+        "acknowledgement": "I reviewed this blocked field-level hazard assessment.",
+        "signing_mode": "supervised_shared_device",
+    })
+    assert signed.status_code == 409
+    released = client.post(f"/api/v1/field-operations/records/{created.json()['id']}/release", json={
+        "field_conditions_verified": True, "supervisor_name": "Test Foreperson",
+        "acknowledgement": "I verified the work location but this hazard remains uncontrolled.",
+    })
+    assert released.status_code == 409
+
+
+def test_flha_reassessment_creates_new_unsigned_version() -> None:
+    employee = _employee()
+    project = _project()
+    created = client.post("/api/v1/field-operations/records", json={
+        "record_type": "daily_hazard_assessment", "project_id": project["id"],
+        "work_date": str(date.today()), "title": "Versioned FLHA", "details": _valid_flha_details(employee),
+    }).json()
+    reassessed = client.post(f"/api/v1/field-operations/records/{created['id']}/reassess", json={
+        "change_reason": "Weather changed to heavy rain",
+        "changed_conditions": ["weather", "conditions"],
+        "details": {"weather": "Heavy rain, 9 C"},
+    })
+    assert reassessed.status_code == 201
+    assert reassessed.json()["id"] != created["id"]
+    assert reassessed.json()["details"]["version"] == 2
+    assert reassessed.json()["details"]["previous_version_id"] == created["id"]
+    assert reassessed.json()["signatures"] == []
+
+
+
+def test_flha_permissions_require_foreperson_for_creation() -> None:
+    employee = _employee()
+    project = _project()
+
+    def operator_user(request: Request) -> AuthenticatedUser:
+        principal = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000099"),
+            email=employee["email"], display_name="Crew Member", role="viewer", session_version=1,
+        )
+        request.state.authenticated_user = principal
+        return principal
+
+    app.dependency_overrides[require_authenticated_user] = operator_user
+    denied = client.post("/api/v1/field-operations/records", json={
+        "record_type": "daily_hazard_assessment", "project_id": project["id"],
+        "work_date": str(date.today()), "title": "Unauthorized FLHA", "details": _valid_flha_details(employee),
+    })
+    assert denied.status_code == 403
+    assert "permission" in denied.text.lower() or "foreperson" in denied.text.lower()

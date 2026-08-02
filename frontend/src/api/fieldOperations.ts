@@ -145,6 +145,13 @@ export const fieldOperationsApi = {
     request<FieldRecord>("/field-operations/records", { method: "POST", body: JSON.stringify(payload) }),
   signRecord: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/sign", { method: "POST", body: JSON.stringify(payload) }),
+  updateRecord: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id, { method: "PATCH", body: JSON.stringify(payload) }),
+  reassessRecord: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/reassess", { method: "POST", body: JSON.stringify(payload) }),
+  releaseRecord: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/release", { method: "POST", body: JSON.stringify(payload) }),
+  pdfUrl: (id: string) => API_BASE_URL + "/field-operations/records/" + id + "/pdf",
   decideMilestone: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/milestone-decision", { method: "POST", body: JSON.stringify(payload) }),
   decideTimeOff: (id: string, payload: Record<string, unknown>) =>

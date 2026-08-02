@@ -238,6 +238,26 @@ class SignatureCreate(BaseModel):
     employee_id: UUID
     employee_name: str = Field(min_length=1, max_length=255)
     acknowledgement: str = Field(default="I acknowledge and understand this record.", min_length=10)
+    signing_mode: Literal["own_device", "supervised_shared_device"] = "own_device"
+
+
+class FieldRecordUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    severity: Severity | None = None
+    details: dict | None = None
+    document_ids: list[UUID] | None = None
+
+
+class FLHAReassessmentCreate(BaseModel):
+    change_reason: str = Field(min_length=3, max_length=500)
+    changed_conditions: list[Literal["scope", "weather", "crew", "equipment", "conditions"]] = Field(min_length=1)
+    details: dict | None = None
+
+
+class FLHAReleaseCreate(BaseModel):
+    field_conditions_verified: bool
+    supervisor_name: str = Field(min_length=1, max_length=255)
+    acknowledgement: str = Field(min_length=10, max_length=1000)
 
 
 class MilestoneDecision(BaseModel):

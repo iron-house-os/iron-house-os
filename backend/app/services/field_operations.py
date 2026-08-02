@@ -1,4 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
+import hashlib
+import json
+import textwrap
 import secrets
 from uuid import UUID
 
@@ -21,6 +24,9 @@ from app.schemas.field_operations import (
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
+    FieldRecordUpdate,
+    FLHAReassessmentCreate,
+    FLHAReleaseCreate,
     MilestoneDecision,
     SignatureCreate,
     TimeOffDecision,
@@ -322,6 +328,75 @@ def create_time_entry(db: Session, payload: TimeEntryCreate, user: Authenticated
     return TimeEntryRead.model_validate(item)
 
 
+FLHA_REQUIRED_SCREENINGS = {
+    "first_aid_equipment", "overhead_hazards", "underground_utilities_locates",
+    "mobile_equipment", "confined_space", "excavation_protection_access",
+    "additional_ppe", "traffic_control", "subcontractors", "basic_ppe_review",
+}
+FLHA_HIERARCHY = {"elimination", "substitution", "engineering", "administrative", "ppe"}
+
+
+def _audit(details: dict, action: str, user: AuthenticatedUser, **metadata: object) -> dict:
+    events = list(details.get("audit") or [])
+    events.append({
+        "action": action, "at": datetime.now(UTC).isoformat(), "actor": user.email,
+        "actor_name": user.display_name, **metadata,
+    })
+    return {**details, "audit": events}
+
+
+def _crew_ids(details: dict) -> set[str]:
+    return {
+        str(entry.get("employee_id") or entry.get("id"))
+        for entry in (details.get("crew") or [])
+        if isinstance(entry, dict) and (entry.get("employee_id") or entry.get("id"))
+    }
+
+
+def _flha_blockers(project_id: UUID | None, details: dict) -> list[str]:
+    blockers: list[str] = []
+    required = {
+        "project / job": project_id, "site / location": details.get("site_location"),
+        "supervisor / foreperson": details.get("supervisor"),
+        "first aid attendant": details.get("first_aid_attendant"),
+        "crew": details.get("crew"), "weather": details.get("weather"),
+    }
+    blockers.extend(f"Missing {label}" for label, value in required.items() if not value)
+    if details.get("crew") and not _crew_ids(details):
+        blockers.append("Crew entries must identify an employee")
+    screenings = details.get("screenings") or {}
+    missing_screenings = sorted(FLHA_REQUIRED_SCREENINGS - set(screenings))
+    if missing_screenings or any(screenings.get(key) not in {"yes", "no", "na"} for key in FLHA_REQUIRED_SCREENINGS):
+        blockers.append("Complete every Yes / No / N/A screening item")
+    emergency = details.get("emergency") or {}
+    for key, label in (("muster_point", "muster point"), ("first_aid", "first aid response"), ("communication", "emergency communication"), ("stop_work_triggers", "stop-work triggers")):
+        if not emergency.get(key):
+            blockers.append(f"Missing {label}")
+    rows = details.get("tasks") or []
+    if not rows:
+        blockers.append("Add at least one task, hazard and control row")
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            blockers.append(f"Task row {index} is invalid")
+            continue
+        if not all(str(row.get(key) or "").strip() for key in ("task", "hazard", "control", "responsible_person")):
+            blockers.append(f"Task row {index} is incomplete")
+        if row.get("control_type") not in FLHA_HIERARCHY:
+            blockers.append(f"Task row {index} needs a hierarchy-of-controls category")
+        if row.get("critical") and (not row.get("control_accepted") or not row.get("responsible_person") or (row.get("evidence_required") and not row.get("evidence"))):
+            blockers.append(f"Critical hazard in task row {index} is uncontrolled")
+    return list(dict.fromkeys(blockers))
+
+
+def _prepare_flha(project_id: UUID | None, details: dict, user: AuthenticatedUser, action: str) -> tuple[dict, str]:
+    prepared = dict(details)
+    prepared.setdefault("version", 1)
+    prepared["blockers"] = _flha_blockers(project_id, prepared)
+    prepared["release_state"] = "blocked" if prepared["blockers"] else "draft"
+    prepared = _audit(prepared, action, user, release_state=prepared["release_state"])
+    return prepared, "blocked" if prepared["blockers"] else "draft"
+
+
 def create_field_record(db: Session, payload: FieldRecordCreate, user: AuthenticatedUser) -> FieldRecordRead:
     if payload.project_id:
         require_exists(db, Project, payload.project_id, "Project")
@@ -341,6 +416,12 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             if payload.employee_id and payload.employee_id != profile.id:
                 raise AppError("You can only create records for your own employee profile.", status_code=403)
             values["employee_id"] = profile.id
+    if payload.record_type == "daily_hazard_assessment":
+        if user.role == "viewer" and (profile is None or profile.portal_role != "foreman"):
+            raise AppError("Foreperson or management access is required to create an FLHA.", status_code=403)
+        values["details"], values["status"] = _prepare_flha(
+            payload.project_id, payload.details, user, "created",
+        )
     if payload.record_type == "crew_shift":
         values["status"] = "scheduled"
         values["details"] = {**payload.details, "scheduled_by": user.display_name, "scheduled_at": datetime.now(UTC).isoformat()}
@@ -385,6 +466,181 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)
+
+
+def _require_flha(record: FieldRecord) -> None:
+    if record.record_type != "daily_hazard_assessment":
+        raise AppError("That record is not an FLHA.", status_code=400)
+
+
+def _can_supervise_flha(db: Session, user: AuthenticatedUser) -> bool:
+    if user.role in {"admin", "operations_manager"}:
+        return True
+    profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+    return bool(profile and profile.portal_role == "foreman")
+
+
+def update_field_record(
+    db: Session, record_id: UUID, payload: FieldRecordUpdate, user: AuthenticatedUser,
+) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "Field record")
+    _require_flha(item)
+    if not _can_supervise_flha(db, user):
+        raise AppError("Foreperson or management access is required to edit an FLHA.", status_code=403)
+    if item.signatures or item.status == "released":
+        raise AppError("Signed FLHAs are immutable. Create a re-assessment instead.", status_code=409)
+    values = payload.model_dump(exclude_unset=True)
+    if "details" in values:
+        details = {**(item.details or {}), **(values.pop("details") or {})}
+        details, item.status = _prepare_flha(item.project_id, details, user, "edited")
+        item.details = details
+    else:
+        item.details = _audit(item.details or {}, "edited", user)
+    for key, value in values.items():
+        if key == "document_ids":
+            value = [str(document_id) for document_id in value]
+        setattr(item, key, value)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def reassess_flha(
+    db: Session, record_id: UUID, payload: FLHAReassessmentCreate, user: AuthenticatedUser,
+) -> FieldRecordRead:
+    previous = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(previous)
+    if not _can_supervise_flha(db, user):
+        raise AppError("Foreperson or management access is required to re-assess an FLHA.", status_code=403)
+    details = {**(previous.details or {}), **(payload.details or {})}
+    details.pop("release", None)
+    details.pop("frozen_sha256", None)
+    details["version"] = int((previous.details or {}).get("version") or 1) + 1
+    details["previous_version_id"] = str(previous.id)
+    details["change_reason"] = payload.change_reason
+    details["changed_conditions"] = payload.changed_conditions
+    details["audit"] = []
+    details, next_status = _prepare_flha(previous.project_id, details, user, "reassessed")
+    item = FieldRecord(
+        record_type=previous.record_type, project_id=previous.project_id, employee_id=previous.employee_id,
+        cost_code=previous.cost_code, work_date=date.today(), title=previous.title, status=next_status,
+        severity=previous.severity, details=details, document_ids=list(previous.document_ids or []),
+        signatures=[], alert_recipients=list(previous.alert_recipients or []), submitted_by=user.email,
+    )
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def release_flha(
+    db: Session, record_id: UUID, payload: FLHAReleaseCreate, user: AuthenticatedUser,
+) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(item)
+    if not _can_supervise_flha(db, user):
+        raise AppError("Foreperson or management access is required to release an FLHA.", status_code=403)
+    if item.status == "released":
+        raise AppError("This FLHA version is already released.", status_code=409)
+    if not payload.field_conditions_verified:
+        raise AppError("The responsible field person must verify actual work-location conditions.", status_code=400)
+    base_blockers = _flha_blockers(item.project_id, item.details or {})
+    blockers = list(base_blockers)
+    crew = _crew_ids(item.details or {})
+    signed = {str(entry.get("employee_id")) for entry in (item.signatures or [])}
+    if crew - signed:
+        blockers.append("Every listed worker must review and sign this version")
+    if blockers:
+        details = {**(item.details or {}), "blockers": blockers, "release_state": "blocked"}
+        item.details = _audit(details, "release_blocked", user, blockers=blockers)
+        item.status = "blocked" if base_blockers else "draft"
+        db.add(item)
+        commit(db)
+        raise AppError("FLHA release blocked: " + "; ".join(blockers), status_code=409)
+    released_at = datetime.now(UTC).isoformat()
+    frozen = {
+        **(item.details or {}),
+        "release_state": "released",
+        "blockers": [],
+        "release": {
+            "supervisor_name": payload.supervisor_name, "released_by": user.email,
+            "released_at": released_at, "acknowledgement": payload.acknowledgement,
+        },
+    }
+    snapshot = {"title": item.title, "details": frozen, "signatures": item.signatures, "documents": item.document_ids}
+    frozen["frozen_sha256"] = hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode()).hexdigest()
+    item.details = _audit(frozen, "supervisor_released", user, supervisor=payload.supervisor_name)
+    item.status = "released"
+    item.resolved_at = datetime.now(UTC)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def _pdf_escape(value: object) -> str:
+    return str(value).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _simple_pdf(lines: list[str]) -> bytes:
+    wrapped = [part for line in lines for part in (textwrap.wrap(str(line), width=92) or [""])]
+    pages = [wrapped[index:index + 54] for index in range(0, len(wrapped), 54)] or [[""]]
+    objects: list[bytes] = [b"", b""]
+    font_id = 3 + len(pages) * 2
+    page_ids: list[int] = []
+    for page_lines in pages:
+        page_id = len(objects) + 1
+        content_id = page_id + 1
+        page_ids.append(page_id)
+        stream = "BT /F1 9 Tf 42 756 Td 11 TL " + " ".join(f"({_pdf_escape(line)}) Tj T*" for line in page_lines) + " ET"
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>".encode())
+        objects.append(f"<< /Length {len(stream.encode())} >>\nstream\n{stream}\nendstream".encode())
+    objects[0] = b"<< /Type /Catalog /Pages 2 0 R >>"
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode()
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    output.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
+    output.extend(f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF".encode())
+    return bytes(output)
+
+
+def export_flha_pdf(db: Session, record_id: UUID, user: AuthenticatedUser) -> bytes:
+    item = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(item)
+    details = item.details or {}
+    if user.role == "viewer":
+        profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+        crew_ids = _crew_ids(details)
+        if profile is None or (profile.portal_role != "foreman" and str(profile.id) not in crew_ids):
+            raise AppError("You do not have access to this FLHA.", status_code=403)
+    lines = [
+        "IRON HOUSE - FIELD LEVEL HAZARD ASSESSMENT",
+        f"{item.title} | Date: {item.work_date} | Version: {details.get('version', 1)} | Status: {item.status.upper()}",
+        f"Site: {details.get('site_location', '')} | Supervisor: {details.get('supervisor', '')} | Weather: {details.get('weather', '')}",
+        "", "TASK | HAZARD | CONTROL (HIERARCHY) | RESPONSIBLE",
+    ]
+    for row in details.get("tasks") or []:
+        lines.append(f"{row.get('task', '')} | {row.get('hazard', '')} | {row.get('control', '')} ({row.get('control_type', '')}) | {row.get('responsible_person', '')}")
+    emergency = details.get("emergency") or {}
+    lines.extend([
+        "", "EMERGENCY RESPONSE",
+        f"Muster: {emergency.get('muster_point', '')} | First aid: {emergency.get('first_aid', '')}",
+        f"Communication: {emergency.get('communication', '')} | Stop work: {emergency.get('stop_work_triggers', '')}",
+        "", "CREW ACKNOWLEDGEMENTS",
+    ])
+    for signature in item.signatures or []:
+        lines.append(f"{signature.get('employee_name')} | {signature.get('signed_at')} | {signature.get('signing_mode', 'own_device')}")
+    release = details.get("release") or {}
+    lines.extend(["", f"Supervisor release: {release.get('supervisor_name', 'Not released')} | {release.get('released_at', '')}", f"Audit events: {len(details.get('audit') or [])} | Attachments: {len(item.document_ids or [])}"])
+    return _simple_pdf(lines)
 
 
 def decide_time_off(
@@ -453,10 +709,25 @@ def sign_field_record(
 ) -> FieldRecordRead:
     item = require_exists(db, FieldRecord, record_id, "Field record")
     employee = require_exists(db, Employee, payload.employee_id, "Employee")
-    if user.role not in {"admin", "operations_manager"} and employee.email.lower() != user.email.lower():
+    is_flha = item.record_type == "daily_hazard_assessment"
+    if is_flha:
+        if item.status == "released":
+            raise AppError("Released FLHAs are immutable.", status_code=409)
+        if item.status == "blocked":
+            raise AppError("Resolve all FLHA blockers before collecting signatures.", status_code=409)
+        crew = _crew_ids(item.details or {})
+        if str(employee.id) not in crew:
+            raise AppError("Only workers listed on this FLHA may sign it.", status_code=403)
+        own_account = employee.email.lower() == user.email.lower()
+        if payload.signing_mode == "own_device" and not own_account:
+            raise AppError("Workers using own-device signing must use their own account.", status_code=403)
+        if payload.signing_mode == "supervised_shared_device" and not _can_supervise_flha(db, user):
+            raise AppError("A foreperson or manager must supervise shared-device signing.", status_code=403)
+    elif user.role not in {"admin", "operations_manager"} and employee.email.lower() != user.email.lower():
         raise AppError("You can only apply your own signature.", status_code=403)
     signatures = list(item.signatures or [])
-    signatures = [entry for entry in signatures if entry.get("employee_id") != str(employee.id)]
+    if is_flha and any(entry.get("employee_id") == str(employee.id) for entry in signatures):
+        raise AppError("This worker has already signed this immutable FLHA version.", status_code=409)
     signatures.append(
         {
             "employee_id": str(employee.id),
@@ -464,9 +735,12 @@ def sign_field_record(
             "acknowledgement": payload.acknowledgement,
             "signed_at": datetime.now(UTC).isoformat(),
             "signed_by_account": user.email,
+            "signing_mode": payload.signing_mode,
         }
     )
     item.signatures = signatures
+    if is_flha:
+        item.details = _audit(item.details or {}, "worker_signed", user, employee_id=str(employee.id), signing_mode=payload.signing_mode)
     db.add(item)
     commit(db)
     db.refresh(item)

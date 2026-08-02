@@ -22,6 +22,7 @@ import { Link } from "react-router-dom";
 
 import { MediaCategory, mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
+import { FlhaWorkflow } from "../components/FlhaWorkflow";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Employee,
@@ -571,6 +572,9 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save field record."); }
     finally { setSaving(false); }
   }
+  if (mode === "foreman" && recordType === "daily_hazard_assessment") {
+    return <div className="space-y-4"><div className="rounded-xl border border-iron-100 bg-white p-4 shadow-sm"><Select label="Field form" value={recordType} onChange={setRecordType} options={availableTypes} /></div><FlhaWorkflow data={data} onSaved={onSaved} onError={onError} /></div>;
+  }
   return (
     <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
       <SectionTitle icon={<ClipboardCheck />} title="Field forms and records" subtitle="Photos are stored with the selected job and form. Medium or higher issues alert Jeremie and Mac." />
@@ -645,7 +649,7 @@ function RecentRecords({ records, employees, onSaved, onError }: { records: Fiel
               <div><div className="font-semibold text-iron-950">{record.title}</div><div className="mt-1 text-xs uppercase tracking-wide text-iron-500">{record.record_type.replaceAll("_", " ")} · {record.work_date}</div></div>
               <StatusPill status={record.severity} />
             </div>
-            <div className="mt-3 text-sm text-iron-600">{String(record.details.notes ?? record.details.summary ?? "")}</div>
+            {record.record_type === "daily_hazard_assessment" ? <div className="mt-3 space-y-2 text-sm text-iron-700"><div className="grid gap-2">{((record.details.tasks as Array<Record<string, unknown>> | undefined) ?? []).map((row, index) => <div key={index} className="rounded-md bg-iron-50 p-2"><b>{String(row.task ?? "Task")}</b><div>Hazard: {String(row.hazard ?? "")}</div><div>Control: {String(row.control ?? "")} · Responsible: {String(row.responsible_person ?? "")}</div></div>)}</div><div className="text-xs"><b>Emergency:</b> Muster {String((record.details.emergency as Record<string, unknown> | undefined)?.muster_point ?? "not entered")} · Stop work: {String((record.details.emergency as Record<string, unknown> | undefined)?.stop_work_triggers ?? "not entered")}</div></div> : <div className="mt-3 text-sm text-iron-600">{String(record.details.notes ?? record.details.summary ?? "")}</div>}
             <div className="mt-3 text-xs font-medium text-iron-500">{record.document_ids.length} attachment(s) · {record.signatures.length} signature(s)</div>
             {record.document_ids.length ? <div className="mt-3"><UniversalPhotoField documentIds={record.document_ids} /></div> : null}
             {["daily_hazard_assessment", "toolbox_talk"].includes(record.record_type) ? (

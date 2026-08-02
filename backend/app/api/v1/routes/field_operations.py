@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -14,6 +14,9 @@ from app.schemas.field_operations import (
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
+    FieldRecordUpdate,
+    FLHAReassessmentCreate,
+    FLHAReleaseCreate,
     MilestoneDecision,
     SignatureCreate,
     TimeEntryCreate,
@@ -79,6 +82,46 @@ def sign_field_record(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.sign_field_record(db, record_id, payload, user)
+
+
+@router.patch("/records/{record_id}", response_model=FieldRecordRead)
+def update_field_record(
+    record_id: UUID,
+    payload: FieldRecordUpdate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.update_field_record(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/reassess", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
+def reassess_flha(
+    record_id: UUID,
+    payload: FLHAReassessmentCreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.reassess_flha(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/release", response_model=FieldRecordRead)
+def release_flha(
+    record_id: UUID,
+    payload: FLHAReleaseCreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.release_flha(db, record_id, payload, user)
+
+
+@router.get("/records/{record_id}/pdf")
+def export_flha_pdf(record_id: UUID, db: DBSession, user: CurrentUser) -> Response:
+    content = field_operations.export_flha_pdf(db, record_id, user)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="FLHA-{record_id}.pdf"'},
+    )
 
 
 @router.post("/records/{record_id}/milestone-decision", response_model=FieldRecordRead)
