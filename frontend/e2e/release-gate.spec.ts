@@ -61,6 +61,24 @@ async function mockApi(page: Page) {
       });
       return;
     }
+    if (path.endsWith("/finance/startup-expenses")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          total_startup_costs: 0,
+          owner_loan_payable: 0,
+          reimbursed_to_owner: 0,
+          pending_review: 0,
+          approved_unreimbursed: 0,
+          entries: [],
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/finance/receipts")) {
+      await route.fulfill({ status: 200, json: { items: [], total: 0 } });
+      return;
+    }
     if (path.endsWith("/estimates/rate-library")) {
       await route.fulfill({ status: 200, json: { production_rates: [] } });
       return;
@@ -148,6 +166,32 @@ test("authenticated core shell is responsive and accessible", async ({ page }, t
   }
 
   await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("receipt capture and financial review surfaces pass responsive accessibility QA", async ({ page }) => {
+  await mockApi(page);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await signIn(page);
+
+  await page.goto("/employee-portal/receipts");
+  await expect(page.getByRole("heading", { name: "Employee Portal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Submit a receipt" })).toBeVisible();
+  await expect(page.getByText("Receipt photos (camera or gallery, up to 10 pages)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Extract receipt" })).toBeDisabled();
+  await expectNoSeriousAccessibilityViolations(page);
+
+  await page.goto("/finance");
+  await expect(page.getByRole("heading", { name: "Financial Control" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Receipt review and coding" })).toBeVisible();
+  await expect(page.getByText("Nothing posts automatically.")).toHaveCount(0);
+  await expectNoSeriousAccessibilityViolations(page);
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+  expect(pageErrors).toEqual([]);
 });
 
 const tabs = [
