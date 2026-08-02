@@ -22,6 +22,7 @@ import { Link } from "react-router-dom";
 
 import { MediaCategory, mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
+import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
 import { FLHAWorkflow } from "../components/FLHAWorkflow";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -148,6 +149,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           {section === "production" ? <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "receipts" ? <ReceiptCapturePanel /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
@@ -283,6 +285,7 @@ export function OperatorPortalPage({ section = "dashboard" }: { section?: string
           <AlertStrip alerts={state.data.alerts} />
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "receipts" ? <ReceiptCapturePanel /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {["inspections", "photos"].includes(section) ? <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
@@ -299,10 +302,11 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Employee Portal" eyebrow="Iron House Contracting" description="Time, daily journal, safety, job photos, requests, contact information and course tickets." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["time", "My time"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
       {section === "safety" ? <SafetyProgramCard /> : null}
       {state.data ? (
         <>
+          {section === "receipts" ? <ReceiptCapturePanel /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "journal" ? <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}

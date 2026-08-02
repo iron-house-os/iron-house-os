@@ -10,7 +10,7 @@ from app.core.errors import AppError
 from app.models.document import Document
 from app.models.equipment import Equipment
 from app.models.field_operations import FieldRecord, VehicleLog
-from app.models.finance import FinancialEntry, StartupExpense
+from app.models.finance import FinancialEntry, Receipt, StartupExpense
 from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
 from app.models.project import Project
 from app.schemas.media import (
@@ -39,6 +39,7 @@ RECORD_MODELS = {
     "equipment": Equipment,
     "financial_entry": FinancialEntry,
     "startup_expense": StartupExpense,
+    "receipt": Receipt,
     "document": Document,
     "project": Project,
 }
