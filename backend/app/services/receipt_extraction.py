@@ -75,12 +75,19 @@ def extract_receipt(db: Session, payload: ReceiptExtractionRequest, user: Authen
 
 
 def _context(db: Session, user: AuthenticatedUser) -> str:
+    management = user.role in {"admin", "operations_manager"}
+    projects = list(db.scalars(select(Project).order_by(Project.name).limit(100))) if management else []
+    equipment = list(db.scalars(select(Equipment).order_by(Equipment.name).limit(100))) if management else []
+    card_query = select(CompanyCard).where(CompanyCard.is_authorized.is_(True))
+    if not management:
+        card_query = card_query.where(CompanyCard.holder_email == user.email)
+    cards = list(db.scalars(card_query.limit(100)))
     data = {
         "submitter": user.email,
         "controlled_vendors": [{"id": str(x.id), "name": x.name} for x in db.scalars(select(Supplier).order_by(Supplier.name).limit(100))],
-        "projects": [{"id": str(x.id), "name": x.name, "number": x.project_number} for x in db.scalars(select(Project).order_by(Project.name).limit(100))],
-        "equipment": [{"id": str(x.id), "name": x.name, "identifier": x.identifier} for x in db.scalars(select(Equipment).order_by(Equipment.name).limit(100))],
-        "authorized_cards_last_four_only": [{"brand": x.brand, "last_four": x.last_four, "holder_email": x.holder_email} for x in db.scalars(select(CompanyCard).where(CompanyCard.is_authorized.is_(True)).limit(100))],
+        "projects": [{"id": str(x.id), "name": x.name, "number": x.project_number} for x in projects],
+        "equipment": [{"id": str(x.id), "name": x.name, "identifier": x.identifier} for x in equipment],
+        "authorized_cards_last_four_only": [{"brand": x.brand, "last_four": x.last_four} for x in cards],
     }
     return "CONTROLLED CONTEXT AND OUTPUT SCHEMA\n" + json.dumps(data)
 
