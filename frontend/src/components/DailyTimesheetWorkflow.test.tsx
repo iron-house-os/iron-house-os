@@ -9,6 +9,7 @@ vi.mock("../api/dailyTimesheets", async () => {
   return { ...actual, dailyTimesheetApi: { bootstrap: vi.fn(), save: vi.fn(), submit: vi.fn(), action: vi.fn(), revision: vi.fn(), post: vi.fn(), pdfUrl: vi.fn((id) => `/pdf/${id}`), csvUrl: vi.fn() } };
 });
 vi.mock("../api/media", () => ({ mediaApi: { upload: vi.fn(), list: vi.fn().mockResolvedValue([]) } }));
+vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "user-115", email: "foreman115@example.com" } }) }));
 
 const bootstrap = {
   projects: [{ id: "job-1", name: "Main Street", project_number: "IH-115", status: "active" }],
@@ -34,6 +35,8 @@ describe("DailyTimesheetWorkflow", () => {
     fireEvent.change(screen.getByLabelText("OT"), { target: { value: "1.5" } });
     expect(screen.getByText(/ST 8.00 · OT 1.50 · 9.50 hours/)).toBeInTheDocument();
     await waitFor(() => expect(dailyTimesheetApi.save).toHaveBeenCalled(), { timeout: 2500 });
+    expect(localStorage.getItem("ihos:foreman-daily-timesheet:v1:user-115")).toContain('"project_id":"job-1"');
+    expect(localStorage.getItem("ihos:foreman-daily-timesheet:v1")).toBeNull();
   });
 
   it("adds equipment and a mixed material/production line with receipt linkage", async () => {
