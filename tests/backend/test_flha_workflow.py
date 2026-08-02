@@ -101,6 +101,15 @@ def test_flha_create_edit_sign_release_audit_and_immutability() -> None:
     assert [event["action"] for event in edited.json()["details"]["audit_history"]] == ["created", "edited"]
     assert "supervisor_release" not in edited.json()["details"]
 
+    missing_worker_confirmation = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
+        "employee_id": worker["id"],
+        "employee_name": "Crew Worker",
+        "acknowledgement": "I reviewed the hazards and controls with the foreperson.",
+        "supervised_shared_device": True,
+        "supervisor_confirmation": "I supervised the shared-device review.",
+    })
+    assert missing_worker_confirmation.status_code == 400
+
     signed = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
         "employee_id": worker["id"], "employee_name": "Forged Worker Name",
         "acknowledgement": "I reviewed the hazards and controls with the foreperson.",
