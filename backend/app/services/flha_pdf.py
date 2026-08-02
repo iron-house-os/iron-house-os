@@ -44,6 +44,7 @@ def render_flha_pdf(record: FieldRecord) -> bytes:
             add(f"Worker: {member.get('name', '')} | NOT YET ACKNOWLEDGED", signature=True)
             add("Signature: ____________________________________", signature=True)
             add("Date/time: ____________________________________", signature=True)
+        add()
     release = details.get("supervisor_release") or {}
     if release:
         add()
@@ -56,7 +57,7 @@ def render_flha_pdf(record: FieldRecord) -> bytes:
         text, is_signature = lines[index]
         if is_signature:
             group: list[str] = []
-            while index < len(lines) and lines[index][1] and len(group) < 3:
+            while index < len(lines) and lines[index][1]:
                 group.append(lines[index][0])
                 index += 1
             if len(pages[-1]) + len(group) > 52:
