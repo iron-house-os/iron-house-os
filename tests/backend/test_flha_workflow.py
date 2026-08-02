@@ -205,6 +205,15 @@ def test_pdf_is_legible_compact_and_has_no_blank_overflow_pages() -> None:
     details = complete_details(crew)
     details["hazards"] = [{**details["hazards"][0], "task": f"Task {index}", "hazard": f"Hazard {index}"} for index in range(1, 9)]
     record = create_flha(project, crew, details)
+    long_acknowledgement = "I reviewed the complete FLHA. " + ("control " * 80) + "END-OF-ACK"
+    signed = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
+        "employee_id": crew[0]["id"],
+        "employee_name": "Forged PDF Name",
+        "acknowledgement": long_acknowledgement,
+        "supervised_shared_device": True,
+        "supervisor_confirmation": "I supervised this worker acknowledgement.",
+    })
+    assert signed.status_code == 200
     pdf = client.get(f"/api/v1/field-operations/records/{record['id']}/flha.pdf")
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
@@ -213,5 +222,6 @@ def test_pdf_is_legible_compact_and_has_no_blank_overflow_pages() -> None:
     page_text = [page.extract_text() for page in reader.pages]
     assert all(len(text.strip()) > 80 for text in page_text)
     assert "FIELD LEVEL HAZARD ASSESSMENT" in page_text[0]
+    assert any("Worker: Worker 1" in text and "END-OF-ACK" in text for text in page_text)
     combined = "\n".join(page_text)
     assert "Worker 1" in combined and "Worker 18" in combined
