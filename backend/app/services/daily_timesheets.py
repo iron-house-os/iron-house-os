@@ -128,11 +128,14 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
         if profile is None or supervisor.id != profile.id:
             raise AppError("A foreman can only submit a daily sheet under their own supervisor identity.", status_code=403)
     manager = _active(db, Employee, payload.project_manager_id, "Project manager", {"active"}) if payload.project_manager_id else None
-    for document_id in payload.document_ids:
+    def validate_document(document_id: UUID) -> None:
         document = db.get(Document, document_id)
         if document is None or document.project_id != payload.project_id or document.status in {"archived", "superseded"}:
             raise AppError("Attachment is not active for the selected job.", status_code=400)
         require_document_access(db, document_id, user)
+
+    for document_id in payload.document_ids:
+        validate_document(document_id)
     allowed = {item["code"] for item in _project_cost_codes(db).get(str(payload.project_id), [])}
     if not allowed:
         raise AppError("The selected job has no approved estimate cost codes.", status_code=400)
@@ -167,6 +170,8 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
             receipt = _active(db, Receipt, line.receipt_id, "Receipt")
             if not _is_management(user) and receipt.submitter_email.lower() != user.email.lower():
                 raise AppError("Receipt not found.", status_code=404)
+        if line.document_id:
+            validate_document(line.document_id)
         materials.append({**line.model_dump(mode="json"), "vendor_name": vendor.name, "cost_code": check_code(line.cost_code)})
     code_totals: dict[str, dict[str, float]] = defaultdict(lambda: {"straight_time": 0, "overtime": 0, "equipment_quantity": 0, "material_quantity": 0, "production_quantity": 0})
     employee_totals: dict[str, dict[str, float]] = {}
