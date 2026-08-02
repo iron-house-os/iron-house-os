@@ -5,7 +5,15 @@ from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
 from app.models.equipment import Equipment
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
-from app.models.finance import FinancialEntry, StartupExpense
+from app.models.finance import (
+    CompanyCard,
+    FinancialEntry,
+    Receipt,
+    ReceiptAlias,
+    ReceiptAuditEvent,
+    ReceiptLineItem,
+    StartupExpense,
+)
 from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
 from app.models.municipality import Municipality
 from app.models.project import Project, ProjectSupplier
@@ -36,6 +44,11 @@ __all__ = [
     "EmployeeCertification",
     "FieldRecord",
     "FinancialEntry",
+    "CompanyCard",
+    "Receipt",
+    "ReceiptAlias",
+    "ReceiptAuditEvent",
+    "ReceiptLineItem",
     "StartupExpense",
     "LoginThrottle",
     "MediaAsset",

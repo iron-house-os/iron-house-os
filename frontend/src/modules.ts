@@ -197,8 +197,8 @@ export const modules: AppModule[] = [
     label: "Financial Control",
     path: "/finance",
     icon: DollarSign,
-    description: "Project budgets, commitments, actuals, forecasts, margin, and QuickBooks export.",
-    status: "Build 226 active",
+    description: "Controlled receipt review, line-item coding, project financials, forecasts, and QuickBooks export.",
+    status: "Receipt intelligence active",
   },
   {
     label: "Reporting",
