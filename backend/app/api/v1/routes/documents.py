@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.document import (
     DocumentCategory,
@@ -18,7 +19,7 @@ from app.schemas.document import (
     RFQAttachmentManifest,
     RFQAttachmentManifestRequest,
 )
-from app.services import documents
+from app.services import documents, media
 from app.services.document_audit import (
     DocumentAuditEvent,
     emit_document_audit_event,
@@ -51,6 +52,7 @@ def create_document(payload: DocumentCreate, db: DBSession) -> DocumentRead:
 async def upload_document(
     request: Request,
     db: DBSession,
+    user: CurrentUser,
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
     category: DocumentCategory = Form(default=DocumentCategory.other),
@@ -60,6 +62,7 @@ async def upload_document(
 ) -> DocumentUploadResponse:
     response = await documents.upload_document(
         db,
+        user=user,
         file=file,
         title=title,
         category=category.value,
@@ -78,11 +81,14 @@ async def upload_document(
             metadata={"filename": response.original_filename, "size_bytes": response.size_bytes},
         )
     )
+    if category == DocumentCategory.photo:
+        media.register_document(db, response.document.id, user=user)
     return response
 
 
 @router.get("", response_model=DocumentList)
 def list_documents(
+    user: CurrentUser,
     db: DBSession,
     category: OptionalQuery = None,
     status: OptionalQuery = None,
@@ -92,6 +98,7 @@ def list_documents(
 ) -> DocumentList:
     return documents.list_documents(
         db,
+        user,
         category=category,
         status=status,
         project_id=project_id,
@@ -152,12 +159,16 @@ def document_audit_export(
 
 
 @router.post("/attachment-manifest", response_model=RFQAttachmentManifest)
-def attachment_manifest(payload: RFQAttachmentManifestRequest, db: DBSession) -> RFQAttachmentManifest:
-    return documents.build_attachment_manifest(db, payload.document_ids)
+def attachment_manifest(
+    payload: RFQAttachmentManifestRequest,
+    user: CurrentUser,
+    db: DBSession,
+) -> RFQAttachmentManifest:
+    return documents.build_attachment_manifest(db, payload.document_ids, user)
 
 
 @router.get("/signed-download")
-def signed_download(token: str, request: Request, db: DBSession) -> FileResponse:
+def signed_download(token: str, request: Request, user: CurrentUser, db: DBSession) -> FileResponse:
     context = get_request_audit_context(request)
     try:
         document_id = verify_download_token(token)
@@ -172,8 +183,8 @@ def signed_download(token: str, request: Request, db: DBSession) -> FileResponse
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
-    document = documents.get_document(db, document_id)
-    path = documents.get_document_file_path(db, document_id)
+    document = documents.get_document(db, document_id, user)
+    path = documents.get_document_file_path(db, document_id, user)
     filename = document.metadata.get("original_filename") or document.title
     emit_document_audit_event(
         DocumentAuditEvent(
@@ -189,8 +200,13 @@ def signed_download(token: str, request: Request, db: DBSession) -> FileResponse
 
 
 @router.get("/{document_id}/download-token")
-def document_download_token(document_id: UUID, request: Request, db: DBSession) -> dict[str, str | int]:
-    document = documents.get_document(db, document_id)
+def document_download_token(
+    document_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> dict[str, str | int]:
+    document = documents.get_document(db, document_id, user)
     context = get_request_audit_context(request)
     emit_document_audit_event(
         DocumentAuditEvent(
@@ -206,14 +222,19 @@ def document_download_token(document_id: UUID, request: Request, db: DBSession) 
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
-def read_document(document_id: UUID, db: DBSession) -> DocumentRead:
-    return documents.get_document(db, document_id)
+def read_document(document_id: UUID, user: CurrentUser, db: DBSession) -> DocumentRead:
+    return documents.get_document(db, document_id, user)
 
 
 @router.get("/{document_id}/download")
-def download_document(document_id: UUID, request: Request, db: DBSession) -> FileResponse:
-    document = documents.get_document(db, document_id)
-    path = documents.get_document_file_path(db, document_id)
+def download_document(
+    document_id: UUID,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> FileResponse:
+    document = documents.get_document(db, document_id, user)
+    path = documents.get_document_file_path(db, document_id, user)
     filename = document.metadata.get("original_filename") or document.title
     context = get_request_audit_context(request)
     emit_document_audit_event(
@@ -230,19 +251,25 @@ def download_document(document_id: UUID, request: Request, db: DBSession) -> Fil
 
 
 @router.get("/{document_id}/integrity", response_model=DocumentIntegrity)
-def document_integrity(document_id: UUID, db: DBSession) -> DocumentIntegrity:
-    return documents.document_integrity(db, document_id)
+def document_integrity(document_id: UUID, user: CurrentUser, db: DBSession) -> DocumentIntegrity:
+    return documents.document_integrity(db, document_id, user)
 
 
 @router.patch("/{document_id}", response_model=DocumentRead)
-def update_document(document_id: UUID, payload: DocumentUpdate, db: DBSession) -> DocumentRead:
-    return documents.update_document(db, document_id, payload)
+def update_document(
+    document_id: UUID,
+    payload: DocumentUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> DocumentRead:
+    return documents.update_document(db, document_id, payload, user)
 
 
 @router.patch("/{document_id}/status", response_model=DocumentRead)
 def update_document_status(
     document_id: UUID,
     payload: DocumentUpdateStatus,
+    user: CurrentUser,
     db: DBSession,
 ) -> DocumentRead:
-    return documents.update_document_status(db, document_id, payload)
+    return documents.update_document_status(db, document_id, payload, user)

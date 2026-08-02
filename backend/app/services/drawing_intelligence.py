@@ -28,6 +28,7 @@ from app.schemas.drawing_intelligence import (
 )
 from app.schemas.document import DocumentCategory
 from app.services import documents
+from app.services.auth import AuthenticatedUser
 from app.services.file_storage import resolve_storage_path
 
 MUNICIPALITY_HINTS = [
@@ -145,6 +146,7 @@ CONSTRUCTABILITY_RULES = (
 async def ingest_civil_pdf(
     db: Session,
     *,
+    user: AuthenticatedUser,
     file: UploadFile,
     project_id: UUID,
     title: str | None = None,
@@ -158,6 +160,7 @@ async def ingest_civil_pdf(
 
     uploaded = await documents.upload_document(
         db,
+        user=user,
         file=file,
         title=title,
         category=DocumentCategory.drawing.value,

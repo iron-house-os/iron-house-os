@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { UniversalPhotoField } from "./UniversalPhotoField";
+
 import { DocumentList, DocumentStatus, documentsApi, LibraryDocument } from "../api/documents";
 
 type Props = {
@@ -88,6 +90,7 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
           </table>
         </div>
       ) : null}
+      {documents?.items.some((item) => item.category === "photo") ? <div className="mt-5"><UniversalPhotoField documentIds={documents.items.filter((item) => item.category === "photo").map((item) => item.id)} label="Project photo gallery" /></div> : null}
     </div>
   );
 }

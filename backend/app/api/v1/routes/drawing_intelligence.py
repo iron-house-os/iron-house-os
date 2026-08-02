@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.drawing_intelligence import (
     CivilDrawingAnalysis,
@@ -38,6 +39,7 @@ def analyze(payload: DrawingSetAnalyzeRequest) -> DrawingSetAnalysisResponse:
 )
 async def ingest(
     request: Request,
+    user: CurrentUser,
     db: DBSession,
     file: UploadFile = File(...),
     project_id: UUID = Form(...),
@@ -46,6 +48,7 @@ async def ingest(
 ) -> CivilDrawingAnalysis:
     report = await ingest_civil_pdf(
         db,
+        user=user,
         file=file,
         project_id=project_id,
         title=title,

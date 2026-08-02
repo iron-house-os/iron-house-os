@@ -20,7 +20,8 @@ import {
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { documentsApi } from "../api/documents";
+import { MediaCategory, mediaApi } from "../api/media";
+import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Employee,
@@ -71,8 +72,8 @@ export function VehicleTrackingPage() {
     setSaving(true);
     state.setError(null);
     try {
-      const documentIds = await uploadPhotos(files, undefined, "Vehicle receipt or maintenance photo");
-      await fieldOperationsApi.createVehicleLog({
+      const documentIds = await uploadPhotos(files, undefined, "Vehicle receipt or maintenance photo", "receipt");
+      const log = await fieldOperationsApi.createVehicleLog({
         vehicle_id: vehicleId,
         log_type: logType,
         entry_date: today(),
@@ -83,6 +84,7 @@ export function VehicleTrackingPage() {
         details: details || null,
         document_ids: documentIds,
       });
+      await linkPhotos(documentIds, "vehicle_log", log.id);
       setOdometer(""); setLitres(""); setAmount(""); setVendor(""); setDetails(""); setFiles([]);
       await state.refresh();
     } catch (current) {
@@ -128,6 +130,7 @@ export function VehicleTrackingPage() {
         </div>
         <PrimaryButton disabled={saving || !vehicleId}>{saving ? "Saving…" : "Save vehicle entry"}</PrimaryButton>
       </form>
+      {state.data?.vehicle_logs.some((log) => log.document_ids.length) ? <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<Camera />} title="Fleet photo history" subtitle="Receipts, inspections and maintenance photos use the shared versioned viewer." /><div className="mt-4 grid gap-4 md:grid-cols-2">{state.data.vehicle_logs.filter((log) => log.document_ids.length).map((log) => <article key={log.id} className="rounded-md border border-iron-100 p-3"><div className="mb-3 text-sm font-semibold text-iron-800">{log.log_type.replaceAll("_", " ")} · {log.entry_date}</div><UniversalPhotoField documentIds={log.document_ids} /></article>)}</div></section> : null}
     </PortalShell>
   );
 }
@@ -183,13 +186,14 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
     setSaving(true); onError(null);
     try {
       const documentIds = await uploadPhotos(files, projectId, direction + " material ticket");
-      await fieldOperationsApi.createRecord({
+      const record = await fieldOperationsApi.createRecord({
         record_type: "material_movement", project_id: projectId, supplier_id: supplierId || null,
         equipment_id: selectedHaulUnit?.type === "equipment" ? selectedHaulUnit.id : null,
         cost_code: costCode, work_date: today(), title: direction + " — " + material.name,
         document_ids: documentIds,
         details: { direction, material_code: material.code, material_type: material.name, loads: Number(loads), tonnes_per_load: Number(tonnesPerLoad), total_tonnes: totalTonnes, ticket_number: ticketNumber, notes, haul_unit_id: selectedHaulUnit?.id, haul_unit_type: selectedHaulUnit?.type, haul_unit_name: selectedHaulUnit?.name },
       });
+      await linkPhotos(documentIds, "field_record", record.id);
       setLoads(""); setTonnesPerLoad(""); setTicketNumber(""); setNotes(""); setFiles([]); await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save material movement."); }
     finally { setSaving(false); }
@@ -465,8 +469,9 @@ function SmallEquipmentInspectionCard({ data, onSaved, onError }: { data: FieldO
     event.preventDefault(); if (!employeeId || !equipmentType) return;
     setSaving(true); onError(null);
     try {
-      const documentIds = await uploadPhotos(files, projectId || undefined, "Small equipment inspection");
-      await fieldOperationsApi.createRecord({ record_type: "small_equipment_inspection", employee_id: employeeId, project_id: projectId || null, work_date: today(), title: equipmentType + (identifier ? " — " + identifier : ""), severity: condition === "serviceable" ? "none" : condition === "remove_from_service" ? "high" : "medium", details: { equipment_type: equipmentType, identifier, condition, notes, checks: ["guards", "controls", "cords_or_hoses", "fuel_or_battery", "general_condition"] }, document_ids: documentIds });
+      const documentIds = await uploadPhotos(files, projectId || undefined, "Small equipment inspection", "inspection");
+      const record = await fieldOperationsApi.createRecord({ record_type: "small_equipment_inspection", employee_id: employeeId, project_id: projectId || null, work_date: today(), title: equipmentType + (identifier ? " — " + identifier : ""), severity: condition === "serviceable" ? "none" : condition === "remove_from_service" ? "high" : "medium", details: { equipment_type: equipmentType, identifier, condition, notes, checks: ["guards", "controls", "cords_or_hoses", "fuel_or_battery", "general_condition"] }, document_ids: documentIds });
+      await linkPhotos(documentIds, "field_record", record.id);
       setIdentifier(""); setNotes(""); setFiles([]); setCondition("serviceable"); await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save small equipment inspection."); }
     finally { setSaving(false); }
@@ -529,7 +534,7 @@ function TimeEntryForm({ data, mode, onSaved, onError }: { data: FieldOperations
 
 function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBootstrap; mode: "foreman" | "operator" | "employee"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
   const availableTypes = mode === "foreman"
-    ? [["journal", "Daily journal"], ["daily_hazard_assessment", "Daily hazard assessment"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
+    ? [["journal", "Daily journal"], ["daily_hazard_assessment", "Daily hazard assessment / FLHA"], ["incident", "Incident / near miss"], ["deficiency", "Deficiency"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense / receipt"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
     : mode === "operator"
       ? [["equipment_inspection", "Machine inspection"], ["job_photo", "Job photos"], ["performance_review", "Performance review request"], ["journal", "Journal"]]
       : [["journal", "Journal"], ["job_photo", "Job photos"], ["expense", "Expense"], ["missing_form", "Missing form"], ["performance_review", "Performance review request"]];
@@ -552,14 +557,15 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
     event.preventDefault();
     setSaving(true); onError(null);
     try {
-      const documentIds = await uploadPhotos(files, projectId || undefined, title || recordType);
-      await fieldOperationsApi.createRecord({
+      const documentIds = await uploadPhotos(files, projectId || undefined, title || recordType, categoryForRecord(recordType));
+      const record = await fieldOperationsApi.createRecord({
         record_type: recordType, project_id: projectId || null, employee_id: employeeId || null,
         equipment_id: equipmentId || null, supplier_id: supplierId || null, cost_code: costCode || null,
         work_date: today(), title, severity,
         details: { notes, quantity: quantity || null, weather: weather || null, attendees },
         document_ids: documentIds,
       });
+      await linkPhotos(documentIds, "field_record", record.id);
       setTitle(""); setNotes(""); setQuantity(""); setWeather(""); setFiles([]); setAttendees([]); setSeverity("none");
       await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save field record."); }
@@ -641,6 +647,7 @@ function RecentRecords({ records, employees, onSaved, onError }: { records: Fiel
             </div>
             <div className="mt-3 text-sm text-iron-600">{String(record.details.notes ?? record.details.summary ?? "")}</div>
             <div className="mt-3 text-xs font-medium text-iron-500">{record.document_ids.length} attachment(s) · {record.signatures.length} signature(s)</div>
+            {record.document_ids.length ? <div className="mt-3"><UniversalPhotoField documentIds={record.document_ids} /></div> : null}
             {["daily_hazard_assessment", "toolbox_talk"].includes(record.record_type) ? (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <select value={signer[record.id] ?? ""} onChange={(event) => setSigner((current) => ({ ...current, [record.id]: event.target.value }))} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
@@ -714,9 +721,26 @@ function Fact({ label, value }: { label: string; value: string }) { return <div 
 function StatusPill({ status }: { status: string }) { const danger = ["overdue", "critical", "high"].includes(status); const warning = ["due_soon", "medium"].includes(status); return <span className={"rounded-full px-2.5 py-1 text-xs font-semibold " + (danger ? "bg-red-100 text-red-800" : warning ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800")}>{status.replaceAll("_", " ")}</span>; }
 function Input({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) { return <label className="grid gap-1 text-sm"><span className="font-medium text-iron-700">{label}</span><input required={required} type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2" /></label>; }
 function Select({ label, value, onChange, options, required = false }: { label: string; value: string; onChange: (value: string) => void; options: string[][]; required?: boolean }) { return <label className="grid gap-1 text-sm"><span className="font-medium text-iron-700">{label}</span><select required={required} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-100 px-3 py-2"><option value="">Select…</option>{options.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>; }
-function FilePicker({ files, onChange }: { files: File[]; onChange: (value: File[]) => void }) { return <label className="grid gap-1 text-sm"><span className="font-medium text-iron-700">Photos / receipts</span><span className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-brand-gold/60 px-3 py-2"><Camera className="h-4 w-4" />{files.length ? files.length + " selected" : "Choose multiple"}<input type="file" accept="image/*,.pdf" multiple capture="environment" className="sr-only" onChange={(event) => onChange(Array.from(event.target.files ?? []))} /></span></label>; }
+function FilePicker({ files, onChange }: { files: File[]; onChange: (value: File[]) => void }) { return <UniversalPhotoField files={files} onFilesChange={onChange} label="Photos / receipts" />; }
 function PrimaryButton({ children, disabled }: { children: ReactNode; disabled?: boolean }) { return <button type="submit" disabled={disabled} className="mt-4 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{children}</button>; }
 function EmployeeChecklist({ employees, selected, onChange }: { employees: Employee[]; selected: string[]; onChange: (value: string[]) => void }) { return <fieldset className="mt-4 rounded-md bg-iron-50 p-4"><legend className="px-1 text-sm font-semibold text-iron-800">Employees attending / required to sign</legend><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{employees.map((employee) => <label key={employee.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(employee.id)} onChange={(event) => onChange(event.target.checked ? [...selected, employee.id] : selected.filter((id) => id !== employee.id))} />{employee.first_name} {employee.last_name}</label>)}</div></fieldset>; }
 function employeeOptions(employees: Employee[]): string[][] { return employees.map((item) => [item.id, item.first_name + " " + item.last_name]); }
 function numberOrNull(value: string): number | null { return value ? Number(value) : null; }
-async function uploadPhotos(files: File[], projectId: string | undefined, description: string): Promise<string[]> { const results = []; for (const file of files) { const uploaded = await documentsApi.upload({ file, title: file.name, category: "photo", project_id: projectId, description }); results.push(uploaded.document.id); } return results; }
+async function uploadPhotos(files: File[], projectId: string | undefined, description: string, category: MediaCategory = "job_photo"): Promise<string[]> {
+  if (!files.length) return [];
+  const assets = await mediaApi.upload({ files, projectId, caption: description, capturedDate: today(), category });
+  return assets.map((asset) => asset.original_document_id);
+}
+async function linkPhotos(documentIds: string[], recordType: string, recordId: string): Promise<void> {
+  if (!documentIds.length) return;
+  const assets = await mediaApi.list({ documentIds });
+  await Promise.all(assets.map((asset) => mediaApi.link(asset.id, recordType, recordId)));
+}
+function categoryForRecord(recordType: string): MediaCategory {
+  if (recordType === "daily_hazard_assessment") return "flha";
+  if (recordType === "incident") return "incident";
+  if (recordType === "deficiency") return "deficiency";
+  if (recordType === "expense") return "expense";
+  if (recordType.includes("inspection")) return "inspection";
+  return recordType === "job_photo" ? "production_photo" : "job_photo";
+}
