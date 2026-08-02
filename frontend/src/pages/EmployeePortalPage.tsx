@@ -22,6 +22,7 @@ import { Link } from "react-router-dom";
 
 import { MediaCategory, mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
+import { DailyTimesheetWorkflow } from "../components/DailyTimesheetWorkflow";
 import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
 import { FLHAWorkflow } from "../components/FLHAWorkflow";
 import { useAuth } from "../contexts/AuthContext";
@@ -150,7 +151,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "receipts" ? <ReceiptCapturePanel /> : null}
-          {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "time" ? <DailyTimesheetWorkflow /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "safety" ? <><FLHAWorkflow data={state.data} canCreate onSaved={state.refresh} onError={state.setError} /><ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /></> : null}
