@@ -2,13 +2,15 @@
 
 from collections import defaultdict
 from datetime import UTC, datetime
+from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.bid import Bid
+from app.models.document import Document
 from app.models.equipment import Equipment
 from app.models.field_operations import FieldRecord, TimeEntry
 from app.models.finance import Receipt
@@ -18,9 +20,15 @@ from app.models.user import Employee
 from app.schemas.daily_timesheet import DailyTimesheetAction, DailyTimesheetBootstrap, DailyTimesheetRead, DailyTimesheetRevision, DailyTimesheetWrite
 from app.services.auth import AuthenticatedUser
 from app.services.field_operations import commit
+from app.services.media_access import require_document_access
 
 
 MANAGEMENT_ROLES = {"admin", "operations_manager"}
+ACTIVE_SHEET_STATUSES = {"needs_review", "approved", "exported"}
+
+
+def _is_management(user: AuthenticatedUser) -> bool:
+    return user.role in MANAGEMENT_ROLES
 
 
 def _profile(db: Session, user: AuthenticatedUser) -> Employee | None:
@@ -71,8 +79,11 @@ def _assigned_crew(db: Session) -> dict[str, list[str]]:
     return dict(result)
 
 
-def _records(db: Session) -> list[FieldRecord]:
-    return list(db.scalars(select(FieldRecord).where(FieldRecord.record_type == "daily_timesheet").order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc())))
+def _records(db: Session, user: AuthenticatedUser) -> list[FieldRecord]:
+    statement = select(FieldRecord).where(FieldRecord.record_type == "daily_timesheet")
+    if not _is_management(user):
+        statement = statement.where(func.lower(FieldRecord.submitted_by) == user.email.lower())
+    return list(db.scalars(statement.order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc())))
 
 
 def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
@@ -82,7 +93,10 @@ def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
     equipment = list(db.scalars(select(Equipment).where(Equipment.status.in_(["active", "available"])).order_by(Equipment.name)))
     vendors = list(db.scalars(select(Supplier).order_by(Supplier.name)))
     rentals = list(db.scalars(select(FieldRecord).where(FieldRecord.record_type == "rental_equipment", FieldRecord.status.not_in(["inactive", "void", "closed"])).order_by(FieldRecord.work_date.desc())))
-    receipts = list(db.scalars(select(Receipt).where(Receipt.status != "void").order_by(Receipt.receipt_date.desc()).limit(100)))
+    receipt_statement = select(Receipt).where(Receipt.status != "void")
+    if not _is_management(user):
+        receipt_statement = receipt_statement.where(func.lower(Receipt.submitter_email) == user.email.lower())
+    receipts = list(db.scalars(receipt_statement.order_by(Receipt.receipt_date.desc()).limit(100)))
     return DailyTimesheetBootstrap(
         projects=[{"id": str(item.id), "name": item.name, "project_number": item.project_number or "Unnumbered", "status": item.status} for item in projects if item.status not in {"closed", "cancelled", "inactive"}],
         employees=[{"id": str(item.id), "code": "EMP-" + str(item.id)[:6].upper(), "name": f"{item.first_name} {item.last_name}", "classification": item.role or item.portal_role.replace("_", " ").title(), "portal_role": item.portal_role} for item in employees],
@@ -90,7 +104,7 @@ def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
         rentals=[{"id": str(item.id), "name": item.title, "project_id": str(item.project_id) if item.project_id else None, "vendor_id": str(item.supplier_id) if item.supplier_id else None, "status": item.status} for item in rentals],
         vendors=[{"id": str(item.id), "name": item.name, "category": item.category} for item in vendors],
         receipts=[{"id": str(item.id), "reference": item.reference, "vendor_name": item.vendor_name, "receipt_date": item.receipt_date, "status": item.status} for item in receipts],
-        project_cost_codes=_project_cost_codes(db), assigned_crew=_assigned_crew(db), sheets=[_read(item) for item in _records(db)], can_approve=user.role in MANAGEMENT_ROLES,
+        project_cost_codes=_project_cost_codes(db), assigned_crew=_assigned_crew(db), sheets=[_read(item) for item in _records(db, user)], can_approve=_is_management(user),
     )
 
 
@@ -106,10 +120,19 @@ def _active(db: Session, model: type, item_id: UUID, label: str, allowed_status:
     return item
 
 
-def _validated_details(db: Session, payload: DailyTimesheetWrite) -> dict:
+def _validated_details(db: Session, payload: DailyTimesheetWrite, user: AuthenticatedUser) -> dict:
     project = _active(db, Project, payload.project_id, "Job")
     supervisor = _active(db, Employee, payload.supervisor_id, "Supervisor", {"active"})
+    if not _is_management(user):
+        profile = _profile(db, user)
+        if profile is None or supervisor.id != profile.id:
+            raise AppError("A foreman can only submit a daily sheet under their own supervisor identity.", status_code=403)
     manager = _active(db, Employee, payload.project_manager_id, "Project manager", {"active"}) if payload.project_manager_id else None
+    for document_id in payload.document_ids:
+        document = db.get(Document, document_id)
+        if document is None or document.project_id != payload.project_id or document.status in {"archived", "superseded"}:
+            raise AppError("Attachment is not active for the selected job.", status_code=400)
+        require_document_access(db, document_id, user)
     allowed = {item["code"] for item in _project_cost_codes(db).get(str(payload.project_id), [])}
     if not allowed:
         raise AppError("The selected job has no approved estimate cost codes.", status_code=400)
@@ -141,7 +164,9 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite) -> dict:
     for line in payload.materials:
         vendor = _active(db, Supplier, line.vendor_id, "Vendor")
         if line.receipt_id:
-            _active(db, Receipt, line.receipt_id, "Receipt")
+            receipt = _active(db, Receipt, line.receipt_id, "Receipt")
+            if not _is_management(user) and receipt.submitter_email.lower() != user.email.lower():
+                raise AppError("Receipt not found.", status_code=404)
         materials.append({**line.model_dump(mode="json"), "vendor_name": vendor.name, "cost_code": check_code(line.cost_code)})
     code_totals: dict[str, dict[str, float]] = defaultdict(lambda: {"straight_time": 0, "overtime": 0, "equipment_quantity": 0, "material_quantity": 0, "production_quantity": 0})
     employee_totals: dict[str, dict[str, float]] = {}
@@ -168,19 +193,85 @@ def _read(record: FieldRecord) -> DailyTimesheetRead:
     return DailyTimesheetRead(id=record.id, status=record.status, version=int(details.get("version", 1)), project_id=record.project_id, work_date=record.work_date, shift=details.get("shift", "day"), details=details, document_ids=[UUID(str(value)) for value in record.document_ids or []], submitted_by=record.submitted_by, created_at=record.created_at, updated_at=record.updated_at)
 
 
-def _get(db: Session, sheet_id: UUID) -> FieldRecord:
-    record = db.get(FieldRecord, sheet_id)
-    if record is None or record.record_type != "daily_timesheet":
+def _get(db: Session, sheet_id: UUID, user: AuthenticatedUser, *, for_update: bool = False) -> FieldRecord:
+    statement = select(FieldRecord).where(FieldRecord.id == sheet_id, FieldRecord.record_type == "daily_timesheet")
+    if for_update:
+        statement = statement.with_for_update()
+    record = db.scalar(statement)
+    if record is None or (not _is_management(user) and (record.submitted_by or "").lower() != user.email.lower()):
         raise AppError("Daily time sheet not found.", status_code=404)
     return record
 
 
+def _lock_project_day(db: Session, project_id: UUID, work_date) -> None:
+    """Serialize conflict checks for a job/day on PostgreSQL without changing the schema."""
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        lock_key = int.from_bytes(sha256(f"{project_id}:{work_date}".encode()).digest()[:8], "big", signed=True)
+        db.execute(select(func.pg_advisory_xact_lock(lock_key)))
+
+
+def _labour_intervals(details: dict) -> dict[str, list[tuple[str, str] | None]]:
+    result: dict[str, list[tuple[str, str] | None]] = defaultdict(list)
+    for line in details.get("labour") or []:
+        for split in line.get("splits") or []:
+            start, end = split.get("start_time"), split.get("end_time")
+            result[str(line.get("employee_id"))].append((start, end) if start and end else None)
+    return result
+
+
+def _intervals_conflict(left: list[tuple[str, str] | None], right: list[tuple[str, str] | None]) -> bool:
+    if any(item is None for item in [*left, *right]):
+        return True
+    return any(a_start < b_end and b_start < a_end for a_start, a_end in left if a_start and a_end for b_start, b_end in right if b_start and b_end)
+
+
+def _ensure_no_cross_record_conflicts(db: Session, record: FieldRecord) -> None:
+    details = record.details or {}
+    root_id = str(details.get("root_record_id") or record.id)
+    current_labour = _labour_intervals(details)
+    current_equipment = {(str(line.get("source")), str(line.get("resource_id"))) for line in details.get("equipment") or []}
+    statement = (
+        select(FieldRecord)
+        .where(
+            FieldRecord.record_type == "daily_timesheet",
+            FieldRecord.project_id == record.project_id,
+            FieldRecord.work_date == record.work_date,
+            FieldRecord.status.in_(ACTIVE_SHEET_STATUSES),
+            FieldRecord.id != record.id,
+        )
+        .order_by(FieldRecord.id)
+        .with_for_update()
+    )
+    for other in db.scalars(statement):
+        other_details = other.details or {}
+        if str(other_details.get("root_record_id") or other.id) == root_id:
+            continue
+        other_labour = _labour_intervals(other_details)
+        for employee_id in current_labour.keys() & other_labour.keys():
+            if _intervals_conflict(current_labour[employee_id], other_labour[employee_id]):
+                raise AppError("Crew time overlaps another active daily sheet for this job and date.", status_code=409)
+        other_equipment = {(str(line.get("source")), str(line.get("resource_id"))) for line in other_details.get("equipment") or []}
+        if current_equipment & other_equipment:
+            raise AppError("Equipment is already recorded on another active daily sheet for this job and date.", status_code=409)
+    if current_labour:
+        duplicate_time = db.scalar(
+            select(TimeEntry.id).where(
+                TimeEntry.project_id == record.project_id,
+                TimeEntry.work_date == record.work_date,
+                TimeEntry.employee_id.in_([UUID(employee_id) for employee_id in current_labour]),
+                TimeEntry.status.not_in(["void", "rejected"]),
+            ).limit(1)
+        )
+        if duplicate_time:
+            raise AppError("Crew time already exists in the system for this job and date.", status_code=409)
+
+
 def save_draft(db: Session, payload: DailyTimesheetWrite, user: AuthenticatedUser, sheet_id: UUID | None = None) -> DailyTimesheetRead:
     _require_foreman(db, user)
-    details = _validated_details(db, payload)
+    details = _validated_details(db, payload, user)
     document_ids = [str(item) for item in payload.document_ids]
     if sheet_id:
-        record = _get(db, sheet_id)
+        record = _get(db, sheet_id, user, for_update=True)
         if record.status != "draft":
             raise AppError("Submitted daily sheets are immutable. Create a revision with a reason.", status_code=409)
         old = record.details or {}
@@ -203,12 +294,14 @@ def save_draft(db: Session, payload: DailyTimesheetWrite, user: AuthenticatedUse
 
 def submit(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> DailyTimesheetRead:
     _require_foreman(db, user)
-    record = _get(db, sheet_id)
+    record = _get(db, sheet_id, user, for_update=True)
     if record.status != "draft":
         raise AppError("Only a draft daily sheet can be submitted.", status_code=409)
     details = record.details or {}
     if not details.get("labour"):
         raise AppError("Add at least one crew labour entry before submitting.", status_code=400)
+    _lock_project_day(db, record.project_id, record.work_date)
+    _ensure_no_cross_record_conflicts(db, record)
     audit = [*(details.get("audit_history") or []), _event("submitted_by_foreman", user, from_status="draft", to_status="submitted"), _event("queued_for_review", user, from_status="submitted", to_status="needs_review")]
     record.status = "needs_review"
     record.details = {**details, "submitted_at": datetime.now(UTC).isoformat(), "audit_history": audit, "review_item": {"type": "potential_change", "status": "open"} if (details.get("narrative") or {}).get("potential_change") else None}
@@ -217,18 +310,49 @@ def submit(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> DailyTimeshe
     return _read(record)
 
 
+def _create_revision(source: FieldRecord, reason: str, user: AuthenticatedUser, *, action: str) -> FieldRecord:
+    details = dict(source.details or {})
+    if details.get("posted_at"):
+        raise AppError("Posted daily sheets require a controlled accounting reversal before revision.", status_code=409)
+    details.pop("submitted_at", None)
+    details.pop("review_item", None)
+    details.update({
+        "version": int(details.get("version", 1)) + 1,
+        "previous_record_id": str(source.id),
+        "revision_reason": reason,
+        "audit_history": [*(details.get("audit_history") or []), _event(action, user, reason=reason, from_status=source.status, to_status="draft")],
+    })
+    return FieldRecord(record_type="daily_timesheet", project_id=source.project_id, work_date=source.work_date, title=source.title, status="draft", severity=source.severity, details=details, document_ids=list(source.document_ids or []), signatures=[], alert_recipients=[], submitted_by=user.email)
+
+
 def decide(db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetAction, user: AuthenticatedUser) -> DailyTimesheetRead:
     _require_management(user)
-    record = _get(db, sheet_id)
-    transitions = {"approve": ({"needs_review"}, "approved"), "reject": ({"needs_review"}, "rejected"), "void": ({"draft", "needs_review", "approved", "rejected"}, "void"), "reopen": ({"rejected", "approved"}, "draft")}
+    record = _get(db, sheet_id, user, for_update=True)
+    if action == "reopen":
+        if record.status not in {"rejected", "approved"}:
+            raise AppError(f"A {record.status} daily sheet cannot be reopened.", status_code=409)
+        reason = (payload.reason or "").strip()
+        if not reason:
+            raise AppError("A reason is required to reopen a daily sheet.", status_code=400)
+        revision = _create_revision(record, reason, user, action="reopened_as_revision")
+        db.add(revision)
+        commit(db)
+        db.refresh(revision)
+        return _read(revision)
+
+    transitions = {"approve": ({"needs_review"}, "approved"), "reject": ({"needs_review"}, "rejected"), "void": ({"draft", "needs_review", "approved", "rejected"}, "void")}
     allowed, target = transitions[action]
     if record.status not in allowed:
         raise AppError(f"A {record.status} daily sheet cannot be {action}d.", status_code=409)
-    if action in {"reject", "void", "reopen"} and not (payload.reason or "").strip():
+    if action in {"reject", "void"} and not (payload.reason or "").strip():
         raise AppError(f"A reason is required to {action} a daily sheet.", status_code=400)
+    if action == "approve":
+        _lock_project_day(db, record.project_id, record.work_date)
+        _ensure_no_cross_record_conflicts(db, record)
     previous = record.status
+    event_name = {"approve": "approved", "reject": "rejected", "void": "voided"}[action]
     record.status = target
-    record.details = {**(record.details or {}), "audit_history": [*((record.details or {}).get("audit_history") or []), _event(action + "d", user, reason=payload.reason, from_status=previous, to_status=target)]}
+    record.details = {**(record.details or {}), "audit_history": [*((record.details or {}).get("audit_history") or []), _event(event_name, user, reason=payload.reason, from_status=previous, to_status=target)]}
     commit(db)
     db.refresh(record)
     return _read(record)
@@ -236,12 +360,10 @@ def decide(db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetActi
 
 def create_revision(db: Session, sheet_id: UUID, payload: DailyTimesheetRevision, user: AuthenticatedUser) -> DailyTimesheetRead:
     _require_foreman(db, user)
-    source = _get(db, sheet_id)
+    source = _get(db, sheet_id, user, for_update=True)
     if source.status == "draft":
         raise AppError("Edit the existing draft instead of creating a revision.", status_code=409)
-    details = dict(source.details or {})
-    details.update({"version": int(details.get("version", 1)) + 1, "previous_record_id": str(source.id), "revision_reason": payload.reason, "audit_history": [*(details.get("audit_history") or []), _event("revision_created", user, reason=payload.reason, from_status=source.status, to_status="draft")]})
-    revision = FieldRecord(record_type="daily_timesheet", project_id=source.project_id, work_date=source.work_date, title=source.title, status="draft", severity=source.severity, details=details, document_ids=list(source.document_ids or []), signatures=[], alert_recipients=[], submitted_by=user.email)
+    revision = _create_revision(source, payload.reason, user, action="revision_created")
     db.add(revision)
     commit(db)
     db.refresh(revision)
@@ -250,7 +372,7 @@ def create_revision(db: Session, sheet_id: UUID, payload: DailyTimesheetRevision
 
 def export_csv(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> tuple[str, str]:
     _require_management(user)
-    record = _get(db, sheet_id)
+    record = _get(db, sheet_id, user, for_update=True)
     if record.status not in {"approved", "exported"}:
         raise AppError("Only approved daily sheets can be exported.", status_code=409)
     details = record.details or {}
@@ -268,12 +390,14 @@ def export_csv(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> tuple[st
 
 def post_time_entries(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> DailyTimesheetRead:
     _require_management(user)
-    record = _get(db, sheet_id)
+    record = _get(db, sheet_id, user, for_update=True)
     if record.status not in {"approved", "exported"}:
         raise AppError("Only approved daily sheets can be posted.", status_code=409)
     details = record.details or {}
     if details.get("posted_at"):
         raise AppError("This daily sheet has already been posted.", status_code=409)
+    _lock_project_day(db, record.project_id, record.work_date)
+    _ensure_no_cross_record_conflicts(db, record)
     for line in details.get("labour") or []:
         for split in line.get("splits") or []:
             db.add(TimeEntry(employee_id=UUID(line["employee_id"]), project_id=record.project_id, cost_code=split["cost_code"], work_date=record.work_date, regular_hours=split["straight_time"], overtime_hours=split["overtime"], entry_type="foreman_crew", notes=f"Daily sheet {record.id} v{details.get('version', 1)}", status="approved", submitted_by=record.submitted_by))
@@ -285,7 +409,7 @@ def post_time_entries(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> D
 
 def get_for_pdf(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> FieldRecord:
     _require_management(user)
-    record = _get(db, sheet_id)
+    record = _get(db, sheet_id, user)
     if record.status not in {"approved", "exported"}:
         raise AppError("Only approved daily sheets can be exported.", status_code=409)
     return record
