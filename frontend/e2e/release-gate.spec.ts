@@ -61,6 +61,54 @@ async function mockApi(page: Page) {
       });
       return;
     }
+    if (path.endsWith("/field-operations/bootstrap")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          employees: [], projects: [], suppliers: [], equipment: [], cost_codes: [],
+          job_workbooks: [], production_items: [], material_types: [], material_movement_summary: [],
+          milestone_catalog: [], milestone_recognitions: [], paperwork_recognitions: [],
+          vehicles: [], vehicle_logs: [], time_entries: [], records: [], certifications: [], alerts: [],
+          toolbox_talk: { week_of: "2026-08-02", title: "Release gate", summary: "Staging-only QA", discussion_points: [], source_name: "WorkSafeBC", source_url: "https://www.worksafebc.com/" },
+          flha_presets: [],
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/daily-timesheets/bootstrap")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          projects: [{ id: "11500000-0000-0000-0000-000000000001", name: "Granite Creek Civil Works", project_number: "IH-115", status: "construction" }],
+          employees: [
+            { id: "11500000-0000-0000-0000-000000000002", code: "EMP-FRM115", name: "Fran Foreman", classification: "Foreman", portal_role: "foreman" },
+            { id: "11500000-0000-0000-0000-000000000003", code: "EMP-CRW115", name: "Casey Crew", classification: "Pipe Layer", portal_role: "employee" },
+          ],
+          equipment: [{ id: "11500000-0000-0000-0000-000000000004", name: "Excavator", identifier: "EX-115", status: "available" }],
+          rentals: [],
+          vendors: [{ id: "11500000-0000-0000-0000-000000000005", name: "Active Aggregate", category: "materials" }],
+          receipts: [{ id: "11500000-0000-0000-0000-000000000006", reference: "R-115", vendor_name: "Active Aggregate", receipt_date: "2026-08-02", status: "approved" }],
+          project_cost_codes: { "11500000-0000-0000-0000-000000000001": [{ code: "03-100", name: "Excavation" }, { code: "31-200", name: "Pipe installation" }] },
+          assigned_crew: { "11500000-0000-0000-0000-000000000001": ["11500000-0000-0000-0000-000000000003"] },
+          sheets: [],
+          can_approve: true,
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/daily-timesheets") && request.method() === "POST") {
+      const payload = request.postDataJSON();
+      await route.fulfill({
+        status: 201,
+        json: {
+          id: "11500000-0000-0000-0000-000000000007", status: "draft", version: 1,
+          project_id: payload.project_id, work_date: payload.work_date, shift: payload.shift,
+          details: payload, document_ids: payload.document_ids, submitted_by: user.email,
+          created_at: "2026-08-02T00:00:00Z", updated_at: "2026-08-02T00:00:00Z",
+        },
+      });
+      return;
+    }
     if (path.endsWith("/finance/startup-expenses")) {
       await route.fulfill({
         status: 200,
@@ -191,6 +239,36 @@ test("receipt capture and financial review surfaces pass responsive accessibilit
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
+test("foreman daily time sheet passes responsive interaction and accessibility QA", async ({ page }) => {
+  await mockApi(page);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await signIn(page);
+
+  await page.goto("/foreman-portal/time");
+  await expect(page.getByRole("heading", { name: "Foreman Portal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Foreman Daily Time Sheet" })).toBeVisible();
+
+  await page.getByLabel("Job number and name").selectOption("11500000-0000-0000-0000-000000000001");
+  await page.getByLabel("Foreman / supervisor").selectOption("11500000-0000-0000-0000-000000000002");
+  await expect(page.getByText("EMP-CRW115 · Casey Crew")).toBeVisible();
+  await page.getByLabel("Job cost code").selectOption("03-100");
+  await page.getByLabel("ST", { exact: true }).fill("8");
+  await expect(page.getByText("ST 8.00 · OT 0.00 · 8.00 hours")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit" })).toBeEnabled();
+
+  await expect.poll(async () => page.evaluate((key) => Boolean(localStorage.getItem(key)), "ihos:foreman-daily-timesheet:v1:" + user.id)).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem("ihos:foreman-daily-timesheet:v1"))).toBeNull();
+
+  const overflow = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  expect(overflow.width).toBe(overflow.viewport);
+  await expectNoSeriousAccessibilityViolations(page);
   expect(pageErrors).toEqual([]);
 });
 
