@@ -56,6 +56,42 @@ export type FieldRecord = {
   alert_recipients: string[];
   submitted_by: string | null;
 };
+
+
+export type FLHAScreening = { key: string; response: "yes" | "no" | "na"; notes: string | null };
+export type FLHATask = {
+  id: string;
+  task: string;
+  hazard: string;
+  control: string;
+  control_hierarchy: "elimination" | "substitution" | "engineering" | "administrative" | "ppe";
+  responsible_person: string;
+  critical: boolean;
+  control_accepted: boolean;
+  evidence_required: boolean;
+  evidence_ids: string[];
+  ai_suggested: boolean;
+};
+export type FLHADetails = {
+  site_location: string;
+  started_at: string;
+  supervisor_name: string;
+  first_aid_attendant: string;
+  crew: Array<{ employee_id: string; employee_name: string }>;
+  weather: string;
+  screening: FLHAScreening[];
+  tasks: FLHATask[];
+  emergency_response: string;
+  muster_point: string;
+  communication_method: string;
+  stop_work_triggers: string[];
+  preset_names: string[];
+  flha_version?: number;
+  source_record_id?: string | null;
+  release_blockers?: string[];
+  audit_trail?: Array<{ action: string; actor_email: string; timestamp: string }>;
+};
+
 export type FieldOperationsBootstrap = {
   employees: Employee[];
   projects: SelectRecord[];
@@ -127,8 +163,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail ?? "Request failed with " + response.status);
+    const body = await response.json().catch(() => null) as { detail?: string; error?: { message?: string } } | null;
+    throw new Error(body?.detail ?? body?.error?.message ?? "Request failed with " + response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -151,6 +187,24 @@ export const fieldOperationsApi = {
     request<FieldRecord>("/field-operations/records/" + id + "/time-off-decision", { method: "POST", body: JSON.stringify(payload) }),
   createEmployee: (payload: Record<string, unknown>) =>
     request("/field-operations/employees", { method: "POST", body: JSON.stringify(payload) }),
+
+  createFlha: (payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/flha", { method: "POST", body: JSON.stringify(payload) }),
+  updateFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/flha/" + id, { method: "PATCH", body: JSON.stringify(payload) }),
+  releaseFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/flha/" + id + "/release", { method: "POST", body: JSON.stringify(payload) }),
+  signFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/flha/" + id + "/sign", { method: "POST", body: JSON.stringify(payload) }),
+  reassessFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/flha/" + id + "/reassess", { method: "POST", body: JSON.stringify(payload) }),
+  suggestFlha: (task: string) =>
+    request<Array<{ hazard: string; control: string; control_hierarchy: FLHATask["control_hierarchy"]; advisory_only: true }>>(
+      "/field-operations/flha/suggestions",
+      { method: "POST", body: JSON.stringify({ task }) },
+    ),
+  flhaPdfUrl: (id: string) => API_BASE_URL + "/field-operations/flha/" + id + "/pdf",
+
   createCertification: (payload: Record<string, unknown>) =>
     request("/field-operations/certifications", { method: "POST", body: JSON.stringify(payload) }),
 };

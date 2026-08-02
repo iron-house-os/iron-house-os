@@ -99,6 +99,23 @@ def _validate_existing_link_projects(db: Session, asset: MediaAsset) -> None:
         _validate_record_project(asset, link.record_type, record)
 
 
+
+def _require_mutable_flha_evidence(db: Session, asset: MediaAsset) -> None:
+    links = db.scalars(
+        select(MediaRecordLink).where(
+            MediaRecordLink.asset_id == asset.id,
+            MediaRecordLink.record_type == "field_record",
+        )
+    ).all()
+    for link in links:
+        record = db.get(FieldRecord, link.record_id)
+        if record and record.record_type == "daily_hazard_assessment" and record.status in {"released", "signed"}:
+            raise AppError(
+                "Evidence attached to a released or signed FLHA is immutable; create a reassessment.",
+                status_code=409,
+            )
+
+
 def _validate_amendment(asset: MediaAsset, action: MediaAction, reason: str | None) -> None:
     if asset.controlled and action in {MediaAction.replacement, MediaAction.restore} and not (reason or "").strip():
         raise AppError(
@@ -253,6 +270,11 @@ def link_asset(
     asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
     record = _require_link_target(db, payload)
+    if (
+        payload.record_type == "field_record" and isinstance(record, FieldRecord)
+        and record.record_type == "daily_hazard_assessment" and record.status in {"released", "signed"}
+    ):
+        raise AppError("Released or signed FLHA evidence is immutable; create a reassessment.", status_code=409)
     _validate_record_project(asset, payload.record_type, record)
     exists = db.scalar(
         select(MediaRecordLink).where(
@@ -280,6 +302,7 @@ async def create_version(
 ) -> MediaAssetRead:
     asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
+    _require_mutable_flha_evidence(db, asset)
     if action not in {MediaAction.edit, MediaAction.replacement}:
         raise AppError("Only edit or replacement versions can upload a file.", status_code=422)
     _validate_amendment(asset, action, amendment_reason)
@@ -329,6 +352,7 @@ def restore_version(
 ) -> MediaAssetRead:
     asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
+    _require_mutable_flha_evidence(db, asset)
     _validate_amendment(asset, MediaAction.restore, amendment_reason)
     target = db.get(MediaVersion, version_id)
     if target is None or target.asset_id != asset.id:
@@ -361,6 +385,7 @@ def update_metadata(
 ) -> MediaAssetRead:
     asset = _require_asset(db, asset_id, user)
     _require_editor(asset, user)
+    _require_mutable_flha_evidence(db, asset)
     changes = payload.model_dump(exclude_unset=True)
     if user.role not in {"admin", "operations_manager"} and ({"location", "project_id"} & changes.keys()):
         raise AppError("Only management can change restricted location or project metadata.", status_code=403)

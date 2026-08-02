@@ -150,7 +150,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "safety" ? <><Link to="/flha" className="inline-flex min-h-11 items-center rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black">Open daily FLHA</Link><ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "records" ? <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
@@ -276,6 +276,7 @@ export function OperatorPortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
       <Status state={state} />
+      <Link to="/flha" className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black"><ClipboardCheck className="h-4 w-4" />Open daily FLHA</Link>
       {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
@@ -690,7 +691,7 @@ function SafetyProgramCard() {
     <article className="rounded-xl border border-brand-gold/40 bg-white p-5 shadow-sm">
       <SectionTitle icon={<BookOpenCheck />} title="Occupational Health, Safety & Environmental Program" subtitle="Controlled Iron House document · British Columbia · Revision 1.1" />
       <p className="mt-3 text-sm leading-6 text-iron-600">Revision 1.1 incorporates current British Columbia and applicable federal safety requirements.</p>
-      <a href={SAFETY_PROGRAM_URL} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black">Open Safety Program<ExternalLink className="h-4 w-4" /></a>
+      <div className="mt-4 flex flex-wrap gap-2"><Link to="/flha" className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black"><ClipboardCheck className="h-4 w-4" />Open daily FLHA</Link><a href={SAFETY_PROGRAM_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold px-4 py-2 text-sm font-semibold text-brand-black">Open Safety Program<ExternalLink className="h-4 w-4" /></a></div>
     </article>
   );
 }

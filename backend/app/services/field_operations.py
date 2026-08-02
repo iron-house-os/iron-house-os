@@ -110,7 +110,16 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
         employee_id = profile.id if profile else None
         employees = [profile] if profile else []
         time_entries = [item for item in time_entries if item.employee_id == employee_id]
-        records = [item for item in records if item.employee_id == employee_id or item.record_type == "toolbox_talk"]
+        records = [
+            item
+            for item in records
+            if item.employee_id == employee_id
+            or item.record_type == "toolbox_talk"
+            or (
+                item.record_type == "daily_hazard_assessment"
+                and str(employee_id) in {str(member.get("employee_id")) for member in (item.details or {}).get("crew", [])}
+            )
+        ]
         certifications = [item for item in certifications if item.employee_id == employee_id]
         milestone_recognitions = [item for item in milestone_recognitions if item["employee_id"] == str(employee_id)]
         paperwork_recognitions = [item for item in paperwork_recognitions if item["employee_id"] == str(employee_id)]
@@ -323,6 +332,8 @@ def create_time_entry(db: Session, payload: TimeEntryCreate, user: Authenticated
 
 
 def create_field_record(db: Session, payload: FieldRecordCreate, user: AuthenticatedUser) -> FieldRecordRead:
+    if payload.record_type == "daily_hazard_assessment":
+        raise AppError("Use the guarded FLHA workflow to create a daily hazard assessment.", status_code=422)
     if payload.project_id:
         require_exists(db, Project, payload.project_id, "Project")
     if payload.employee_id:
@@ -452,6 +463,8 @@ def sign_field_record(
     user: AuthenticatedUser,
 ) -> FieldRecordRead:
     item = require_exists(db, FieldRecord, record_id, "Field record")
+    if item.record_type == "daily_hazard_assessment":
+        raise AppError("Use the guarded FLHA acknowledgement workflow.", status_code=422)
     employee = require_exists(db, Employee, payload.employee_id, "Employee")
     if user.role not in {"admin", "operations_manager"} and employee.email.lower() != user.email.lower():
         raise AppError("You can only apply your own signature.", status_code=403)

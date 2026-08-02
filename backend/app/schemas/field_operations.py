@@ -282,3 +282,94 @@ class FieldOperationsBootstrap(BaseModel):
     certifications: list[CertificationRead]
     alerts: list[dict]
     toolbox_talk: ToolboxTalk
+
+
+FLHAResponse = Literal["yes", "no", "na"]
+ControlHierarchy = Literal["elimination", "substitution", "engineering", "administrative", "ppe"]
+
+
+class FLHAScreeningItem(BaseModel):
+    key: str = Field(min_length=1, max_length=80)
+    response: FLHAResponse
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class FLHATaskRow(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    task: str = Field(min_length=1, max_length=500)
+    hazard: str = Field(min_length=1, max_length=1000)
+    control: str = Field(default="", max_length=2000)
+    control_hierarchy: ControlHierarchy
+    responsible_person: str = Field(default="", max_length=255)
+    critical: bool = False
+    control_accepted: bool = False
+    evidence_required: bool = False
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    ai_suggested: bool = False
+
+
+class FLHACrewMember(BaseModel):
+    employee_id: UUID
+    employee_name: str = Field(min_length=1, max_length=255)
+
+
+class FLHADetails(BaseModel):
+    site_location: str = Field(min_length=1, max_length=500)
+    started_at: datetime
+    supervisor_name: str = Field(min_length=1, max_length=255)
+    first_aid_attendant: str = Field(min_length=1, max_length=255)
+    crew: list[FLHACrewMember] = Field(min_length=1)
+    weather: str = Field(min_length=1, max_length=500)
+    screening: list[FLHAScreeningItem] = Field(min_length=10)
+    tasks: list[FLHATaskRow] = Field(min_length=1)
+    emergency_response: str = Field(min_length=1, max_length=2000)
+    muster_point: str = Field(min_length=1, max_length=500)
+    communication_method: str = Field(min_length=1, max_length=500)
+    stop_work_triggers: list[str] = Field(min_length=1)
+    preset_names: list[str] = Field(default_factory=list)
+
+    @field_validator("stop_work_triggers")
+    @classmethod
+    def clean_stop_work_triggers(cls, value: list[str]) -> list[str]:
+        cleaned = list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        if not cleaned:
+            raise ValueError("At least one stop-work trigger is required.")
+        return cleaned
+
+
+class FLHACreate(BaseModel):
+    project_id: UUID
+    work_date: date
+    title: str = Field(default="Daily FLHA", min_length=1, max_length=255)
+    details: FLHADetails
+
+
+class FLHAUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    details: FLHADetails
+    change_summary: str = Field(min_length=1, max_length=1000)
+
+
+class FLHARelease(BaseModel):
+    field_conditions_verified: bool
+    release_note: str | None = Field(default=None, max_length=1000)
+
+
+class FLHAReassessment(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+    details: FLHADetails
+
+
+class FLHASignatureCreate(SignatureCreate):
+    supervised_shared_device: bool = False
+
+
+class FLHASuggestionRequest(BaseModel):
+    task: str = Field(min_length=2, max_length=500)
+
+
+class FLHASuggestion(BaseModel):
+    hazard: str
+    control: str
+    control_hierarchy: ControlHierarchy
+    advisory_only: Literal[True] = True

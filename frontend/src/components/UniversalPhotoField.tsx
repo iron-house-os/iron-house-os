@@ -15,6 +15,8 @@ type Props = {
   projectId?: string;
   recordType?: string;
   recordId?: string;
+  onAssetsChange?: (assets: MediaAsset[]) => void;
+  readOnly?: boolean;
 };
 
 type Annotation = { type: "draw" | "arrow" | "box" | "highlight" | "text"; text?: string };
@@ -23,11 +25,13 @@ export function UniversalPhotoField({
   files = [],
   onFilesChange,
   documentIds = [],
+  onAssetsChange,
   category = "job_photo",
   label = "Photos",
   projectId,
   recordType,
   recordId,
+  readOnly = false,
 }: Props) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [recordFiles, setRecordFiles] = useState<File[]>([]);
@@ -51,6 +55,10 @@ export function UniversalPhotoField({
   }, [documentIds.join(","), recordId, recordType]);
 
   const previews = useMemo(() => selectedFiles.map((file) => ({ file, url: URL.createObjectURL(file) })), [selectedFiles]);
+  useEffect(() => {
+    onAssetsChange?.(assets);
+  }, [assets, onAssetsChange]);
+
   useEffect(() => () => previews.forEach((item) => URL.revokeObjectURL(item.url)), [previews]);
 
   async function uploadToRecord() {
@@ -69,7 +77,7 @@ export function UniversalPhotoField({
   return (
     <div className="grid gap-2 text-sm">
       <span className="font-medium text-iron-700">{label}</span>
-      {(onFilesChange || recordId) ? (
+      {(onFilesChange || recordId) && !readOnly ? (
         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-brand-gold/60 bg-brand-gold/5 px-3 py-2 font-semibold text-iron-800">
           <Camera className="h-4 w-4" />
           {selectedFiles.length ? selectedFiles.length + " ready to upload" : "Take photos or choose multiple"}
@@ -115,7 +123,7 @@ export function UniversalPhotoField({
         </div>
       ) : null}
       {error ? <p role="alert" className="text-xs text-red-700">{error}</p> : null}
-      {active ? <PhotoViewer asset={active} onClose={() => setActive(null)} onChange={(updated) => {
+      {active ? <PhotoViewer asset={active} readOnly={readOnly} onClose={() => setActive(null)} onChange={(updated) => {
         setActive(updated);
         setAssets((items) => items.map((item) => item.id === updated.id ? updated : item));
       }} /> : null}
@@ -124,7 +132,7 @@ export function UniversalPhotoField({
   );
 }
 
-function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose: () => void; onChange: (asset: MediaAsset) => void }) {
+function PhotoViewer({ asset, readOnly, onClose, onChange }: { asset: MediaAsset; readOnly: boolean; onClose: () => void; onChange: (asset: MediaAsset) => void }) {
   const imageRef = useRef<HTMLImageElement>(null);
   const [versionId, setVersionId] = useState(asset.current_version_id);
   const [zoom, setZoom] = useState(1);
@@ -142,7 +150,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
   const [location, setLocation] = useState(asset.location ?? "");
   const [capturedDate, setCapturedDate] = useState(asset.captured_date ?? "");
   const [category, setCategory] = useState<MediaCategory>(asset.category);
-  const [tab, setTab] = useState<"edit" | "history" | "metadata">("edit");
+  const [tab, setTab] = useState<"edit" | "history" | "metadata">(readOnly ? "history" : "edit");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentVersion = asset.versions.find((version) => version.id === versionId) ?? asset.versions[0];
@@ -280,7 +288,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
         </div>
         <aside className="w-full overflow-y-auto border-l border-white/10 bg-iron-950 p-3 lg:w-96">
           <div className="grid grid-cols-3 gap-1 rounded-md bg-white/5 p-1">
-            {(["edit", "metadata", "history"] as const).map((item) => <button type="button" key={item} onClick={() => setTab(item)} className={"rounded px-2 py-2 text-xs font-semibold capitalize " + (tab === item ? "bg-brand-gold text-brand-black" : "")}>{item}</button>)}
+            {(readOnly ? (["history"] as const) : (["edit", "metadata", "history"] as const)).map((item) => <button type="button" key={item} onClick={() => setTab(item)} className={"rounded px-2 py-2 text-xs font-semibold capitalize " + (tab === item ? "bg-brand-gold text-brand-black" : "")}>{item}</button>)}
           </div>
           {tab === "edit" ? (
             <div className="mt-4 grid gap-4">

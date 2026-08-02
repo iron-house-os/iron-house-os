@@ -75,6 +75,14 @@ export const modules: AppModule[] = [
     status: "Build 221 active",
   },
   {
+    label: "Daily FLHA",
+    path: "/flha",
+    icon: ClipboardList,
+    description: "Mobile field-level hazard assessments, crew acknowledgements and auditable reassessments.",
+    status: "Build 127 active",
+  },
+
+  {
     label: "Safety Operations",
     path: "/safety-operations",
     icon: Siren,

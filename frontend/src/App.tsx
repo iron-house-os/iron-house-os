@@ -18,6 +18,7 @@ import {
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { FinancialControlPage } from "./pages/FinancialControlPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
+import { FLHAPage } from "./pages/FLHAPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -63,7 +64,7 @@ function AuthenticatedApp() {
     const root = `/${portalRole ?? "employee"}-portal`;
     const sections = portalRole === "foreman" ? ["time", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    return <AppLayout><Routes><Route path={root} element={<Page />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="/flha" element={<FLHAPage />} /><Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -80,6 +81,7 @@ function AuthenticatedApp() {
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
         <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />
+        <Route path="/flha" element={<FLHAPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/meeting-minutes" element={<MeetingMinutesPage />} />
         <Route path="/google-calendar" element={<GoogleCalendarPage />} />

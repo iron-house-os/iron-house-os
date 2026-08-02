@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -12,6 +12,13 @@ from app.schemas.field_operations import (
     EmployeeCreate,
     EmployeeRead,
     FieldOperationsBootstrap,
+    FLHACreate,
+    FLHAReassessment,
+    FLHARelease,
+    FLHASignatureCreate,
+    FLHASuggestion,
+    FLHASuggestionRequest,
+    FLHAUpdate,
     FieldRecordCreate,
     FieldRecordRead,
     MilestoneDecision,
@@ -25,7 +32,7 @@ from app.schemas.field_operations import (
     VehicleRead,
     VehicleUpdate,
 )
-from app.services import field_operations
+from app.services import field_operations, flha
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -79,6 +86,80 @@ def sign_field_record(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.sign_field_record(db, record_id, payload, user)
+
+
+
+@router.get("/flha/presets")
+def flha_presets() -> list[dict]:
+    return flha.presets()
+
+
+@router.post("/flha/suggestions", response_model=list[FLHASuggestion])
+def flha_suggestions(payload: FLHASuggestionRequest) -> list[FLHASuggestion]:
+    return flha.suggest_controls(payload)
+
+
+@router.post("/flha", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
+def create_flha(
+    payload: FLHACreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return flha.create_flha(db, payload, user)
+
+
+@router.get("/flha/{record_id}", response_model=FieldRecordRead)
+def read_flha(record_id: UUID, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return flha.get_flha(db, record_id, user)
+
+
+@router.patch("/flha/{record_id}", response_model=FieldRecordRead)
+def update_flha(
+    record_id: UUID,
+    payload: FLHAUpdate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return flha.update_flha(db, record_id, payload, user)
+
+
+@router.post("/flha/{record_id}/release", response_model=FieldRecordRead)
+def release_flha(
+    record_id: UUID,
+    payload: FLHARelease,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return flha.release_flha(db, record_id, payload, user)
+
+
+@router.post("/flha/{record_id}/sign", response_model=FieldRecordRead)
+def sign_flha(
+    record_id: UUID,
+    payload: FLHASignatureCreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return flha.sign_flha(db, record_id, payload, user)
+
+
+@router.post("/flha/{record_id}/reassess", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
+def reassess_flha(
+    record_id: UUID,
+    payload: FLHAReassessment,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return flha.reassess_flha(db, record_id, payload, user)
+
+
+@router.get("/flha/{record_id}/pdf")
+def export_flha_pdf(record_id: UUID, db: DBSession, user: CurrentUser) -> Response:
+    return Response(
+        content=flha.export_flha_pdf(db, record_id, user),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="flha-{record_id}.pdf"'},
+    )
 
 
 @router.post("/records/{record_id}/milestone-decision", response_model=FieldRecordRead)
