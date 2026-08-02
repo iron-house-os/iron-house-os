@@ -68,26 +68,47 @@ def create_flha(project: dict, crew: list[dict], details: dict | None = None) ->
 def test_flha_create_edit_sign_release_audit_and_immutability() -> None:
     worker = create_employee("Crew Worker", "crew.worker@example.com")
     project = create_project()
-    record = create_flha(project, [worker])
+    initial = complete_details([worker])
+    initial.update({
+        "schema_version": 99,
+        "version": 99,
+        "root_record_id": "forged-root",
+        "audit_history": [{"action": "forged", "by": "attacker@example.com"}],
+        "supervisor_release": {"released_by": "attacker@example.com"},
+        "release_blockers": [],
+    })
+    record = create_flha(project, [worker], initial)
     assert record["status"] == "draft"
-    assert record["details"]["audit_history"][0]["action"] == "created"
+    assert record["details"]["schema_version"] == 1
+    assert record["details"]["version"] == 1
+    assert record["details"]["root_record_id"] is None
+    assert [event["action"] for event in record["details"]["audit_history"]] == ["created"]
+    assert "supervisor_release" not in record["details"]
     assert record["details"]["release_blockers"] == []
 
     changed = complete_details([worker])
     changed["weather"] = "Cloud increasing, 16 C"
+    changed.update({
+        "version": 88,
+        "audit_history": [{"action": "forged-edit"}],
+        "supervisor_release": {"released_by": "attacker@example.com"},
+    })
     edited = client.patch(f"/api/v1/field-operations/records/{record['id']}/flha", json={
         "project_id": project["id"], "work_date": str(date.today()), "title": record["title"], "details": changed,
     })
     assert edited.status_code == 200
-    assert edited.json()["details"]["audit_history"][-1]["action"] == "edited"
+    assert edited.json()["details"]["version"] == 1
+    assert [event["action"] for event in edited.json()["details"]["audit_history"]] == ["created", "edited"]
+    assert "supervisor_release" not in edited.json()["details"]
 
     signed = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
-        "employee_id": worker["id"], "employee_name": "Crew Worker",
+        "employee_id": worker["id"], "employee_name": "Forged Worker Name",
         "acknowledgement": "I reviewed the hazards and controls with the foreperson.",
         "supervised_shared_device": True,
         "supervisor_confirmation": "I observed the worker review and personally acknowledge this FLHA.",
     })
     assert signed.status_code == 200
+    assert signed.json()["signatures"][0]["employee_name"] == "Crew Worker"
     assert signed.json()["signatures"][0]["signing_method"] == "supervised_shared_device"
 
     frozen = client.patch(f"/api/v1/field-operations/records/{record['id']}/flha", json={
