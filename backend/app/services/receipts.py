@@ -88,6 +88,10 @@ def update_receipt(db: Session, receipt_id: UUID, payload: ReceiptUpdate, user: 
         supplied = set(payload.media_asset_ids)
         if supplied != set(UUID(value) for value in receipt.media_asset_ids):
             raise HTTPException(status_code=409, detail="Original receipt images are immutable; add an edited media version instead.")
+    existing_flags = set(receipt.flags_json or [])
+    requested_flags = set(payload.flags)
+    if payload.duplicate_resolution or BLOCKING_FLAGS.intersection(existing_flags - requested_flags):
+        _require_management(user)
     before = _snapshot(receipt, db)
     values = _receipt_values(payload)
     values.pop("media_asset_ids", None)
@@ -139,7 +143,7 @@ def submit_receipt(db: Session, receipt_id: UUID, action: ReceiptAction, user: A
 
 def approve_receipt(db: Session, receipt_id: UUID, action: ReceiptAction, user: AuthenticatedUser) -> ReceiptRead:
     _require_management(user)
-    receipt = _require_receipt(db, receipt_id, user)
+    receipt = _require_receipt_for_update(db, receipt_id, user)
     _check_version(receipt, action.version)
     if receipt.status != "needs_review":
         raise HTTPException(status_code=409, detail="Only receipts awaiting review can be approved.")
@@ -159,20 +163,20 @@ def approve_receipt(db: Session, receipt_id: UUID, action: ReceiptAction, user: 
 
 def export_receipt(db: Session, receipt_id: UUID, action: ReceiptAction, user: AuthenticatedUser) -> str:
     _require_management(user)
-    receipt = _require_receipt(db, receipt_id, user)
+    receipt = _require_receipt_for_update(db, receipt_id, user)
     _check_version(receipt, action.version)
     if receipt.exported_at is not None:
         raise HTTPException(status_code=409, detail="Receipt was already exported; duplicate export is blocked.")
     if receipt.status != "approved" or not receipt.approved_by:
         raise HTTPException(status_code=409, detail="An authorized human must approve this receipt before export.")
     lines = _lines(db, receipt.id)
-    rows = [["Date", "Reference", "Vendor", "Project ID", "Equipment ID", "Cost Code", "Overhead", "Category", "Description", "Amount CAD", "GST", "PST", "Treatment", "Receipt ID"]]
+    rows = [["Date", "Reference", "Vendor", "Project ID", "Equipment ID", "Cost Code", "Overhead", "Category", "Description", "Amount CAD", "Tax CAD", "Treatment", "Receipt ID"]]
     for line in lines:
         rows.append([
             receipt.receipt_date.isoformat(), receipt.reference or "", receipt.vendor_name or "",
             str(line.project_id or ""), str(line.equipment_id or ""), line.cost_code or "", line.overhead_category or "",
             line.category, line.normalized_description or line.description, f"{float(line.line_total):.2f}",
-            f"{float(receipt.gst):.2f}", f"{float(receipt.pst):.2f}", line.treatment, str(receipt.id),
+            f"{float(line.tax):.2f}", line.treatment, str(receipt.id),
         ])
         if line.project_id:
             db.add(FinancialEntry(
@@ -341,7 +345,18 @@ def _approval_blockers(db: Session, receipt: Receipt) -> list[str]:
     lines = _lines(db, receipt.id)
     if not lines:
         blockers.append("At least one line item is required.")
+    elif receipt.subtotal is not None:
+        line_subtotal = sum((Decimal(str(line.line_total)) for line in lines), Decimal("0"))
+        if abs(line_subtotal - Decimal(str(receipt.subtotal))) > ROUNDING_TOLERANCE:
+            blockers.append("Line-item totals do not reconcile to the receipt subtotal.")
+        line_tax = sum((Decimal(str(line.tax)) for line in lines), Decimal("0"))
+        header_tax = Decimal(str(receipt.gst)) + Decimal(str(receipt.pst)) + Decimal(str(receipt.other_tax))
+        if abs(line_tax - header_tax) > ROUNDING_TOLERANCE:
+            blockers.append("Line-item taxes do not reconcile to the receipt tax total.")
     for line in lines:
+        expected_line_total = Decimal(str(line.quantity)) * Decimal(str(line.unit_price))
+        if abs(expected_line_total - Decimal(str(line.line_total))) > ROUNDING_TOLERANCE:
+            blockers.append(f"Line {line.position} total does not match quantity × unit price.")
         prefix = f"Line {line.position}"
         if float(line.confidence) < MIN_CONFIDENCE:
             blockers.append(f"{prefix} has low confidence.")
@@ -392,6 +407,13 @@ def _to_read(db: Session, receipt: Receipt) -> ReceiptRead:
         approval_blockers=_approval_blockers(db, receipt), line_items=lines, audit_history=audits,
         created_at=receipt.created_at, updated_at=receipt.updated_at,
     )
+
+
+def _require_receipt_for_update(db: Session, receipt_id: UUID, user: AuthenticatedUser) -> Receipt:
+    receipt = db.scalar(select(Receipt).where(Receipt.id == receipt_id).with_for_update())
+    if receipt is None or (user.role not in MANAGEMENT_ROLES and receipt.submitter_id != user.id):
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+    return receipt
 
 
 def _require_receipt(db: Session, receipt_id: UUID, user: AuthenticatedUser) -> Receipt:
