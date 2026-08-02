@@ -54,6 +54,17 @@ FLHA_SCREENING_ITEMS = [
     "basic_ppe_review",
 ]
 FLHA_CONTROL_LEVELS = {"elimination", "substitution", "engineering", "administrative", "ppe"}
+FLHA_SERVER_MANAGED_DETAIL_FIELDS = {
+    "schema_version",
+    "version",
+    "root_record_id",
+    "previous_record_id",
+    "audit_history",
+    "release_blockers",
+    "supervisor_release",
+    "reassessment_reason",
+    "changed_conditions",
+}
 FLHA_PRESETS = [
     {
         "id": "company-excavation",
@@ -458,17 +469,34 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     return FieldRecordRead.model_validate(item)
 
 
-def prepare_flha_values(values: dict, user: AuthenticatedUser, *, action: str) -> dict:
+def prepare_flha_values(
+    values: dict,
+    user: AuthenticatedUser,
+    *,
+    action: str,
+    trusted_details: dict | None = None,
+) -> dict:
     now = datetime.now(UTC).isoformat()
-    details = dict(values.get("details") or {})
-    details.setdefault("schema_version", 1)
-    details.setdefault("version", 1)
-    details.setdefault("root_record_id", None)
+    submitted_details = dict(values.get("details") or {})
+    details = {
+        key: value
+        for key, value in submitted_details.items()
+        if key not in FLHA_SERVER_MANAGED_DETAIL_FIELDS
+    }
+    server_details = dict(trusted_details or {})
+    details.update({
+        key: value
+        for key, value in server_details.items()
+        if key in FLHA_SERVER_MANAGED_DETAIL_FIELDS
+    })
+    details["schema_version"] = int(server_details.get("schema_version") or 1)
+    details["version"] = int(server_details.get("version") or 1)
+    details["root_record_id"] = server_details.get("root_record_id")
     details.setdefault("screening", {})
     details.setdefault("hazards", [])
     details.setdefault("crew", [])
     details.setdefault("emergency", {})
-    audit = list(details.get("audit_history") or [])
+    audit = list(server_details.get("audit_history") or [])
     audit.append({"action": action, "at": now, "by": user.email, "display_name": user.display_name})
     details["audit_history"] = audit
     blockers = flha_release_blockers(values.get("project_id"), values.get("work_date"), details)
@@ -552,11 +580,16 @@ def update_flha(db: Session, record_id: UUID, payload: FLHAUpdate, user: Authent
             "project_id": payload.project_id,
             "work_date": payload.work_date,
             "title": payload.title,
-            "details": {**payload.details, "audit_history": list((item.details or {}).get("audit_history") or [])},
+            "details": payload.details,
             "document_ids": [str(value) for value in payload.document_ids],
         },
         user,
         action="edited",
+        trusted_details={
+            key: value
+            for key, value in (item.details or {}).items()
+            if key in FLHA_SERVER_MANAGED_DETAIL_FIELDS and key != "release_blockers"
+        },
     )
     for key in ("project_id", "work_date", "title", "details", "document_ids", "status", "severity"):
         setattr(item, key, values[key])
@@ -576,8 +609,8 @@ def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user:
     previous_details = dict(previous.details or {})
     version = int(previous_details.get("version") or 1) + 1
     root_id = previous_details.get("root_record_id") or str(previous.id)
-    details = {
-        **payload.details,
+    trusted_details = {
+        "schema_version": int(previous_details.get("schema_version") or 1),
         "version": version,
         "root_record_id": root_id,
         "previous_record_id": str(previous.id),
@@ -592,11 +625,12 @@ def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user:
             "employee_id": previous.employee_id,
             "work_date": payload.work_date,
             "title": payload.title,
-            "details": details,
+            "details": payload.details,
             "document_ids": [str(value) for value in payload.document_ids],
         },
         user,
         action="reassessed",
+        trusted_details=trusted_details,
     )
     values["details"]["audit_history"][-1].update({"reason": payload.reason, "changed_conditions": payload.changed_conditions, "previous_record_id": str(previous.id)})
     item = FieldRecord(**values, alert_recipients=previous.alert_recipients or [], submitted_by=user.email)
@@ -735,10 +769,11 @@ def sign_field_record(
         crew_ids = {str(member.get("id")) for member in details.get("crew") or [] if member.get("id")}
         if str(employee.id) not in crew_ids:
             raise AppError("Only workers listed on this FLHA may acknowledge it.", status_code=403)
+    employee_name = f"{employee.first_name} {employee.last_name}"
     signatures.append(
         {
             "employee_id": str(employee.id),
-            "employee_name": payload.employee_name,
+            "employee_name": employee_name,
             "acknowledgement": payload.acknowledgement,
             "signed_at": datetime.now(UTC).isoformat(),
             "signed_by_account": user.email,
@@ -755,7 +790,7 @@ def sign_field_record(
             "at": signatures[-1]["signed_at"],
             "by": user.email,
             "employee_id": str(employee.id),
-            "employee_name": payload.employee_name,
+            "employee_name": employee_name,
             "signing_method": signatures[-1]["signing_method"],
         })
         details["audit_history"] = audit
