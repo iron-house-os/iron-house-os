@@ -104,7 +104,7 @@ def test_flha_create_edit_sign_release_audit_and_immutability() -> None:
     signed = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
         "employee_id": worker["id"], "employee_name": "Forged Worker Name",
         "acknowledgement": "I reviewed the hazards and controls with the foreperson.",
-        "supervised_shared_device": True,
+        "supervised_shared_device": True, "worker_confirmation": True,
         "supervisor_confirmation": "I observed the worker review and personally acknowledge this FLHA.",
     })
     assert signed.status_code == 200
@@ -137,7 +137,7 @@ def test_uncontrolled_critical_hazard_blocks_acknowledgement_and_release() -> No
 
     sign = client.post(f"/api/v1/field-operations/records/{record['id']}/sign", json={
         "employee_id": worker["id"], "employee_name": "Critical Worker", "acknowledgement": "I reviewed this blocked assessment.",
-        "supervised_shared_device": True, "supervisor_confirmation": "Supervised review.",
+        "supervised_shared_device": True, "worker_confirmation": True, "supervisor_confirmation": "Supervised review.",
     })
     assert sign.status_code == 409
     release = client.post(f"/api/v1/field-operations/records/{record['id']}/flha/release", json={"verification": "I checked the work location and crew."})
@@ -150,7 +150,7 @@ def test_reassessment_creates_new_version_and_requires_new_acknowledgement() -> 
     original = create_flha(project, [worker])
     signed = client.post(f"/api/v1/field-operations/records/{original['id']}/sign", json={
         "employee_id": worker["id"], "employee_name": "Version Worker", "acknowledgement": "I reviewed the original FLHA controls.",
-        "supervised_shared_device": True, "supervisor_confirmation": "Supervised review.",
+        "supervised_shared_device": True, "worker_confirmation": True, "supervisor_confirmation": "Supervised review.",
     })
     assert signed.status_code == 200
     revised_details = complete_details([worker])
@@ -210,7 +210,7 @@ def test_pdf_is_legible_compact_and_has_no_blank_overflow_pages() -> None:
         "employee_id": crew[0]["id"],
         "employee_name": "Forged PDF Name",
         "acknowledgement": long_acknowledgement,
-        "supervised_shared_device": True,
+        "supervised_shared_device": True, "worker_confirmation": True,
         "supervisor_confirmation": "I supervised this worker acknowledgement.",
     })
     assert signed.status_code == 200
