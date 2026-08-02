@@ -175,9 +175,9 @@ test("FLHA completes, releases and signs without overflow or accessibility block
   await page.getByLabel("First aid attendant").fill("FLHA QA Foreperson");
   for (const button of await page.getByRole("button", { name: "yes", exact: true }).all()) await button.click();
   await page.getByRole("textbox", { name: "Task", exact: true }).fill("Excavate utility trench");
-  await page.getByLabel("Hazard").fill("Cave-in and utility strike");
-  await page.getByLabel("Control").fill("Verify locates, shoring, ladder access and exclusion zone");
-  await page.getByLabel("Responsible person").fill("FLHA QA Foreperson");
+  await page.getByRole("textbox", { name: "Hazard", exact: true }).fill("Cave-in and utility strike");
+  await page.getByRole("textbox", { name: "Control", exact: true }).fill("Verify locates, shoring, ladder access and exclusion zone");
+  await page.getByRole("textbox", { name: "Responsible person", exact: true }).fill("FLHA QA Foreperson");
   await page.getByLabel("Critical hazard").check();
   await page.getByLabel("Field control accepted").check();
   await page.getByLabel("Emergency response").fill("Stop work, call emergency services and notify supervision");
