@@ -754,6 +754,8 @@ def sign_field_record(
     if item.record_type == "daily_hazard_assessment":
         if not own_signature and not supervised_signature:
             raise AppError("Workers must sign on their own account or in a supervised shared-device flow.", status_code=403)
+        if supervised_signature and not payload.worker_confirmation:
+            raise AppError("Shared-device signatures require the worker's explicit confirmation.", status_code=400)
         if supervised_signature and not str(payload.supervisor_confirmation or "").strip():
             raise AppError("Shared-device signatures require supervisor confirmation.", status_code=400)
     elif user.role not in {"admin", "operations_manager"} and not own_signature:
@@ -778,6 +780,7 @@ def sign_field_record(
             "signed_at": datetime.now(UTC).isoformat(),
             "signed_by_account": user.email,
             "signing_method": "supervised_shared_device" if supervised_signature else "own_device",
+            "worker_confirmation": payload.worker_confirmation if supervised_signature else True,
             "supervisor_confirmation": payload.supervisor_confirmation if supervised_signature else None,
         }
     )
