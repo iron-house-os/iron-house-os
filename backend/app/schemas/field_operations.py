@@ -237,7 +237,27 @@ class FieldRecordRead(FieldRecordCreate):
 class SignatureCreate(BaseModel):
     employee_id: UUID
     employee_name: str = Field(min_length=1, max_length=255)
-    acknowledgement: str = Field(default="I acknowledge and understand this record.", min_length=10)
+    acknowledgement: str = Field(default="I acknowledge and understand this record.", min_length=10, max_length=1000)
+    supervised_shared_device: bool = False
+    worker_confirmation: bool = False
+    supervisor_confirmation: str | None = Field(default=None, max_length=500)
+
+
+class FLHAUpdate(BaseModel):
+    project_id: UUID | None = None
+    work_date: date
+    title: str = Field(min_length=1, max_length=255)
+    details: dict = Field(default_factory=dict)
+    document_ids: list[UUID] = Field(default_factory=list)
+
+
+class FLHAReassessment(FLHAUpdate):
+    reason: str = Field(min_length=3, max_length=1000)
+    changed_conditions: list[Literal["scope", "weather", "crew", "equipment", "conditions"]] = Field(min_length=1)
+
+
+class FLHARelease(BaseModel):
+    verification: str = Field(min_length=10, max_length=1000)
 
 
 class MilestoneDecision(BaseModel):
@@ -282,3 +302,4 @@ class FieldOperationsBootstrap(BaseModel):
     certifications: list[CertificationRead]
     alerts: list[dict]
     toolbox_talk: ToolboxTalk
+    flha_presets: list[dict]

@@ -22,6 +22,7 @@ import { Link } from "react-router-dom";
 
 import { MediaCategory, mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
+import { FLHAWorkflow } from "../components/FLHAWorkflow";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Employee,
@@ -150,7 +151,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           {section === "time" ? <TimeEntryForm data={state.data} mode="foreman_crew" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "forms" ? <RecordForm data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "safety" ? <><FLHAWorkflow data={state.data} canCreate onSaved={state.refresh} onError={state.setError} /><ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "records" ? <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
@@ -307,7 +308,7 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
           {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "profile" ? <EmployeeDirectory data={state.data} /> : null}
-          {section === "safety" ? <ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "safety" ? <><FLHAWorkflow data={state.data} canCreate={false} onSaved={state.refresh} onError={state.setError} /><ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "records" ? <RecentRecords records={state.data.records} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
         </>
@@ -534,7 +535,7 @@ function TimeEntryForm({ data, mode, onSaved, onError }: { data: FieldOperations
 
 function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBootstrap; mode: "foreman" | "operator" | "employee"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
   const availableTypes = mode === "foreman"
-    ? [["journal", "Daily journal"], ["daily_hazard_assessment", "Daily hazard assessment / FLHA"], ["incident", "Incident / near miss"], ["deficiency", "Deficiency"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense / receipt"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
+    ? [["journal", "Daily journal"], ["incident", "Incident / near miss"], ["deficiency", "Deficiency"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense / receipt"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
     : mode === "operator"
       ? [["equipment_inspection", "Machine inspection"], ["job_photo", "Job photos"], ["performance_review", "Performance review request"], ["journal", "Journal"]]
       : [["journal", "Journal"], ["job_photo", "Job photos"], ["expense", "Expense"], ["missing_form", "Missing form"], ["performance_review", "Performance review request"]];
@@ -648,7 +649,7 @@ function RecentRecords({ records, employees, onSaved, onError }: { records: Fiel
             <div className="mt-3 text-sm text-iron-600">{String(record.details.notes ?? record.details.summary ?? "")}</div>
             <div className="mt-3 text-xs font-medium text-iron-500">{record.document_ids.length} attachment(s) · {record.signatures.length} signature(s)</div>
             {record.document_ids.length ? <div className="mt-3"><UniversalPhotoField documentIds={record.document_ids} /></div> : null}
-            {["daily_hazard_assessment", "toolbox_talk"].includes(record.record_type) ? (
+            {record.record_type === "toolbox_talk" ? (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <select value={signer[record.id] ?? ""} onChange={(event) => setSigner((current) => ({ ...current, [record.id]: event.target.value }))} className="rounded-md border border-iron-100 px-3 py-2 text-sm">
                   <option value="">Select employee signing</option>
