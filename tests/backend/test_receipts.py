@@ -1,6 +1,8 @@
 from datetime import date
 from uuid import UUID
 
+import csv
+import io
 import json
 from types import SimpleNamespace
 
@@ -18,6 +20,7 @@ from app.services.auth import AuthenticatedUser
 from app.services.file_storage import LocalFileStorageProvider
 import app.services.file_storage as file_storage
 import app.services.receipt_extraction as receipt_extraction
+import app.services.receipts as receipt_service
 from conftest import TestingSessionLocal
 
 client = TestClient(app)
@@ -71,7 +74,7 @@ def _seed_vendor_and_card() -> tuple[UUID, UUID]:
         return supplier.id, card.id
 
 
-def test_split_coding_vendor_card_alias_approval_and_one_time_export() -> None:
+def test_split_coding_vendor_card_alias_approval_and_one_time_export(monkeypatch) -> None:
     project = _project()
     vendor_id, card_id = _seed_vendor_and_card()
     created = client.post("/api/v1/finance/receipts", json=_payload(_asset(), project["id"]))
@@ -82,6 +85,14 @@ def test_split_coding_vendor_card_alias_approval_and_one_time_export() -> None:
     assert receipt["is_balanced"] is True
     assert {line["project_id"] for line in receipt["line_items"]} == {project["id"], None}
 
+    locked_calls = []
+    original_locked_lookup = receipt_service._require_receipt_for_update
+
+    def tracked_locked_lookup(*args, **kwargs):
+        locked_calls.append(args[1])
+        return original_locked_lookup(*args, **kwargs)
+
+    monkeypatch.setattr(receipt_service, "_require_receipt_for_update", tracked_locked_lookup)
     submitted = client.post(f"/api/v1/finance/receipts/{receipt['id']}/submit", json={"version": receipt["version"], "reason": "Employee confirmed receipt"})
     assert submitted.status_code == 200
     receipt = submitted.json()
@@ -97,6 +108,10 @@ def test_split_coding_vendor_card_alias_approval_and_one_time_export() -> None:
     exported = client.post(f"/api/v1/finance/receipts/{receipt['id']}/export", json={"version": receipt["version"], "reason": "QB staging batch 114"})
     assert exported.status_code == 200
     assert "Green nitrile safety gloves" in exported.text
+    export_rows = list(csv.DictReader(io.StringIO(exported.text)))
+    assert [row["Tax CAD"] for row in export_rows] == ["3.00", "2.00"]
+    assert all("GST" not in row and "PST" not in row for row in export_rows)
+    assert len(locked_calls) == 2
     current = client.get(f"/api/v1/finance/receipts/{receipt['id']}").json()
     duplicate_export = client.post(f"/api/v1/finance/receipts/{receipt['id']}/export", json={"version": current["version"], "reason": "Attempt duplicate export"})
     assert duplicate_export.status_code == 409
@@ -117,6 +132,27 @@ def test_low_confidence_and_out_of_balance_receipt_cannot_be_approved() -> None:
     assert approval.status_code == 422
 
 
+def test_line_totals_and_taxes_must_reconcile_before_approval() -> None:
+    project = _project("RCPT-LINE")
+    _seed_vendor_and_card()
+    payload = _payload(_asset(b"line-mismatch"), project["id"])
+    payload["line_items"][0]["line_total"] = 59
+    payload["line_items"][0]["tax"] = 1
+    receipt = client.post("/api/v1/finance/receipts", json=payload).json()
+    receipt = client.post(
+        f"/api/v1/finance/receipts/{receipt['id']}/submit",
+        json={"version": receipt["version"], "reason": "Send mismatched split"},
+    ).json()
+    assert any("Line-item totals" in blocker for blocker in receipt["approval_blockers"])
+    assert any("Line-item taxes" in blocker for blocker in receipt["approval_blockers"])
+    assert any("quantity" in blocker for blocker in receipt["approval_blockers"])
+    approval = client.post(
+        f"/api/v1/finance/receipts/{receipt['id']}/approve",
+        json={"version": receipt["version"], "reason": "Must remain blocked"},
+    )
+    assert approval.status_code == 422
+
+
 def test_duplicate_image_and_vendor_date_amount_reference_are_flagged() -> None:
     project = _project("RCPT-DUP")
     _seed_vendor_and_card()
@@ -127,6 +163,42 @@ def test_duplicate_image_and_vendor_date_amount_reference_are_flagged() -> None:
     assert second.json()["duplicate_of_id"] == first.json()["id"]
     assert "possible_duplicate" in second.json()["flags"]
     assert any("duplicate" in blocker.lower() for blocker in second.json()["approval_blockers"])
+
+
+def test_submitter_cannot_dismiss_duplicate_or_restricted_flags() -> None:
+    project = _project("RCPT-DUP-DENY")
+    _seed_vendor_and_card()
+    first_payload = _payload(_asset(b"duplicate-source"), project["id"])
+    first = client.post("/api/v1/finance/receipts", json=first_payload)
+    assert first.status_code == 201
+    second_payload = _payload(_asset(b"duplicate-source"), project["id"])
+    second_payload["flags"] = ["restricted_purchase"]
+    second = client.post("/api/v1/finance/receipts", json=second_payload).json()
+
+    def viewer_user(request: Request) -> AuthenticatedUser:
+        principal = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            email="test-admin@ironhousecontracting.com",
+            display_name="Employee",
+            role="viewer",
+            session_version=1,
+        )
+        request.state.authenticated_user = principal
+        return principal
+
+    app.dependency_overrides[require_authenticated_user] = viewer_user
+    attempted = client.put(
+        f"/api/v1/finance/receipts/{second['id']}",
+        json={
+            **second_payload,
+            "media_asset_ids": second["media_asset_ids"],
+            "flags": [],
+            "duplicate_resolution": "not_duplicate",
+            "correction_reason": "Try to bypass reviewer controls",
+            "version": second["version"],
+        },
+    )
+    assert attempted.status_code == 403
 
 
 def test_reviewer_can_create_vendor_but_employee_cannot_approve() -> None:
@@ -156,6 +228,28 @@ def test_full_card_number_is_rejected_and_never_persisted() -> None:
     response = client.post("/api/v1/finance/receipts", json=payload)
     assert response.status_code == 422
     assert "last four" in response.text
+
+
+def test_non_management_ai_context_excludes_other_cardholders_and_operational_records() -> None:
+    _project("RCPT-CONTEXT")
+    with TestingSessionLocal() as db:
+        db.add_all([
+            CompanyCard(brand="Visa", last_four="1111", holder_email="test-admin@ironhousecontracting.com", is_authorized=True),
+            CompanyCard(brand="Visa", last_four="9999", holder_email="other@ironhousecontracting.com", is_authorized=True),
+        ])
+        db.commit()
+        viewer = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            email="test-admin@ironhousecontracting.com",
+            display_name="Employee",
+            role="viewer",
+            session_version=1,
+        )
+        context = json.loads(receipt_extraction._context(db, viewer).split("\n", 1)[1])
+    assert context["projects"] == []
+    assert context["equipment"] == []
+    assert context["authorized_cards_last_four_only"] == [{"brand": "Visa", "last_four": "1111"}]
+    assert "holder_email" not in json.dumps(context["authorized_cards_last_four_only"])
 
 
 def test_ai_extraction_uses_controlled_images_and_returns_unapproved_draft(monkeypatch) -> None:
