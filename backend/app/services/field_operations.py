@@ -18,6 +18,9 @@ from app.schemas.field_operations import (
     CertificationRead,
     EmployeeCreate,
     EmployeeRead,
+    FLHAReassessment,
+    FLHARelease,
+    FLHAUpdate,
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
@@ -38,6 +41,38 @@ from app.services.cost_codes import get_cost_code_library
 
 
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
+FLHA_SCREENING_ITEMS = [
+    "first_aid_equipment",
+    "overhead_hazards",
+    "underground_utilities_and_locates",
+    "mobile_equipment",
+    "confined_space",
+    "excavation_sloping_shoring_and_access",
+    "additional_ppe",
+    "traffic_control",
+    "subcontractors",
+    "basic_ppe_review",
+]
+FLHA_CONTROL_LEVELS = {"elimination", "substitution", "engineering", "administrative", "ppe"}
+FLHA_PRESETS = [
+    {
+        "id": "company-excavation",
+        "scope": "company",
+        "name": "Excavation and utility work",
+        "rows": [
+            {"task": "Excavate", "hazard": "Underground utility contact", "control": "Confirm current locates, expose services safely and maintain marked limits", "control_level": "engineering", "risk": "critical", "evidence_required": True},
+            {"task": "Work near excavation", "hazard": "Cave-in or unsafe access", "control": "Verify sloping or shoring and provide safe access before entry", "control_level": "engineering", "risk": "critical", "evidence_required": True},
+        ],
+    },
+    {
+        "id": "company-mobile-equipment",
+        "scope": "company",
+        "name": "Mobile equipment and ground crew",
+        "rows": [
+            {"task": "Operate mobile equipment", "hazard": "Worker struck by equipment", "control": "Establish exclusion zone, designated spotter and agreed signals", "control_level": "administrative", "risk": "critical", "evidence_required": False},
+        ],
+    },
+]
 MATERIAL_TYPES = [
     {"code": "pit_run", "name": "Pit run gravel"},
     {"code": "75mm_minus", "name": "75 mm minus"},
@@ -110,7 +145,19 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
         employee_id = profile.id if profile else None
         employees = [profile] if profile else []
         time_entries = [item for item in time_entries if item.employee_id == employee_id]
-        records = [item for item in records if item.employee_id == employee_id or item.record_type == "toolbox_talk"]
+        records = [
+            item for item in records
+            if item.employee_id == employee_id
+            or item.record_type == "toolbox_talk"
+            or (
+                item.record_type == "daily_hazard_assessment"
+                and str(employee_id) in {
+                    str(member.get("id"))
+                    for member in (item.details or {}).get("crew") or []
+                    if member.get("id")
+                }
+            )
+        ]
         certifications = [item for item in certifications if item.employee_id == employee_id]
         milestone_recognitions = [item for item in milestone_recognitions if item["employee_id"] == str(employee_id)]
         paperwork_recognitions = [item for item in paperwork_recognitions if item["employee_id"] == str(employee_id)]
@@ -135,6 +182,26 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
         certifications=[certification_schema(item) for item in certifications],
         alerts=alerts,
         toolbox_talk=current_toolbox_talk(),
+        flha_presets=[
+            *FLHA_PRESETS,
+            *[
+                {
+                    "id": f"project-{item.id}-site-setup",
+                    "scope": "project",
+                    "project_id": str(item.id),
+                    "name": f"{item.name} site setup",
+                    "rows": [{
+                        "task": "Set up work area",
+                        "hazard": "Public or worker enters active work zone",
+                        "control": "Verify project access, barriers, signs and communication before work starts",
+                        "control_level": "administrative",
+                        "risk": "high",
+                        "evidence_required": False,
+                    }],
+                }
+                for item in projects
+            ],
+        ],
     )
 
 
@@ -337,6 +404,8 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             raise AppError("Your employee profile is not linked to this account.", status_code=400)
         if payload.record_type == "crew_shift" and profile.portal_role != "foreman":
             raise AppError("Foreman access is required to schedule crews.", status_code=403)
+        if payload.record_type == "daily_hazard_assessment" and profile.portal_role not in {"foreman", "management"}:
+            raise AppError("Foreperson access is required to create an FLHA.", status_code=403)
         if profile.portal_role in {"employee", "operator"}:
             if payload.employee_id and payload.employee_id != profile.id:
                 raise AppError("You can only create records for your own employee profile.", status_code=403)
@@ -378,6 +447,8 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             "practical_status": "pending",
             "requested_at": datetime.now(UTC).isoformat(),
         }
+    if payload.record_type == "daily_hazard_assessment":
+        values = prepare_flha_values(values, user, action="created")
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
@@ -385,6 +456,197 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)
+
+
+def prepare_flha_values(values: dict, user: AuthenticatedUser, *, action: str) -> dict:
+    now = datetime.now(UTC).isoformat()
+    details = dict(values.get("details") or {})
+    details.setdefault("schema_version", 1)
+    details.setdefault("version", 1)
+    details.setdefault("root_record_id", None)
+    details.setdefault("screening", {})
+    details.setdefault("hazards", [])
+    details.setdefault("crew", [])
+    details.setdefault("emergency", {})
+    audit = list(details.get("audit_history") or [])
+    audit.append({"action": action, "at": now, "by": user.email, "display_name": user.display_name})
+    details["audit_history"] = audit
+    blockers = flha_release_blockers(values.get("project_id"), values.get("work_date"), details)
+    details["release_blockers"] = blockers
+    values["details"] = details
+    values["signatures"] = []
+    values["status"] = "blocked" if critical_flha_blockers(details) else "draft"
+    values["severity"] = "critical" if any(str(row.get("risk", "")).lower() == "critical" for row in details["hazards"]) else "high"
+    return values
+
+
+def critical_flha_blockers(details: dict) -> list[str]:
+    blockers: list[str] = []
+    for index, row in enumerate(details.get("hazards") or [], start=1):
+        if str(row.get("risk", "")).lower() != "critical":
+            continue
+        if not row.get("accepted_control"):
+            blockers.append(f"Critical hazard {index} requires an accepted control.")
+        if not str(row.get("responsible_person") or "").strip():
+            blockers.append(f"Critical hazard {index} requires a responsible person.")
+        if row.get("evidence_required") and not str(row.get("evidence") or "").strip():
+            blockers.append(f"Critical hazard {index} requires evidence.")
+    return blockers
+
+
+def flha_release_blockers(project_id: object, work_date: object, details: dict) -> list[str]:
+    blockers = critical_flha_blockers(details)
+    required = {
+        "Project / job": project_id,
+        "Date": work_date,
+        "Site / location": details.get("site_location"),
+        "Assessment date and time": details.get("assessment_datetime"),
+        "Supervisor / foreperson": (details.get("supervisor") or {}).get("name"),
+        "First aid attendant": (details.get("first_aid_attendant") or {}).get("name"),
+        "Crew": details.get("crew"),
+        "Weather": details.get("weather"),
+        "Task, hazard and control rows": details.get("hazards"),
+    }
+    blockers.extend(f"{label} is required." for label, value in required.items() if not value)
+    screening = details.get("screening") or {}
+    for item in FLHA_SCREENING_ITEMS:
+        if screening.get(item) not in {"yes", "no", "na"}:
+            blockers.append(f"Screening response is required for {item.replace('_', ' ')}.")
+    for index, row in enumerate(details.get("hazards") or [], start=1):
+        if not all(str(row.get(key) or "").strip() for key in ("task", "hazard", "control", "responsible_person")):
+            blockers.append(f"Hazard row {index} requires task, hazard, control and responsible person.")
+        if row.get("control_level") not in FLHA_CONTROL_LEVELS:
+            blockers.append(f"Hazard row {index} requires a hierarchy-of-controls category.")
+    emergency = details.get("emergency") or {}
+    for key in ("response_plan", "muster_point", "first_aid_location", "communication", "stop_work_triggers"):
+        if not str(emergency.get(key) or "").strip():
+            blockers.append(f"Emergency {key.replace('_', ' ')} is required.")
+    return list(dict.fromkeys(blockers))
+
+
+def _flha_profile(db: Session, user: AuthenticatedUser) -> Employee | None:
+    return db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+
+
+def _can_supervise_flha(db: Session, user: AuthenticatedUser) -> bool:
+    profile = _flha_profile(db, user)
+    return user.role in {"admin", "operations_manager"} or bool(profile and profile.portal_role in {"foreman", "management"})
+
+
+def _require_flha(item: FieldRecord) -> None:
+    if item.record_type != "daily_hazard_assessment":
+        raise AppError("That record is not an FLHA.", status_code=400)
+
+
+def update_flha(db: Session, record_id: UUID, payload: FLHAUpdate, user: AuthenticatedUser) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(item)
+    if item.signatures or item.status == "released":
+        raise AppError("Signed FLHAs are immutable. Create a re-assessment instead.", status_code=409)
+    if item.submitted_by != user.email and not _can_supervise_flha(db, user):
+        raise AppError("You do not have permission to edit this FLHA.", status_code=403)
+    if payload.project_id:
+        require_exists(db, Project, payload.project_id, "Project")
+    values = prepare_flha_values(
+        {
+            "project_id": payload.project_id,
+            "work_date": payload.work_date,
+            "title": payload.title,
+            "details": {**payload.details, "audit_history": list((item.details or {}).get("audit_history") or [])},
+            "document_ids": [str(value) for value in payload.document_ids],
+        },
+        user,
+        action="edited",
+    )
+    for key in ("project_id", "work_date", "title", "details", "document_ids", "status", "severity"):
+        setattr(item, key, values[key])
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user: AuthenticatedUser) -> FieldRecordRead:
+    previous = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(previous)
+    if not _can_supervise_flha(db, user):
+        raise AppError("Foreperson access is required to re-assess an FLHA.", status_code=403)
+    if payload.project_id:
+        require_exists(db, Project, payload.project_id, "Project")
+    previous_details = dict(previous.details or {})
+    version = int(previous_details.get("version") or 1) + 1
+    root_id = previous_details.get("root_record_id") or str(previous.id)
+    details = {
+        **payload.details,
+        "version": version,
+        "root_record_id": root_id,
+        "previous_record_id": str(previous.id),
+        "reassessment_reason": payload.reason,
+        "changed_conditions": payload.changed_conditions,
+        "audit_history": list(previous_details.get("audit_history") or []),
+    }
+    values = prepare_flha_values(
+        {
+            "record_type": "daily_hazard_assessment",
+            "project_id": payload.project_id,
+            "employee_id": previous.employee_id,
+            "work_date": payload.work_date,
+            "title": payload.title,
+            "details": details,
+            "document_ids": [str(value) for value in payload.document_ids],
+        },
+        user,
+        action="reassessed",
+    )
+    values["details"]["audit_history"][-1].update({"reason": payload.reason, "changed_conditions": payload.changed_conditions, "previous_record_id": str(previous.id)})
+    item = FieldRecord(**values, alert_recipients=previous.alert_recipients or [], submitted_by=user.email)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def release_flha(db: Session, record_id: UUID, payload: FLHARelease, user: AuthenticatedUser) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(item)
+    if item.status == "released":
+        raise AppError("This FLHA has already been released.", status_code=409)
+    if not _can_supervise_flha(db, user):
+        raise AppError("Foreperson access is required to release an FLHA.", status_code=403)
+    details = dict(item.details or {})
+    blockers = flha_release_blockers(item.project_id, item.work_date, details)
+    crew_ids = {str(member.get("id")) for member in details.get("crew") or [] if member.get("id")}
+    signed_ids = {str(signature.get("employee_id")) for signature in item.signatures or []}
+    missing_signatures = crew_ids - signed_ids
+    if missing_signatures:
+        blockers.append(f"{len(missing_signatures)} crew acknowledgement(s) are still required.")
+    if blockers:
+        raise AppError("FLHA release blocked: " + " ".join(blockers), status_code=409)
+    now = datetime.now(UTC).isoformat()
+    details["release_blockers"] = []
+    details["supervisor_release"] = {"released_at": now, "released_by": user.email, "display_name": user.display_name, "verification": payload.verification}
+    audit = list(details.get("audit_history") or [])
+    audit.append({"action": "supervisor_released", "at": now, "by": user.email, "display_name": user.display_name})
+    details["audit_history"] = audit
+    item.details = details
+    item.status = "released"
+    item.resolved_at = datetime.now(UTC)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def get_flha_for_user(db: Session, record_id: UUID, user: AuthenticatedUser) -> FieldRecord:
+    item = require_exists(db, FieldRecord, record_id, "FLHA")
+    _require_flha(item)
+    if user.role != "viewer":
+        return item
+    profile = _flha_profile(db, user)
+    crew_ids = {str(member.get("id")) for member in (item.details or {}).get("crew") or [] if member.get("id")}
+    if not profile or (str(profile.id) not in crew_ids and profile.portal_role not in {"foreman", "management"}):
+        raise AppError("You do not have permission to view this FLHA.", status_code=403)
+    return item
 
 
 def decide_time_off(
@@ -453,10 +715,26 @@ def sign_field_record(
 ) -> FieldRecordRead:
     item = require_exists(db, FieldRecord, record_id, "Field record")
     employee = require_exists(db, Employee, payload.employee_id, "Employee")
-    if user.role not in {"admin", "operations_manager"} and employee.email.lower() != user.email.lower():
+    own_signature = employee.email.lower() == user.email.lower()
+    supervised_signature = payload.supervised_shared_device and _can_supervise_flha(db, user)
+    if item.record_type == "daily_hazard_assessment":
+        if not own_signature and not supervised_signature:
+            raise AppError("Workers must sign on their own account or in a supervised shared-device flow.", status_code=403)
+        if supervised_signature and not str(payload.supervisor_confirmation or "").strip():
+            raise AppError("Shared-device signatures require supervisor confirmation.", status_code=400)
+    elif user.role not in {"admin", "operations_manager"} and not own_signature:
         raise AppError("You can only apply your own signature.", status_code=403)
     signatures = list(item.signatures or [])
-    signatures = [entry for entry in signatures if entry.get("employee_id") != str(employee.id)]
+    if any(entry.get("employee_id") == str(employee.id) for entry in signatures):
+        raise AppError("This worker has already acknowledged this version.", status_code=409)
+    if item.record_type == "daily_hazard_assessment":
+        details = dict(item.details or {})
+        blockers = flha_release_blockers(item.project_id, item.work_date, details)
+        if blockers:
+            raise AppError("FLHA acknowledgement blocked until required fields and controls are complete: " + " ".join(blockers), status_code=409)
+        crew_ids = {str(member.get("id")) for member in details.get("crew") or [] if member.get("id")}
+        if str(employee.id) not in crew_ids:
+            raise AppError("Only workers listed on this FLHA may acknowledge it.", status_code=403)
     signatures.append(
         {
             "employee_id": str(employee.id),
@@ -464,9 +742,24 @@ def sign_field_record(
             "acknowledgement": payload.acknowledgement,
             "signed_at": datetime.now(UTC).isoformat(),
             "signed_by_account": user.email,
+            "signing_method": "supervised_shared_device" if supervised_signature else "own_device",
+            "supervisor_confirmation": payload.supervisor_confirmation if supervised_signature else None,
         }
     )
     item.signatures = signatures
+    if item.record_type == "daily_hazard_assessment":
+        details = dict(item.details or {})
+        audit = list(details.get("audit_history") or [])
+        audit.append({
+            "action": "worker_acknowledged",
+            "at": signatures[-1]["signed_at"],
+            "by": user.email,
+            "employee_id": str(employee.id),
+            "employee_name": payload.employee_name,
+            "signing_method": signatures[-1]["signing_method"],
+        })
+        details["audit_history"] = audit
+        item.details = details
     db.add(item)
     commit(db)
     db.refresh(item)

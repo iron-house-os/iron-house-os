@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -11,6 +11,9 @@ from app.schemas.field_operations import (
     CertificationRead,
     EmployeeCreate,
     EmployeeRead,
+    FLHAReassessment,
+    FLHARelease,
+    FLHAUpdate,
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
@@ -26,6 +29,7 @@ from app.schemas.field_operations import (
     VehicleUpdate,
 )
 from app.services import field_operations
+from app.services.flha_pdf import render_flha_pdf
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -79,6 +83,45 @@ def sign_field_record(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.sign_field_record(db, record_id, payload, user)
+
+
+@router.patch("/records/{record_id}/flha", response_model=FieldRecordRead)
+def update_flha(record_id: UUID, payload: FLHAUpdate, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return field_operations.update_flha(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/flha/reassess", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
+def reassess_flha(record_id: UUID, payload: FLHAReassessment, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return field_operations.reassess_flha(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/flha/release", response_model=FieldRecordRead)
+def release_flha(record_id: UUID, payload: FLHARelease, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return field_operations.release_flha(db, record_id, payload, user)
+
+
+@router.get("/records/{record_id}/flha/audit")
+def flha_audit(record_id: UUID, db: DBSession, user: CurrentUser) -> dict:
+    item = field_operations.get_flha_for_user(db, record_id, user)
+    details = item.details or {}
+    return {
+        "record_id": str(item.id),
+        "version": details.get("version", 1),
+        "events": details.get("audit_history") or [],
+        "signatures": item.signatures or [],
+        "supervisor_release": details.get("supervisor_release"),
+    }
+
+
+@router.get("/records/{record_id}/flha.pdf")
+def flha_pdf(record_id: UUID, db: DBSession, user: CurrentUser) -> Response:
+    item = field_operations.get_flha_for_user(db, record_id, user)
+    filename = f"flha-{item.work_date}-v{(item.details or {}).get('version', 1)}.pdf"
+    return Response(
+        content=render_flha_pdf(item),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/records/{record_id}/milestone-decision", response_model=FieldRecordRead)

@@ -117,6 +117,13 @@ export type FieldOperationsBootstrap = {
     source_name: string;
     source_url: string;
   };
+  flha_presets: Array<{
+    id: string;
+    scope: "company" | "project";
+    project_id?: string;
+    name: string;
+    rows: Array<Record<string, unknown>>;
+  }>;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -145,6 +152,13 @@ export const fieldOperationsApi = {
     request<FieldRecord>("/field-operations/records", { method: "POST", body: JSON.stringify(payload) }),
   signRecord: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/sign", { method: "POST", body: JSON.stringify(payload) }),
+  updateFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/flha", { method: "PATCH", body: JSON.stringify(payload) }),
+  reassessFlha: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/flha/reassess", { method: "POST", body: JSON.stringify(payload) }),
+  releaseFlha: (id: string, verification: string) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/flha/release", { method: "POST", body: JSON.stringify({ verification }) }),
+  flhaPdfUrl: (id: string) => API_BASE_URL + "/field-operations/records/" + id + "/flha.pdf",
   decideMilestone: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/milestone-decision", { method: "POST", body: JSON.stringify(payload) }),
   decideTimeOff: (id: string, payload: Record<string, unknown>) =>
