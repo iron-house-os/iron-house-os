@@ -239,6 +239,7 @@ class SignatureCreate(BaseModel):
     employee_name: str = Field(min_length=1, max_length=255)
     acknowledgement: str = Field(default="I acknowledge and understand this record.", min_length=10, max_length=1000)
     supervised_shared_device: bool = False
+    worker_confirmation: bool = False
     supervisor_confirmation: str | None = Field(default=None, max_length=500)
 
 
