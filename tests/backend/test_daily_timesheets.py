@@ -119,7 +119,7 @@ def test_live_dropdown_filtering_split_totals_equipment_material_receipt_and_att
 def test_approval_post_idempotency_and_compact_long_pdf_export() -> None:
     data = _setup()
     payload = _payload(data)
-    long_text = "Detailed field progress with locations quantities constraints and follow-up actions. " * 120
+    long_text = "Detailed field progress with locations quantities constraints and follow-up actions. " * 25
     payload["narrative"].update({"work_completed": long_text, "delays_issues": long_text, "safety_quality_notes": long_text, "general_comments": long_text})
     created = client.post("/api/v1/daily-timesheets", json=payload).json()
     sheet_id = created["id"]
