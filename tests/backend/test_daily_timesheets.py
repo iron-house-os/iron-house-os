@@ -66,7 +66,7 @@ def _payload(data: dict) -> dict:
         "document_ids": [data["document_id"]],
         "labour": [{"employee_id": data["worker"]["id"], "equipment_id": data["equipment_id"], "splits": [{"cost_code": "03-100", "straight_time": 5, "overtime": 0, "start_time": "07:00", "end_time": "12:00"}, {"cost_code": "31-200", "straight_time": 3, "overtime": 1, "start_time": "12:30", "end_time": "16:30"}]}],
         "equipment": [{"source": "owned", "resource_id": data["equipment_id"], "unit": "hours", "splits": [{"cost_code": "03-100", "quantity": 4}, {"cost_code": "31-200", "quantity": 4}]}, {"source": "rental", "resource_id": data["rental_id"], "vendor_id": data["vendor_id"], "unit": "hours", "splits": [{"cost_code": "31-200", "quantity": 3}]}],
-        "materials": [{"description": "Pipe bedding", "vendor_id": data["vendor_id"], "cost_code": "31-200", "quantity": 12, "unit": "tonnes", "production_quantity": 24, "production_unit": "m", "receipt_id": data["receipt_id"]}],
+        "materials": [{"description": "Pipe bedding", "vendor_id": data["vendor_id"], "cost_code": "31-200", "quantity": 12, "unit": "tonnes", "production_quantity": 24, "production_unit": "m", "receipt_id": data["receipt_id"], "document_id": data["document_id"]}],
         "narrative": {"work_completed": "Excavated and placed pipe.", "delays_issues": "None", "potential_change": True, "potential_change_details": "Unmarked crossing for office review", "safety_quality_notes": "Compaction tests passed", "general_comments": "Crew clear at 17:00"},
     }
 
@@ -111,6 +111,9 @@ def test_live_dropdown_filtering_split_totals_equipment_material_receipt_and_att
     wrong_project_attachment = _payload(data)
     wrong_project_attachment["document_ids"] = [data["other_document_id"]]
     assert client.post("/api/v1/daily-timesheets", json=wrong_project_attachment).status_code == 400
+    wrong_material_attachment = _payload(data)
+    wrong_material_attachment["materials"][0]["document_id"] = data["other_document_id"]
+    assert client.post("/api/v1/daily-timesheets", json=wrong_material_attachment).status_code == 400
 
 
 def test_approval_post_idempotency_and_compact_long_pdf_export() -> None:
