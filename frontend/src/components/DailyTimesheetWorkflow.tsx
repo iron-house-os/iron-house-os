@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCopy, Clock3, FileDo
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { dailyTimesheetApi, DailyTimesheet, DailyTimesheetBootstrap, DailyTimesheetPayload, EquipmentLine, LabourLine, MaterialLine } from "../api/dailyTimesheets";
+import { useAuth } from "../contexts/AuthContext";
 import { mediaApi } from "../api/media";
 import { UniversalPhotoField } from "./UniversalPhotoField";
 
@@ -11,9 +12,11 @@ const emptyPayload = (): DailyTimesheetPayload => ({ work_date: today(), shift: 
 const STORAGE_KEY = "ihos:foreman-daily-timesheet:v1";
 
 export function DailyTimesheetWorkflow() {
+  const { user } = useAuth();
+  const storageKey = `${STORAGE_KEY}:${user?.id ?? user?.email ?? "anonymous"}`;
   const [data, setData] = useState<DailyTimesheetBootstrap | null>(null);
   const [payload, setPayload] = useState<DailyTimesheetPayload>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || emptyPayload(); } catch { return emptyPayload(); }
+    try { return JSON.parse(localStorage.getItem(storageKey) || "null") || emptyPayload(); } catch { return emptyPayload(); }
   });
   const [sheetId, setSheetId] = useState<string | undefined>();
   const [status, setStatus] = useState("draft");
@@ -28,7 +31,8 @@ export function DailyTimesheetWorkflow() {
     catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to load daily sheets."); }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); }, [payload]);
+  useEffect(() => { localStorage.removeItem(STORAGE_KEY); }, []);
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(payload)); }, [payload, storageKey]);
 
   const codes = data?.project_cost_codes[payload.project_id] ?? [];
   const totals = useMemo(() => payload.labour.reduce((sum, line) => {
@@ -83,8 +87,8 @@ export function DailyTimesheetWorkflow() {
     finally { setBusy(false); }
     return undefined;
   }
-  async function submit() { const id = await saveNow(); if (!id) return; setBusy(true); try { const result = await dailyTimesheetApi.submit(id); setStatus(result.status); localStorage.removeItem(STORAGE_KEY); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to submit."); } finally { setBusy(false); } }
-  async function act(action: "approve" | "reject" | "void" | "reopen") { if (!sheetId) return; const reason = action === "approve" ? undefined : window.prompt(`Reason to ${action} this daily sheet`) ?? ""; if (action !== "approve" && !reason) return; setBusy(true); try { const result = await dailyTimesheetApi.action(sheetId, action, reason); setStatus(result.status); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Action failed."); } finally { setBusy(false); } }
+  async function submit() { const id = await saveNow(); if (!id) return; setBusy(true); try { const result = await dailyTimesheetApi.submit(id); setStatus(result.status); localStorage.removeItem(storageKey); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to submit."); } finally { setBusy(false); } }
+  async function act(action: "approve" | "reject" | "void" | "reopen") { if (!sheetId) return; const reason = action === "approve" ? undefined : window.prompt(`Reason to ${action} this daily sheet`) ?? ""; if (action !== "approve" && !reason) return; setBusy(true); try { const result = await dailyTimesheetApi.action(sheetId, action, reason); if (action === "reopen") loadSheet(result); else setStatus(result.status); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Action failed."); } finally { setBusy(false); } }
   async function revise() { if (!sheetId) return; const reason = window.prompt("Reason for correction / revision") ?? ""; if (!reason) return; try { const result = await dailyTimesheetApi.revision(sheetId, reason); loadSheet(result); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to create revision."); } }
   async function postSheet() { if (!sheetId) return; setBusy(true); try { const result = await dailyTimesheetApi.post(sheetId); setPayload((current) => ({ ...current })); setStatus(result.status); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to post daily sheet."); } finally { setBusy(false); } }
   async function downloadCsv() { if (!sheetId) return; setBusy(true); try { const blob = await dailyTimesheetApi.exportCsv(sheetId); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `daily-timesheet-${payload.work_date}.csv`; anchor.click(); URL.revokeObjectURL(url); setStatus("exported"); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to export daily sheet."); } finally { setBusy(false); } }
