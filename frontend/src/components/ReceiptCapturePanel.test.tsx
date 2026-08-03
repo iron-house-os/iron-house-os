@@ -7,6 +7,7 @@ import { ReceiptCapturePanel } from "./ReceiptCapturePanel";
 
 vi.mock("../api/finance", () => ({ financeApi: { getReceipts: vi.fn(), receiptAction: vi.fn(), exportReceipt: vi.fn(), updateReceipt: vi.fn(), createReceipt: vi.fn(), extractReceipt: vi.fn() } }));
 vi.mock("../api/projects", () => ({ projectsApi: { list: vi.fn().mockResolvedValue({ items: [] }) } }));
+vi.mock("../api/costCodes", () => ({ costCodesApi: { list: vi.fn().mockResolvedValue({ items: [{ code: "03-100", name: "Storm main installation" }] }) } }));
 vi.mock("../api/equipment", () => ({ equipmentApi: { list: vi.fn().mockResolvedValue({ items: [] }) } }));
 vi.mock("../api/media", () => ({ mediaApi: { contentUrl: vi.fn(() => "/receipt.jpg"), upload: vi.fn() } }));
 vi.mock("./UniversalPhotoField", () => ({ UniversalPhotoField: ({ label, onFilesChange }: { label: string; onFilesChange?: (files: File[]) => void }) => <div>{label}{onFilesChange ? <button type="button" onClick={() => onFilesChange([new File(["receipt"], "receipt.jpg", { type: "image/jpeg" })])}>Choose mock photo</button> : null}</div> }));
