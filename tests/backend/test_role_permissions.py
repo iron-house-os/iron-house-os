@@ -8,6 +8,7 @@ from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
 from app.services.access_control import (
     ModulePermission,
+    can_access_employee_receipt_route,
     can_access_module,
     describe_role_access,
 )
@@ -106,3 +107,63 @@ def test_permission_summary_is_available_for_the_current_session() -> None:
         "role": "estimator",
         "modules": describe_role_access("estimator"),
     }
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", ["receipts"]),
+        ("POST", ["receipts"]),
+        ("POST", ["receipts", "extract"]),
+        ("GET", ["receipts", "00000000-0000-0000-0000-000000000010"]),
+        ("PUT", ["receipts", "00000000-0000-0000-0000-000000000010"]),
+        (
+            "POST",
+            ["receipts", "00000000-0000-0000-0000-000000000010", "submit"],
+        ),
+    ],
+)
+def test_viewer_receipt_intake_routes_are_narrowly_allowed(
+    method: str,
+    path: list[str],
+) -> None:
+    assert can_access_employee_receipt_route("viewer", "finance", method, path)
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", ["startup-expenses"]),
+        ("POST", ["entries"]),
+        (
+            "POST",
+            ["receipts", "00000000-0000-0000-0000-000000000010", "approve"],
+        ),
+        (
+            "POST",
+            ["receipts", "00000000-0000-0000-0000-000000000010", "export"],
+        ),
+        ("GET", ["receipts", "not-a-uuid"]),
+    ],
+)
+def test_viewer_receipt_intake_does_not_open_sensitive_finance_routes(
+    method: str,
+    path: list[str],
+) -> None:
+    assert not can_access_employee_receipt_route("viewer", "finance", method, path)
+
+
+def test_viewer_can_list_only_their_receipts_but_cannot_access_finance_admin() -> None:
+    _authenticate_as("viewer")
+
+    receipts = client.get("/api/v1/finance/receipts")
+    startup_expenses = client.get("/api/v1/finance/startup-expenses")
+    approve = client.post(
+        "/api/v1/finance/receipts/00000000-0000-0000-0000-000000000010/approve",
+        json={"version": 1, "reason": "Viewer must not approve receipts"},
+    )
+
+    assert receipts.status_code == 200
+    assert receipts.json() == {"items": [], "total": 0}
+    assert startup_expenses.status_code == 403
+    assert approve.status_code == 403
