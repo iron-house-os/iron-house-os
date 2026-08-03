@@ -11,14 +11,24 @@ const blankNarrative = { work_completed: "", delays_issues: "", potential_change
 const emptyPayload = (): DailyTimesheetPayload => ({ work_date: today(), shift: "day", project_id: "", project_manager_id: null, supervisor_id: "", weather: "", site_conditions: "", document_ids: [], labour: [], equipment: [], materials: [], narrative: { ...blankNarrative } });
 const STORAGE_KEY = "ihos:foreman-daily-timesheet:v1";
 
+function storedDraft(storageKey: string): { payload: DailyTimesheetPayload; sheetId?: string } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (!saved) return { payload: emptyPayload() };
+    if (saved.payload) return saved;
+    return { payload: saved };
+  } catch {
+    return { payload: emptyPayload() };
+  }
+}
+
 export function DailyTimesheetWorkflow() {
   const { user } = useAuth();
   const storageKey = `${STORAGE_KEY}:${user?.id ?? user?.email ?? "anonymous"}`;
+  const [restoredDraft] = useState(() => storedDraft(storageKey));
   const [data, setData] = useState<DailyTimesheetBootstrap | null>(null);
-  const [payload, setPayload] = useState<DailyTimesheetPayload>(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) || "null") || emptyPayload(); } catch { return emptyPayload(); }
-  });
-  const [sheetId, setSheetId] = useState<string | undefined>();
+  const [payload, setPayload] = useState<DailyTimesheetPayload>(restoredDraft.payload);
+  const [sheetId, setSheetId] = useState<string | undefined>(restoredDraft.sheetId);
   const [status, setStatus] = useState("draft");
   const [files, setFiles] = useState<File[]>([]);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "offline">("idle");
@@ -32,7 +42,10 @@ export function DailyTimesheetWorkflow() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { localStorage.removeItem(STORAGE_KEY); }, []);
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(payload)); }, [payload, storageKey]);
+  useEffect(() => {
+    if (status === "draft") localStorage.setItem(storageKey, JSON.stringify({ payload, sheetId }));
+    else localStorage.removeItem(storageKey);
+  }, [payload, sheetId, status, storageKey]);
 
   const codes = data?.project_cost_codes[payload.project_id] ?? [];
   const totals = useMemo(() => payload.labour.reduce((sum, line) => {

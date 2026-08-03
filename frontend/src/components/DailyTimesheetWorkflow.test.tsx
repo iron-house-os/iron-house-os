@@ -51,4 +51,22 @@ describe("DailyTimesheetWorkflow", () => {
     expect(screen.getByLabelText("Existing receipt record")).toHaveValue("receipt-1");
     expect(screen.getByText(/Mixed lines may use separate job cost codes/)).toBeInTheDocument();
   });
+
+  it("restores totals after refresh and updates the existing server draft", async () => {
+    const first = render(<DailyTimesheetWorkflow />);
+    fireEvent.change(await screen.findByLabelText("Job number and name"), { target: { value: "job-1" } });
+    fireEvent.change(screen.getByLabelText("Foreman / supervisor"), { target: { value: "foreman-1" } });
+    fireEvent.change(screen.getByLabelText("Job cost code"), { target: { value: "03-100" } });
+    fireEvent.change(screen.getByLabelText("ST"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("OT"), { target: { value: "1.5" } });
+    await waitFor(() => expect(dailyTimesheetApi.save).toHaveBeenCalled(), { timeout: 2500 });
+    await waitFor(() => expect(localStorage.getItem("ihos:foreman-daily-timesheet:v1:user-115")).toContain('"sheetId":"sheet-1"'));
+
+    first.unmount();
+    vi.mocked(dailyTimesheetApi.save).mockClear();
+    render(<DailyTimesheetWorkflow />);
+
+    expect(await screen.findByText(/ST 8.00 · OT 1.50 · 9.50 hours/)).toBeInTheDocument();
+    await waitFor(() => expect(dailyTimesheetApi.save).toHaveBeenCalledWith(expect.any(Object), "sheet-1"), { timeout: 2500 });
+  });
 });
