@@ -285,3 +285,32 @@ def test_ai_extraction_uses_controlled_images_and_returns_unapproved_draft(monke
     assert captured["body"]["store"] is False
     assert "4111111111111111" not in json.dumps(captured["body"])
     assert client.get("/api/v1/finance/receipts").json()["total"] == 0
+
+
+def test_extraction_normalization_merges_reliable_duplicates_and_rejects_unreconciled_lines() -> None:
+    raw = {
+        "vendor_name": "Civil Supply", "receipt_date": "2026-08-02", "subtotal": 20,
+        "gst": 1, "pst": 0, "other_tax": 0, "total": 21,
+        "line_items": [
+            {"description": "GLOVES", "normalized_description": "Safety gloves", "quantity": 1, "unit_price": 10, "tax": 0.5, "confidence": 0.95},
+            {"description": "Safety gloves", "normalized_description": "Safety gloves", "quantity": 1, "unit_price": 10, "tax": 0.5, "confidence": 0.92},
+            {"description": "OCR fragment", "quantity": 1, "unit_price": 99, "tax": 0, "confidence": 0.2},
+        ],
+    }
+    receipt_extraction._normalize_extraction(raw, {"vendor_name": 0.95, "receipt_date": 0.94, "subtotal": 0.96, "total": 0.97})
+    assert len(raw["line_items"]) == 1
+    assert raw["line_items"][0]["quantity"] == 2.0
+    assert raw["line_items"][0]["line_total"] == 20.0
+    assert raw["line_items"][0]["tax"] == 1.0
+
+    raw["line_items"][0]["tax"] = 0.2
+    receipt_extraction._normalize_extraction(raw, {"vendor_name": 0.95, "receipt_date": 0.94, "subtotal": 0.96, "total": 0.97})
+    assert raw["line_items"] == []
+
+
+def test_extraction_normalization_clears_uncertain_core_fields() -> None:
+    raw = {"vendor_name": "Guessed", "receipt_date": "2026-08-02", "subtotal": 10, "total": 10, "line_items": []}
+    receipt_extraction._normalize_extraction(raw, {"vendor_name": 0.4, "receipt_date": 0.8, "subtotal": 0.5, "total": 0.9})
+    assert raw["vendor_name"] is None
+    assert raw["subtotal"] is None
+    assert raw["receipt_date"] == "2026-08-02"
