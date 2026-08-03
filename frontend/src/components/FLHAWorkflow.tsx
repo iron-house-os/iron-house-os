@@ -126,7 +126,8 @@ export function FLHAWorkflow({ data, canCreate, onSaved, onError }: Props) {
     const value = record.details;
     setEditing(asReassessment ? null : record);
     setReassessment(asReassessment ? { sourceId: record.id, reason: window.prompt("Why is this re-assessment required?") ?? "Material field conditions changed" } : null);
-    setProjectId(record.project_id ?? ""); setSite(String(value.site_location ?? "")); setAssessmentDateTime(localDateTime());
+    setProjectId(record.project_id ?? ""); setSite(String(value.site_location ?? ""));
+    setAssessmentDateTime(asReassessment ? localDateTime() : String(value.assessment_datetime ?? localDateTime()));
     setSupervisorId(String((value.supervisor as Record<string, unknown> | undefined)?.id ?? ""));
     setFirstAidId(String((value.first_aid_attendant as Record<string, unknown> | undefined)?.id ?? ""));
     setCrewIds(((value.crew as Array<Record<string, string>> | undefined) ?? []).map((item) => item.id));
