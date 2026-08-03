@@ -1,4 +1,5 @@
 from enum import StrEnum
+from uuid import UUID
 
 from app.services.document_audit_access import normalize_role
 
@@ -105,6 +106,32 @@ def required_permission(module: str, method: str) -> ModulePermission:
 
 def can_access_module(role: str | None, module: str, permission: ModulePermission) -> bool:
     return permission in module_permissions_for_role(role, module)
+
+
+def can_access_employee_receipt_route(
+    role: str | None,
+    module: str,
+    method: str,
+    relative_path: list[str],
+) -> bool:
+    """Allow employee receipt intake without opening the rest of finance."""
+    if normalize_role(role) != "viewer" or module != "finance" or not relative_path:
+        return False
+
+    normalized_method = method.upper()
+    if relative_path == ["receipts"]:
+        return normalized_method in {"GET", "POST"}
+    if relative_path == ["receipts", "extract"]:
+        return normalized_method == "POST"
+    if len(relative_path) not in {2, 3} or relative_path[0] != "receipts":
+        return False
+    try:
+        UUID(relative_path[1])
+    except ValueError:
+        return False
+    if len(relative_path) == 2:
+        return normalized_method in {"GET", "PUT"}
+    return relative_path[2] == "submit" and normalized_method == "POST"
 
 
 def describe_role_access(role: str | None) -> dict[str, list[str]]:

@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.core.config import get_settings
-from app.services.access_control import can_access_module, required_permission
+from app.services.access_control import (
+    can_access_employee_receipt_route,
+    can_access_module,
+    required_permission,
+)
 from app.services.auth import AuthenticatedUser, account_to_principal, decode_session_token, get_account
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
 from app.services.request_context import get_request_audit_context
@@ -76,6 +80,14 @@ def require_module_access(request: Request, user: CurrentUser) -> AuthenticatedU
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Change your temporary password before accessing business modules.",
         )
+    relative_path = path_parts[len(prefix) + 1 :]
+    if can_access_employee_receipt_route(
+        user.role,
+        module,
+        request.method,
+        relative_path,
+    ):
+        return user
     if can_access_module(user.role, module, permission):
         return user
 
