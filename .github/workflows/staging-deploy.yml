@@ -1,0 +1,39 @@
+name: Staging deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character commit SHA from main
+        required: true
+        type: string
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy and verify staging
+    runs-on: [self-hosted, linux, ihos-staging]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Deploy staging
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: sudo /usr/local/sbin/ihos-staging-deploy "$RELEASE_SHA"
+
+      - name: Verify public staging endpoints
+        run: |
+          curl --fail --silent --show-error https://staging.os.ironhousecivil.com/health
+          curl --fail --silent --show-error https://staging.os.ironhousecivil.com/readiness
