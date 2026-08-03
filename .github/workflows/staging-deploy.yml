@@ -40,25 +40,16 @@ jobs:
           fetch-depth: 0
           clean: true
 
-      - name: Verify main ancestry
+      - name: Verify approved main commit
         env:
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
           git fetch --quiet origin main
           [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          [[ -z "$(git status --porcelain)" ]]
 
-      - name: Deploy staging
-        env:
-          RELEASE_SHA: ${{ steps.release.outputs.sha }}
-          IHOS_STAGING_ENV_FILE: /etc/iron-house-os/staging.env
-        run: |
-          sudo bash ops/digitalocean/staging-deploy.sh \
-            --prepare \
-            --host staging.os.ironhousecivil.com \
-            --release "$RELEASE_SHA"
-
-      - name: Verify OpenAI configuration without exposing secrets
+      - name: Validate staging secret and OpenAI provider
         env:
           ENV_FILE: /etc/iron-house-os/staging.env
         run: |
@@ -67,14 +58,14 @@ jobs:
             source "$1"
             set +a
             [[ -n "${OPENAI_API_KEY:-}" ]]
-            status=$(curl -sS -o /tmp/openai-preflight.json -w "%{http_code}" \
+            status=$(curl -sS -o /tmp/ihos-openai-preflight.json -w "%{http_code}" \
               https://api.openai.com/v1/models \
               -H "Authorization: Bearer $OPENAI_API_KEY")
             if [[ "$status" != 200 ]]; then
               python3 - <<"PY"
 import json
 from pathlib import Path
-payload = json.loads(Path("/tmp/openai-preflight.json").read_text())
+payload = json.loads(Path("/tmp/ihos-openai-preflight.json").read_text())
 error = payload.get("error", {})
 print("OpenAI preflight failed:", error.get("code") or error.get("type"), "-", error.get("message"))
 PY
@@ -82,8 +73,35 @@ PY
             fi
           ' _ "$ENV_FILE"
 
+      - name: Build and deploy staging
+        env:
+          ENV_FILE: /etc/iron-house-os/staging.env
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          COMPOSE_PROJECT: iron-house-os-staging
+        run: |
+          sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" \
+            docker compose \
+              --env-file "$ENV_FILE" \
+              -f docker-compose.staging.yml \
+              -p "$COMPOSE_PROJECT" \
+              up -d --build --wait --remove-orphans
+
+      - name: Verify backend received OpenAI key
+        env:
+          ENV_FILE: /etc/iron-house-os/staging.env
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          COMPOSE_PROJECT: iron-house-os-staging
+        run: |
+          result=$(sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" \
+            docker compose \
+              --env-file "$ENV_FILE" \
+              -f docker-compose.staging.yml \
+              -p "$COMPOSE_PROJECT" \
+              exec -T backend sh -lc 'if [ -n "$OPENAI_API_KEY" ]; then printf configured; else printf missing; fi')
+          [[ "$result" == "configured" ]]
+
       - name: Verify public staging
         run: |
           curl --fail --silent --show-error https://staging.os.ironhousecivil.com/health >/dev/null
           curl --fail --silent --show-error https://staging.os.ironhousecivil.com/readiness >/dev/null
-          echo "Staging deployment and provider preflight passed."
+          echo "Staging deployment, health checks, and OpenAI preflight passed."
