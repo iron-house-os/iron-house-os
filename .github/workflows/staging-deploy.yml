@@ -1,0 +1,89 @@
+name: Staging deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character commit SHA from main
+        required: true
+        type: string
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy and verify staging
+    runs-on: [self-hosted, linux, ihos-staging]
+    environment: staging
+    timeout-minutes: 45
+    steps:
+      - name: Resolve release
+        id: release
+        shell: bash
+        env:
+          INPUT_SHA: ${{ inputs.release_sha }}
+        run: |
+          release="${INPUT_SHA:-$GITHUB_SHA}"
+          [[ "$release" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$release" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          fetch-depth: 0
+          clean: true
+
+      - name: Verify main ancestry
+        env:
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          git fetch --quiet origin main
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+
+      - name: Deploy staging
+        env:
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          IHOS_STAGING_ENV_FILE: /etc/iron-house-os/staging.env
+        run: |
+          sudo bash ops/digitalocean/staging-deploy.sh \
+            --prepare \
+            --host staging.os.ironhousecivil.com \
+            --release "$RELEASE_SHA"
+
+      - name: Verify OpenAI configuration without exposing secrets
+        env:
+          ENV_FILE: /etc/iron-house-os/staging.env
+        run: |
+          sudo bash -ceu '
+            set -a
+            source "$1"
+            set +a
+            [[ -n "${OPENAI_API_KEY:-}" ]]
+            status=$(curl -sS -o /tmp/openai-preflight.json -w "%{http_code}" \
+              https://api.openai.com/v1/models \
+              -H "Authorization: Bearer $OPENAI_API_KEY")
+            if [[ "$status" != 200 ]]; then
+              python3 - <<"PY"
+import json
+from pathlib import Path
+payload = json.loads(Path("/tmp/openai-preflight.json").read_text())
+error = payload.get("error", {})
+print("OpenAI preflight failed:", error.get("code") or error.get("type"), "-", error.get("message"))
+PY
+              exit 1
+            fi
+          ' _ "$ENV_FILE"
+
+      - name: Verify public staging
+        run: |
+          curl --fail --silent --show-error https://staging.os.ironhousecivil.com/health >/dev/null
+          curl --fail --silent --show-error https://staging.os.ironhousecivil.com/readiness >/dev/null
+          echo "Staging deployment and provider preflight passed."
