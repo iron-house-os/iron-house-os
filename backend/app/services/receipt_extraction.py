@@ -19,6 +19,7 @@ from app.models.supplier import Supplier
 from app.schemas.receipt import ReceiptCreate, ReceiptExtractionRequest, ReceiptExtractionResponse
 from app.services.auth import AuthenticatedUser
 from app.services.file_storage import resolve_storage_path
+from app.services.local_receipt_ocr import extract_local_receipt
 from app.services.receipts import _assets
 
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
@@ -37,10 +38,9 @@ Return JSON matching the supplied schema exactly, with null for unknown scalar f
 
 def extract_receipt(db: Session, payload: ReceiptExtractionRequest, user: AuthenticatedUser) -> ReceiptExtractionResponse:
     settings = get_settings()
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=503, detail="AI receipt extraction is unavailable; keep the photos and enter the draft manually.")
     assets = _assets(db, payload.media_asset_ids, user)
     content = [{"type": "input_text", "text": _context(db, user)}]
+    images: list[bytes] = []
     for asset in assets:
         document = db.get(Document, asset.original_document_id)
         if document is None or not document.storage_uri:
@@ -51,8 +51,13 @@ def extract_receipt(db: Session, payload: ReceiptExtractionRequest, user: Authen
         media_type = str((document.metadata_json or {}).get("content_type", "image/jpeg"))
         if not media_type.startswith("image/"):
             raise HTTPException(status_code=422, detail="Receipt extraction accepts images only.")
+        images.append(image)
         encoded = base64.b64encode(image).decode("ascii")
         content.append({"type": "input_image", "image_url": f"data:{media_type};base64,{encoded}", "detail": "original"})
+
+    if not settings.openai_api_key:
+        return _local_response(images, payload)
+
     body = {
         "model": settings.openai_chat_model,
         "instructions": INSTRUCTIONS,
@@ -71,13 +76,22 @@ def extract_receipt(db: Session, payload: ReceiptExtractionRequest, user: Authen
         regions = {item["name"]: item["source_region"] for item in raw.pop("field_regions") if item["source_region"] is not None}
         _normalize_extraction(raw, confidence)
         draft = ReceiptCreate.model_validate({**raw, "media_asset_ids": payload.media_asset_ids, "confidence": confidence, "source_regions": regions})
-    except HTTPError as exc:
-        raise HTTPException(status_code=503, detail=f"AI receipt extraction was rejected by the provider ({exc.code}); enter the draft manually.") from exc
-    except (URLError, TimeoutError) as exc:
-        raise HTTPException(status_code=503, detail="AI receipt extraction is temporarily unavailable; enter the draft manually.") from exc
+    except (HTTPError, URLError, TimeoutError):
+        return _local_response(images, payload)
     except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, ValidationError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="AI receipt extraction returned an invalid draft; enter the values manually.") from exc
     return ReceiptExtractionResponse(draft=draft, model=settings.openai_chat_model)
+
+
+def _local_response(images: list[bytes], payload: ReceiptExtractionRequest) -> ReceiptExtractionResponse:
+    try:
+        draft = extract_local_receipt(images, payload.media_asset_ids)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Receipt extraction is temporarily unavailable; the photos were kept for manual entry.",
+        ) from exc
+    return ReceiptExtractionResponse(draft=draft, model="local-tesseract-ocr")
 
 
 def _money(value: object) -> Decimal | None:
