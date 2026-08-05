@@ -121,7 +121,6 @@ export const equipmentRatesApi = {
         expiry_date: expiry.toISOString().slice(0, 10),
         regional_market: payload.regional_market,
         lines: [payload],
-        executive_approved: false,
       }),
     });
     if (!response.ok) throw new Error("Unable to export draft rate sheet");
