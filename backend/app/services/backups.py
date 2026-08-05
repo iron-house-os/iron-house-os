@@ -403,9 +403,14 @@ def _ensure_media_link(db: Session, media_id: UUID, record_type: str, record_id:
 
 def _classify(text: str) -> Classification:
     local = _local_classification(text)
-    settings = get_settings()
-    if not settings.openai_api_key or not text.strip():
+    if local.detected_type != "other" and local.confidence >= MIN_ROUTE_CONFIDENCE:
         return local
+    if not text.strip():
+        return Classification("other", 0.0, "local_ocr_no_text")
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return Classification(local.detected_type, local.confidence, "local_ocr_provider_unconfigured")
     try:
         return _external_classification(text, settings)
     except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError, json.JSONDecodeError):
@@ -414,14 +419,28 @@ def _classify(text: str) -> Classification:
 
 def _local_classification(text: str) -> Classification:
     normalized = " ".join(text.lower().split())
+    if not normalized:
+        return Classification("other", 0.0, "local_ocr_no_text")
     if any(term in normalized for term in ("packing slip", "delivery ticket", "proof of delivery", "packing list")):
         return Classification("packing_slip", 0.94, "local_ocr")
     if any(term in normalized for term in ("supplier invoice", "tax invoice", "invoice number", "invoice #", "amount due", "remit to")):
         return Classification("supplier_invoice", 0.92, "local_ocr")
-    receipt_score = sum(term in normalized for term in ("receipt", "subtotal", "total", "thank you", "change due"))
-    if receipt_score >= 2:
-        return Classification("receipt", min(0.96, 0.68 + receipt_score * 0.07), "local_ocr")
-    return Classification("other", 0.25 if normalized else 0.0, "local_ocr")
+
+    receipt_score = 0
+    receipt_score += 2 if "receipt" in normalized else 0
+    receipt_score += 2 if any(term in normalized for term in ("subtotal", "sub total", "sub-total")) else 0
+    receipt_score += 1 if "total" in normalized else 0
+    receipt_score += 1 if any(term in normalized for term in ("thank you", "change due", "cashier", "transaction")) else 0
+    receipt_score += 1 if any(term in normalized for term in ("cash", "debit", "credit", "visa", "mastercard", "approved")) else 0
+    receipt_score += 1 if any(term in normalized for term in ("gst", "pst", "hst", "sales tax")) else 0
+
+    amount_count = len(re.findall(r"(?<!\\d)(?:[$]\\s*)?\\d{1,6}[.,]\\d{2}(?!\\d)", normalized))
+    receipt_score += 1 if amount_count >= 2 else 0
+    receipt_score += 1 if amount_count >= 4 else 0
+
+    if receipt_score >= 4:
+        return Classification("receipt", min(0.96, 0.74 + receipt_score * 0.04), "local_ocr")
+    return Classification("other", 0.0, "local_ocr_unclassified")
 
 
 def _external_classification(text: str, settings) -> Classification:
