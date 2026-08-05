@@ -16,6 +16,7 @@ EXPECTED_SHEETS = [
     "Summary",
     "Line Items",
     "Production Rates",
+    "Equipment Rates",
     "Markups",
     "Risks",
     "Assumptions",
@@ -75,6 +76,9 @@ def test_workbook_contains_complete_estimator_sheet_contract() -> None:
     assert workbook["Quote Comparison"]["F4"].value == "Yes"
     assert workbook["Quote Comparison"]["G4"].value == "Complete scope and confirmed delivery"
     assert workbook["Quote Comparison"]["H4"].value == "Scope reviewed"
+    assert workbook["Equipment Rates"]["B4"].value == "Excavator"
+    assert workbook["Equipment Rates"]["D4"].value == 142
+    assert workbook["Equipment Rates"]["F4"].value == "IEOA 2026 Suggested Equipment Rates"
 
 
 def test_workbook_records_empty_assumptions_exclusions_and_line_items() -> None:
