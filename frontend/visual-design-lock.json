@@ -14,7 +14,8 @@
     "frontend/src/pages/DashboardPage.tsx": "c8fb703a5c2014231c7934205d18cce247a15a805b73624fa21463225dd5649a",
     "frontend/src/pages/LoginPage.tsx": "8cc96693579ea7e18e3fa34b456f259ad47b8479230df8c04bf7de50e3b510fe",
     "frontend/src/styles.css": "d0ed7ee59b1690db07d4d70193cfbf1f3f80d6a5084edfedad786817de4ce58d",
-    "frontend/tailwind.config.ts": "3c9eae349df550797ad4590c8cfc905e031639f3eadf883844d4386d037be7e2"
+    "frontend/tailwind.config.ts": "3c9eae349df550797ad4590c8cfc905e031639f3eadf883844d4386d037be7e2",
+    "frontend/src/components/AppLayout.tsx": "86aa8205cd5275376386a4b7212e70f743fa85bb40ff7eab7053d4922d9b4b54"
   },
   "policy": "docs/visual-design-lock.md",
   "schema_version": 1
