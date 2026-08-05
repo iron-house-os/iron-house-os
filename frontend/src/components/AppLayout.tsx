@@ -46,7 +46,7 @@ export function AppLayout({ children }: PropsWithChildren) {
                 to={modulePathWithProjectContext(module.path, activeProject)}
                 className={({ isActive }) =>
                   [
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition",
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-shadow",
                     isActive
                       ? "bg-brand-gold text-brand-black shadow-md"
                       : "text-iron-100 hover:bg-white/10 hover:text-white",
