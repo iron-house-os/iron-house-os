@@ -224,3 +224,50 @@ def test_rate_library_exposes_default_activities() -> None:
 
     assert DefaultProductionActivity.pipe_installation in activities
     assert DefaultProductionActivity.traffic_control in activities
+
+
+
+def test_shared_all_in_equipment_rate_prevents_operator_double_count() -> None:
+    from app.schemas.equipment_rates import (
+        EquipmentRateInput,
+        RateCategory,
+        RegionalMarket,
+        RentalPeriod,
+    )
+
+    item = EstimateLineItem(
+        description="Operate rented excavator",
+        quantity=8,
+        unit=EstimateUnit.hour,
+        production_rate_per_hour=1,
+        labour=[
+            LabourCrewMember(role="Operator", quantity=1, hourly_rate=50),
+            LabourCrewMember(role="Labourer", quantity=1, hourly_rate=30),
+        ],
+        equipment=[
+            EquipmentResource(
+                name="20-23 t excavator",
+                quantity=1,
+                hourly_rate=0,
+                rate_input=EquipmentRateInput(
+                    regional_market=RegionalMarket.surrey_fraser_valley_east,
+                    rate_category=RateCategory.equipment,
+                    equipment_class="Excavator",
+                    equipment_description="20-23 t",
+                    operator_included=True,
+                    base_rate=800,
+                    rental_period=RentalPeriod.day,
+                    included_hours=8,
+                    target_margin_percent=10,
+                    market_benchmark_rate=228,
+                    source_name="IEOA 2026 Suggested Equipment Rates",
+                ),
+            )
+        ],
+    )
+
+    result = calculate_line_item(item)
+
+    assert result.labour_cost == 240
+    assert result.equipment_cost == 800
+    assert result.direct_cost == 1040
