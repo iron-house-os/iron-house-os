@@ -8,6 +8,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.schemas.estimate import EstimateCreate, EstimateSummary
+from app.services.equipment_rates import get_equipment_rate_library
 from app.services.estimates import calculate_estimate, get_rate_library
 
 TITLE_FILL = "1F4E79"
@@ -28,6 +29,7 @@ def build_estimate_workbook(payload: EstimateCreate) -> bytes:
     _build_summary_sheet(workbook, summary)
     _build_line_items_sheet(workbook, summary)
     _build_production_rates_sheet(workbook)
+    _build_equipment_rates_sheet(workbook)
     _build_markups_sheet(workbook, payload, summary)
     _build_risks_sheet(workbook, payload)
     _build_assumptions_sheet(workbook, summary)
@@ -188,6 +190,43 @@ def _build_production_rates_sheet(workbook: Workbook) -> None:
     _apply_borders(sheet, 3, 1, len(get_rate_library().production_rates) + 3, len(headers))
     _set_widths(sheet, {"A": 24, "B": 42, "C": 10, "D": 16, "E": 44, "F": 44, "G": 42})
 
+
+
+def _build_equipment_rates_sheet(workbook: Workbook) -> None:
+    sheet = workbook.create_sheet("Equipment Rates")
+    _title(sheet, "Approved Equipment and Attachment Rate Library")
+    headers = [
+        "Category",
+        "Class",
+        "Description",
+        "Client Benchmark",
+        "Operator Included",
+        "Source",
+        "Effective Date",
+    ]
+    _write_headers(sheet, headers, row=3)
+    library = get_equipment_rate_library()
+    for row_index, rate in enumerate(library.benchmarks, start=4):
+        _write_row(
+            sheet,
+            row_index,
+            [
+                rate.rate_category.value,
+                rate.equipment_class,
+                rate.equipment_description,
+                "Price on Request" if rate.price_on_request else rate.base_rate,
+                "Yes" if rate.operator_included else "No",
+                rate.source_name,
+                rate.source_effective_date.isoformat(),
+            ],
+        )
+        if rate.base_rate is not None:
+            sheet.cell(row=row_index, column=4).number_format = MONEY_FORMAT
+    _apply_borders(sheet, 3, 1, len(library.benchmarks) + 3, len(headers))
+    _set_widths(
+        sheet,
+        {"A": 20, "B": 28, "C": 42, "D": 20, "E": 18, "F": 34, "G": 18},
+    )
 
 def _build_markups_sheet(workbook: Workbook, payload: EstimateCreate, summary: EstimateSummary) -> None:
     sheet = workbook.create_sheet("Markups")
