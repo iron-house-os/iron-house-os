@@ -128,6 +128,20 @@ def test_contract_rate_overrides_default_but_below_benchmark_needs_approval() ->
     assert "selected_rate_below_benchmark" in result.approval_reasons
 
 
+def test_approved_override_without_written_reason_stays_blocked() -> None:
+    result = calculate_equipment_rate(
+        rate_input(
+            rate_basis=RateBasis.contract_rate,
+            contract_rate=190,
+            market_benchmark_rate=228,
+            approval_status=ApprovalStatus.approved,
+        )
+    )
+
+    assert result.approval_required is True
+    assert "override_reason_required" in result.approval_reasons
+
+
 def test_approved_override_clears_gate_without_hiding_reasons() -> None:
     result = calculate_equipment_rate(
         rate_input(
