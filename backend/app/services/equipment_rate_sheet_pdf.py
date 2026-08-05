@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from textwrap import wrap
 
-from app.core.errors import AppError
 from app.schemas.equipment_rates import ClientRateSheetRequest
 from app.services.equipment_rates import calculate_equipment_rate
 from app.services.flha_pdf import _build_pdf
@@ -10,13 +9,6 @@ from app.services.flha_pdf import _build_pdf
 
 def render_client_rate_sheet_pdf(payload: ClientRateSheetRequest) -> bytes:
     calculated = [(line, calculate_equipment_rate(line)) for line in payload.lines]
-    blocked = [result for _, result in calculated if result.approval_required]
-    if payload.executive_approved and blocked:
-        raise AppError(
-            "Executive issue is blocked until all rate exceptions are approved.",
-            status_code=409,
-        )
-
     lines: list[str] = []
 
     def add(value: str = "") -> None:
@@ -24,10 +16,7 @@ def render_client_rate_sheet_pdf(payload: ClientRateSheetRequest) -> bytes:
 
     add("IRON HOUSE CONTRACTING LTD.")
     add(payload.title.upper())
-    if payload.executive_approved:
-        add(f"APPROVED FOR ISSUE - Reference: {payload.approval_reference}")
-    else:
-        add("DRAFT - NOT APPROVED FOR EXTERNAL ISSUE")
+    add("DRAFT - NOT APPROVED FOR EXTERNAL ISSUE")
     add(
         f"Market: {payload.regional_market.value.replace('_', ' ').title()} | "
         f"Effective: {payload.effective_date} | Expires: {payload.expiry_date}"
