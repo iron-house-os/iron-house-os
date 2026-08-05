@@ -23,6 +23,7 @@ import { Link } from "react-router-dom";
 import { MediaCategory, mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { DailyTimesheetWorkflow } from "../components/DailyTimesheetWorkflow";
+import { BackupsPage } from "./BackupsPage";
 import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
 import { FLHAWorkflow } from "../components/FLHAWorkflow";
 import { useAuth } from "../contexts/AuthContext";
@@ -143,7 +144,8 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
   return (
     <PortalShell title="Foreman Portal" eyebrow="Field command centre" description="Crew time, daily records, vendors, quantities, weather, safety and production evidence." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["time", "Crew timesheet"], ["schedule", "Crew schedule"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
+      {section === "backups" ? <BackupsPage /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["backups", "Backups"], ["time", "Crew timesheet"], ["schedule", "Crew schedule"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
@@ -280,7 +282,8 @@ export function OperatorPortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
+      {section === "backups" ? <BackupsPage /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["backups", "Backups"], ["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
@@ -303,7 +306,8 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Employee Portal" eyebrow="Iron House Contracting" description="Time, daily journal, safety, job photos, requests, contact information and course tickets." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
+      {section === "backups" ? <BackupsPage /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["backups", "Backups"], ["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
       {section === "safety" ? <SafetyProgramCard /> : null}
       {state.data ? (
         <>

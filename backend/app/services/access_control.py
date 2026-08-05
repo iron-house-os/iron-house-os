@@ -12,6 +12,7 @@ class ModulePermission(StrEnum):
 
 BUSINESS_MODULES = (
     "iron-house-chat",
+    "backups",
     "meeting-minutes",
     "google-calendar",
     "projects",
@@ -40,6 +41,8 @@ ALL_MODULES = (*BUSINESS_MODULES, "users", "operations")
 ESTIMATOR_WRITE_MODULES = frozenset(
     {
         "projects",
+        "backups",
+        "media",
         "suppliers",
         "rfqs",
         "rfq-automation",
@@ -90,7 +93,7 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
         permissions = {ModulePermission.READ}
         if module in {"field-operations", "daily-timesheets"}:
             permissions.add(ModulePermission.WRITE)
-        if module == "media":
+        if module in {"media", "backups"}:
             permissions.add(ModulePermission.WRITE)
         return frozenset(permissions)
     return frozenset()

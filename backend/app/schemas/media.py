@@ -15,6 +15,7 @@ class MediaCategory(StrEnum):
     deficiency = "deficiency"
     expense = "expense"
     receipt = "receipt"
+    backup = "backup"
 
 
 class MediaAction(StrEnum):

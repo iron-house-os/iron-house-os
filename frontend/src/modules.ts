@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  ArchiveRestore,
   DollarSign,
   BookOpen,
   Building2,
@@ -37,6 +38,13 @@ export const modules: AppModule[] = [
     path: "/dashboard",
     icon: Gauge,
     description: "Operational snapshot for projects, bids, suppliers, and workload.",
+    status: "MVP active",
+  },
+  {
+    label: "Backups",
+    path: "/backups",
+    icon: ArchiveRestore,
+    description: "Single-photo document inbox with conservative daily review routing.",
     status: "MVP active",
   },
   {
