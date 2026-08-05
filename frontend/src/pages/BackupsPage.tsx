@@ -157,6 +157,7 @@ export function BackupsPage() {
                   {isManagement ? <span className="text-xs text-iron-500">{item.uploader_email} · {item.uploader_role.replaceAll("_", " ")}</span> : null}
                 </div>
                 <div className="mt-2 text-sm text-iron-700">{item.detected_type ? item.detected_type.replaceAll("_", " ") : "Awaiting classification"}{item.confidence !== null ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}</div>
+                {item.classification_source ? <div className="mt-1 text-xs text-iron-500">Classification source: {classificationSourceLabel(item.classification_source)}</div> : null}
                 {item.project_hint ? <div className="mt-1 text-sm text-iron-500">Project hint: {item.project_hint}</div> : null}
                 {item.note ? <div className="mt-1 text-sm text-iron-500">{item.note}</div> : null}
                 {item.sensitive_quarantine ? <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-amber-800"><ShieldCheck className="h-4 w-4" />Sensitive-content quarantine; external AI was skipped.</div> : null}
@@ -172,6 +173,16 @@ export function BackupsPage() {
       </section>
     </section>
   );
+}
+
+function classificationSourceLabel(source: string) {
+  if (source === "openai_api") return "AI-assisted classification";
+  if (source === "local_ocr") return "Local OCR";
+  if (source === "local_sensitive_screen") return "Local sensitive-content screen";
+  if (source === "local_ocr_no_text") return "No readable text detected";
+  if (source === "local_ocr_unclassified") return "Local OCR found no reliable document type";
+  if (source === "local_ocr_provider_unconfigured" || source === "local_ocr_provider_fallback") return "Local OCR fallback";
+  return source.replaceAll("_", " ");
 }
 
 function StatusPill({ status }: { status: string }) {
