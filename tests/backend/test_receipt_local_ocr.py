@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from PIL import Image
+
 from app.services import local_receipt_ocr
 
 
@@ -77,3 +79,39 @@ def test_generic_tax_does_not_match_total(monkeypatch) -> None:
 
     assert draft.other_tax == 0
     assert draft.total == 100
+
+
+
+def test_local_ocr_crops_bright_receipt_from_dark_background() -> None:
+    image = Image.new("L", (400, 400), color=20)
+    image.paste(220, (135, 15, 265, 385))
+
+    cropped = local_receipt_ocr._crop_receipt_region(image)
+
+    assert cropped.width < image.width * 0.5
+    assert cropped.height > image.height * 0.8
+
+
+def test_local_ocr_prefers_sparse_title_header() -> None:
+    candidates = [
+        "PIUPBAL AATUBAL GAS) CH&eOAI\nINVOICE otee",
+        "Fortins",
+    ]
+
+    assert local_receipt_ocr._best_vendor_header(candidates) == "Fortins"
+
+
+def test_local_ocr_clears_unverified_garbage_header(monkeypatch) -> None:
+    monkeypatch.setattr(
+        local_receipt_ocr,
+        "_ocr_image",
+        lambda _data: "PIUPBAL AATUBAL GAS) CH&eOAI\nINVOICE otee",
+    )
+
+    draft = local_receipt_ocr.extract_local_receipt([b"image"], [ASSET_ID])
+
+    assert draft.vendor_name is None
+    assert draft.reference is None
+    assert draft.receipt_date is None
+    assert draft.total is None
+    assert "vendor_name" not in draft.confidence

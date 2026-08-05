@@ -43,6 +43,16 @@ describe("ReceiptCapturePanel", () => {
     expect(financeApi.createReceipt).not.toHaveBeenCalled();
   });
 
+  it("clears the capture date when extraction cannot verify a receipt date", async () => {
+    const user = userEvent.setup(); render(<ReceiptCapturePanel />);
+    vi.mocked((await import("../api/media")).mediaApi.upload).mockResolvedValue([{ id: "asset-local" }] as never);
+    vi.mocked(financeApi.extractReceipt).mockResolvedValue({ model: "local-tesseract", draft: { media_asset_ids: ["asset-local"], vendor_name: null, vendor_address: null, reference: null, receipt_date: null, receipt_time: null, currency: "CAD", subtotal: null, discounts: 0, gst: 0, pst: 0, other_tax: 0, tip: 0, total: null, payment_method: null, card_brand: null, card_last_four: null, employee_email: null, treatment: "needs_review", confidence: {}, source_regions: {}, flags: ["local_ocr_fallback", "needs_review"], line_items: [] } });
+    await user.click(screen.getByRole("button", { name: "Choose mock photo" }));
+    await user.click(screen.getByRole("button", { name: "Extract receipt" }));
+    expect(await screen.findByText(/AI draft extracted with local-tesseract/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Date")).toHaveValue("");
+  });
+
   it("shows source highlights and disables approval for low-confidence, unbalanced receipts", async () => {
     vi.mocked(financeApi.getReceipts).mockResolvedValue({ items: [blockedReceipt], total: 1 } as never);
     render(<ReceiptCapturePanel reviewer />);
