@@ -140,3 +140,13 @@ class ClientRateSheetRequest(BaseModel):
     lines: list[EquipmentRateInput] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
+    executive_approved: bool = False
+    approval_reference: str | None = None
+
+    @model_validator(mode="after")
+    def validate_issue_gate(self) -> ClientRateSheetRequest:
+        if self.expiry_date < self.effective_date:
+            raise ValueError("Rate-sheet expiry cannot precede its effective date.")
+        if self.executive_approved and not (self.approval_reference or "").strip():
+            raise ValueError("Executive approval requires an approval reference.")
+        return self
