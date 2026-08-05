@@ -31,6 +31,7 @@ CONTROLLED_CATEGORIES = {
     MediaCategory.flha.value,
     MediaCategory.incident.value,
     MediaCategory.expense.value,
+    MediaCategory.backups.value,
     MediaCategory.receipt.value,
 }
 RECORD_MODELS = {

@@ -14,7 +14,13 @@ from app.models.finance import (
     ReceiptLineItem,
     StartupExpense,
 )
-from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
+from app.models.media import (
+    BackupIntake,
+    BackupIntakeAuditEvent,
+    MediaAsset,
+    MediaRecordLink,
+    MediaVersion,
+)
 from app.models.municipality import Municipality
 from app.models.project import Project, ProjectSupplier
 from app.models.rfq import (
@@ -52,6 +58,8 @@ __all__ = [
     "StartupExpense",
     "LoginThrottle",
     "MediaAsset",
+    "BackupIntake",
+    "BackupIntakeAuditEvent",
     "MediaRecordLink",
     "MediaVersion",
     "Municipality",

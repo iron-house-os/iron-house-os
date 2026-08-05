@@ -24,10 +24,14 @@ _ADDRESS_HINT = re.compile(
 )
 
 
+def extract_local_text(image_bytes: list[bytes]) -> str:
+    """Run the local OCR boundary used before any external document processing."""
+    return "\n".join(part for part in (_ocr_image(data) for data in image_bytes) if part).strip()
+
+
 def extract_local_receipt(image_bytes: list[bytes], media_asset_ids: list) -> ReceiptCreate:
     """Conservative local OCR fallback used when the external AI provider is unavailable."""
-    texts = [_ocr_image(data) for data in image_bytes]
-    text = "\n".join(part for part in texts if part).strip()
+    text = extract_local_text(image_bytes)
     lines = [_clean_line(line) for line in text.splitlines()]
     lines = [line for line in lines if line]
 

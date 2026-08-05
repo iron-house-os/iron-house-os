@@ -154,6 +154,12 @@ jobs:
           STAGING_SYNTHETIC_DATA: "true"
           STAGING_SYNTHETIC_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
         run: scripts/staging-smoke-test.sh
+      - name: Prove Backups upload, controller, triage, audit, and private original
+        run: >-
+          python scripts/backups_staging_probe.py
+          --base-url http://127.0.0.1:8081
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
       - name: Create pre-backup recovery sentinel
         run: >-
           python scripts/recovery_probe.py create
@@ -216,6 +222,7 @@ jobs:
             --rollback passed \
             --gate staging_configuration=passed \
             --gate staging_smoke=passed \
+            --gate backups_photo_inbox=passed \
             --gate role_denial=passed \
             --gate synthetic_data=passed \
             --gate backup_restore=passed \

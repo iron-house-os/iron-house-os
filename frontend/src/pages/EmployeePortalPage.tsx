@@ -143,7 +143,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
   return (
     <PortalShell title="Foreman Portal" eyebrow="Field command centre" description="Crew time, daily records, vendors, quantities, weather, safety and production evidence." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["time", "Crew timesheet"], ["schedule", "Crew schedule"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="foreman-portal" items={[["/backups", "Backups photo inbox"], ["time", "Crew timesheet"], ["schedule", "Crew schedule"], ["production", "Job production"], ["loads", "Materials and loads"], ["forms", "Field forms and photos"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
@@ -280,7 +280,7 @@ export function OperatorPortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["/backups", "Backups photo inbox"], ["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
       {state.data ? (
         <>
           <AlertStrip alerts={state.data.alerts} />
@@ -303,7 +303,7 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
   return (
     <PortalShell title="Employee Portal" eyebrow="Iron House Contracting" description="Time, daily journal, safety, job photos, requests, contact information and course tickets." icon={<HardHat />}>
       <Status state={state} />
-      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["/backups", "Backups photo inbox"], ["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
       {section === "safety" ? <SafetyProgramCard /> : null}
       {state.data ? (
         <>
@@ -459,7 +459,7 @@ function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperation
 }
 
 function PortalSectionDashboard({ root, items }: { root: string; items: string[][] }) {
-  return <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<ClipboardCheck />} title="Portal dashboard" subtitle="Open one workspace at a time for more room to enter notes, comments, photos and details." /><div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(([path, label]) => <Link key={path} to={`/${root}/${path}`} className="rounded-xl border border-brand-gold/30 bg-iron-50 p-5 transition hover:border-brand-gold hover:bg-brand-gold/10"><div className="font-semibold text-iron-950">{label}</div><div className="mt-2 text-sm text-iron-500">Open workspace</div></Link>)}</div></section>;
+  return <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<ClipboardCheck />} title="Portal dashboard" subtitle="Open one workspace at a time for more room to enter notes, comments, photos and details." /><div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{items.map(([path, label]) => <Link key={path} to={path.startsWith("/") ? path : `/${root}/${path}`} className="rounded-xl border border-brand-gold/30 bg-iron-50 p-5 transition hover:border-brand-gold hover:bg-brand-gold/10"><div className="font-semibold text-iron-950">{label}</div><div className="mt-2 text-sm text-iron-500">Open workspace</div></Link>)}</div></section>;
 }
 
 function SmallEquipmentInspectionCard({ data, onSaved, onError }: { data: FieldOperationsBootstrap; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {

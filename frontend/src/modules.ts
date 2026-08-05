@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Gauge,
   HardHat,
+  Inbox,
   UserRoundCog,
   Landmark,
   Mic2,
@@ -37,6 +38,13 @@ export const modules: AppModule[] = [
     path: "/dashboard",
     icon: Gauge,
     description: "Operational snapshot for projects, bids, suppliers, and workload.",
+    status: "MVP active",
+  },
+  {
+    label: "Backups",
+    path: "/backups",
+    icon: Inbox,
+    description: "Single-photo inbox with conservative daily review routing.",
     status: "MVP active",
   },
   {

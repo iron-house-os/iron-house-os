@@ -109,6 +109,14 @@ async function mockApi(page: Page) {
       });
       return;
     }
+    if (path.endsWith("/backups")) {
+      if (request.method() === "GET") {
+        await route.fulfill({ status: 200, json: { items: [], total: 0 } });
+        return;
+      }
+      await route.fulfill({ status: 201, json: { id: "15400000-0000-0000-0000-000000000001", media_asset_id: "15400000-0000-0000-0000-000000000002", media_sha256: "a".repeat(64), uploader_id: user.id, uploader_email: user.email, uploader_role: user.role, uploaded_at: "2026-08-05T14:24:59Z", note: "Packing slip backup", project_hint: "Granite Creek", status: "pending", detected_type: null, confidence: null, destination_type: null, destination_record_id: null, error: null, sensitive_quarantine: false, classifier: null, attempt_count: 0, audit_history: [] } });
+      return;
+    }
     if (path.endsWith("/finance/startup-expenses")) {
       await route.fulfill({
         status: 200,
@@ -234,12 +242,35 @@ test("receipt capture and financial review surfaces pass responsive accessibilit
   await expect(page.getByRole("heading", { name: "Receipt review and coding" })).toBeVisible();
   await expect(page.getByText("Nothing posts automatically.")).toHaveCount(0);
   await expectNoSeriousAccessibilityViolations(page);
-
   const hasHorizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
   expect(pageErrors).toEqual([]);
+});
+
+test("Backups saves one photo on phone, iPad, and desktop without approval", async ({ page }) => {
+  await mockApi(page);
+  await signIn(page);
+  await page.goto("/backups");
+  await expect(page.getByRole("heading", { name: "Backups" })).toBeVisible();
+  const picker = page.getByLabel("Take photo or choose image");
+  await picker.setInputFiles({
+    name: "packing-slip.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from("disposable acceptance image"),
+  });
+  await page.getByLabel("Optional note").fill("Packing slip backup");
+  await page.getByLabel("Optional project hint").fill("Granite Creek");
+  await page.getByRole("button", { name: "Save original" }).click();
+  await expect(page.getByRole("status")).toContainText("Original saved");
+  await expect(page.getByText("pending", { exact: true })).toBeVisible();
+  const overflow = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  expect(overflow.width).toBe(overflow.viewport);
+  await expectNoSeriousAccessibilityViolations(page);
 });
 
 test("foreman daily time sheet passes responsive interaction and accessibility QA", async ({ page }) => {
@@ -274,6 +305,7 @@ test("foreman daily time sheet passes responsive interaction and accessibility Q
 
 const tabs = [
   ["Dashboard", "Iron House Dashboard"],
+  ["Backups", "Backups"],
   ["Meeting Minutes", "Meeting Minutes"],
   ["Google Calendar", "Google Calendar"],
   ["MVP Workflow", "IHOS MVP Workflow"],

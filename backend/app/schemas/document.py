@@ -21,6 +21,7 @@ class DocumentCategory(StrEnum):
 
 
 class DocumentStatus(StrEnum):
+    needs_review = "needs_review"
     registered = "registered"
     active = "active"
     current = "current"
