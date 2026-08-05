@@ -25,6 +25,7 @@ function intake() {
     id: intakeId,
     media_id: mediaId,
     media_hash: "a".repeat(64),
+    uploader_id: user.id,
     uploader_email: user.email,
     uploader_role: "administrator",
     upload_timestamp: "2026-08-05T12:00:00Z",
@@ -39,13 +40,14 @@ function intake() {
     error: null,
     sensitive_quarantine: false,
     attempt_count: 0,
+    last_attempt_at: null,
     processing_started_at: null,
     processed_at: null,
     routed_at: null,
     failed_at: null,
     created_at: "2026-08-05T12:00:00Z",
     updated_at: "2026-08-05T12:00:00Z",
-    audit_history: [],
+    audit_history: [{ id: "00000000-0000-0000-0000-000000000157", action: "submitted", actor_email: user.email, from_status: null, to_status: "pending", details: {}, created_at: "2026-08-05T12:00:00Z" }],
   };
 }
 
