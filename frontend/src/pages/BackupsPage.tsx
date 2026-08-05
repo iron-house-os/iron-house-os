@@ -57,7 +57,7 @@ export function BackupsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-gold">Administration · document intake</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-iron-800">Administration · document intake</p>
         <h1 className="mt-1 text-2xl font-semibold text-iron-950">Backups</h1>
         <p className="mt-2 max-w-3xl text-sm text-iron-600">Save one immutable photo now. Daily classification only creates unapproved records for human review.</p>
       </header>
