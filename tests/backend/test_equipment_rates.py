@@ -11,7 +11,6 @@ from app.schemas.equipment_rates import (
     RegionalMarket,
     RentalPeriod,
 )
-from app.core.errors import AppError
 from app.services.equipment_rate_sheet_pdf import render_client_rate_sheet_pdf
 from app.services.equipment_rates import calculate_equipment_rate, get_equipment_rate_library
 
@@ -180,37 +179,13 @@ def test_client_rate_sheet_defaults_to_draft_watermark() -> None:
     assert b"DRAFT - NOT APPROVED FOR EXTERNAL ISSUE" in pdf
 
 
-def test_executive_issue_is_blocked_by_unapproved_rate_exception() -> None:
-    payload = ClientRateSheetRequest(
-        effective_date=date(2026, 8, 5),
-        expiry_date=date(2026, 9, 4),
-        regional_market=RegionalMarket.surrey_fraser_valley_east,
-        lines=[
-            rate_input(
-                rate_basis=RateBasis.contract_rate,
-                contract_rate=190,
-                market_benchmark_rate=228,
-                override_reason="Tender rate",
-            )
-        ],
-        executive_approved=True,
-        approval_reference="Executive approval 2026-08-05",
-    )
 
-    with pytest.raises(AppError, match="blocked"):
-        render_client_rate_sheet_pdf(payload)
-
-
-def test_approved_rate_sheet_records_executive_reference() -> None:
-    payload = ClientRateSheetRequest(
-        effective_date=date(2026, 8, 5),
-        expiry_date=date(2026, 9, 4),
-        regional_market=RegionalMarket.surrey_fraser_valley_east,
-        lines=[rate_input()],
-        executive_approved=True,
-        approval_reference="Executive approval 2026-08-05",
-    )
-
-    pdf = render_client_rate_sheet_pdf(payload)
-
-    assert b"APPROVED FOR ISSUE - Reference: Executive approval 2026-08-05" in pdf
+def test_client_cannot_self_declare_executive_approval() -> None:
+    with pytest.raises(ValueError, match="executive_approved"):
+        ClientRateSheetRequest(
+            effective_date=date(2026, 8, 5),
+            expiry_date=date(2026, 9, 4),
+            regional_market=RegionalMarket.surrey_fraser_valley_east,
+            lines=[rate_input()],
+            executive_approved=True,
+        )
