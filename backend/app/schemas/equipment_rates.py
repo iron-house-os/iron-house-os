@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class RegionalMarket(StrEnum):
@@ -60,6 +60,8 @@ class EquipmentBenchmark(BaseModel):
 
 
 class EquipmentRateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     regional_market: RegionalMarket
     rate_category: RateCategory = RateCategory.equipment
     equipment_class: str = Field(min_length=1)
@@ -133,6 +135,8 @@ class EquipmentRateLibrary(BaseModel):
 
 
 class ClientRateSheetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(default="Iron House Client Rate Sheet", min_length=1)
     effective_date: date
     expiry_date: date
@@ -140,13 +144,9 @@ class ClientRateSheetRequest(BaseModel):
     lines: list[EquipmentRateInput] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
-    executive_approved: bool = False
-    approval_reference: str | None = None
 
     @model_validator(mode="after")
     def validate_issue_gate(self) -> ClientRateSheetRequest:
         if self.expiry_date < self.effective_date:
             raise ValueError("Rate-sheet expiry cannot precede its effective date.")
-        if self.executive_approved and not (self.approval_reference or "").strip():
-            raise ValueError("Executive approval requires an approval reference.")
         return self
