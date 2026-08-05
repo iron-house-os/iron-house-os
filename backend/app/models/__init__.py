@@ -1,4 +1,5 @@
 from app.models.bid import Bid
+from app.models.backups import BackupsAuditEvent, BackupsIntake, BackupsRoute
 from app.models.assistant import AssistantConversation, AssistantMessage, MeetingMinute, ProjectMemory
 from app.models.calendar import GoogleCalendarConnection, GoogleCalendarOAuthState
 from app.models.contact import Contact
@@ -36,6 +37,9 @@ __all__ = [
     "GoogleCalendarConnection",
     "GoogleCalendarOAuthState",
     "Bid",
+    "BackupsAuditEvent",
+    "BackupsIntake",
+    "BackupsRoute",
     "Contact",
     "Document",
     "Drawing",

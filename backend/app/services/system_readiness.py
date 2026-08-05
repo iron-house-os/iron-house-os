@@ -9,6 +9,9 @@ from app.services import file_storage
 REQUIRED_RUNTIME_TABLES = (
     "alembic_version",
     "bids",
+    "backups_audit_events",
+    "backups_intakes",
+    "backups_routes",
     "contacts",
     "documents",
     "equipment",

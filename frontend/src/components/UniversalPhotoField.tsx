@@ -313,7 +313,7 @@ function PhotoViewer({ asset, onClose, onChange }: { asset: MediaAsset; onClose:
               <Field label="Photo date" value={capturedDate} onChange={setCapturedDate} type="date" />
               <div className="text-xs text-iron-100">Project: {asset.project_id ?? "Not linked"}</div>
               <Field label="Location (restricted)" value={location} onChange={setLocation} />
-              <label className="grid gap-1 text-sm"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value as MediaCategory)} className="rounded border border-white/20 bg-black px-3 py-2">{["job_photo","production_photo","inspection","equipment","flha","incident","deficiency","expense","receipt"].map((item) => <option key={item}>{item}</option>)}</select></label>
+              <label className="grid gap-1 text-sm"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value as MediaCategory)} className="rounded border border-white/20 bg-black px-3 py-2">{["job_photo","production_photo","inspection","equipment","flha","incident","deficiency","expense","receipt","backup"].map((item) => <option key={item}>{item}</option>)}</select></label>
               <button type="button" disabled={saving} onClick={() => void saveMetadata()} className="rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black">Save metadata version</button>
             </div>
           ) : null}

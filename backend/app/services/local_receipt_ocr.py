@@ -93,6 +93,11 @@ def extract_local_receipt(image_bytes: list[bytes], media_asset_ids: list) -> Re
     )
 
 
+def extract_local_text(image_bytes: list[bytes]) -> str:
+    """Return OCR text for local-only document screening and classification."""
+    return "\n".join(text for data in image_bytes if (text := _ocr_image(data))).strip()
+
+
 def _ocr_image(data: bytes) -> str:
     image = Image.open(io.BytesIO(data))
     image = ImageOps.exif_transpose(image).convert("L")

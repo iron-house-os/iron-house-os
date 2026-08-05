@@ -4,7 +4,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.models.media import MediaAsset, MediaVersion
+from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
 from app.services.auth import AuthenticatedUser
 
 
@@ -37,6 +37,17 @@ def media_assets_for_document(db: Session, document_id: UUID) -> list[MediaAsset
 
 def can_access_document(db: Session, document_id: UUID, user: AuthenticatedUser) -> bool:
     assets = media_assets_for_document(db, document_id)
+    linked_assets = list(
+        db.scalars(
+            select(MediaAsset)
+            .join(MediaRecordLink, MediaRecordLink.asset_id == MediaAsset.id)
+            .where(
+                MediaRecordLink.record_type == "document",
+                MediaRecordLink.record_id == document_id,
+            )
+        ).all()
+    )
+    assets.extend(asset for asset in linked_assets if asset.id not in {item.id for item in assets})
     return all(can_access_asset(asset, user) for asset in assets)
 
 

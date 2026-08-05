@@ -4,6 +4,7 @@ from app.api.dependencies.auth import require_authenticated_user, require_module
 
 from app.api.v1.routes import (
     assistant,
+    backups,
     auth,
     bid_package,
     bid_readiness,
@@ -37,6 +38,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 protected_router = APIRouter(
     dependencies=[Depends(require_authenticated_user), Depends(require_module_access)]
 )
+protected_router.include_router(backups.router, prefix="/backups", tags=["backups"])
 protected_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 protected_router.include_router(suppliers.router, prefix="/suppliers", tags=["suppliers"])
 protected_router.include_router(rfqs.router, prefix="/rfqs", tags=["rfqs"])

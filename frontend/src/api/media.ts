@@ -9,7 +9,8 @@ export type MediaCategory =
   | "incident"
   | "deficiency"
   | "expense"
-  | "receipt";
+  | "receipt"
+  | "backup";
 
 export type MediaOperation = {
   type: "rotate" | "straighten" | "crop" | "brightness" | "contrast" | "clarity" | "draw" | "arrow" | "box" | "highlight" | "text";

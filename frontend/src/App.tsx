@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { HandsFreeVoiceProvider } from "./contexts/HandsFreeVoiceContext";
+import { BackupsPage } from "./pages/BackupsPage";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
@@ -61,9 +62,9 @@ function AuthenticatedApp() {
 
   if (user.role === "viewer") {
     const root = `/${portalRole ?? "employee"}-portal`;
-    const sections = portalRole === "foreman" ? ["time", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "receipts", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
+    const sections = portalRole === "foreman" ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "backups", "receipts", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/backups" element={<BackupsPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -71,6 +72,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/backups" element={<BackupsPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
         <Route path="/employee-portal/:section" element={<EmployeePortalRoute />} />
         <Route path="/foreman-portal" element={<ForemanPortalPage />} />

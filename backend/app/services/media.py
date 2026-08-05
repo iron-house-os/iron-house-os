@@ -32,6 +32,7 @@ CONTROLLED_CATEGORIES = {
     MediaCategory.incident.value,
     MediaCategory.expense.value,
     MediaCategory.receipt.value,
+    MediaCategory.backup.value,
 }
 RECORD_MODELS = {
     "field_record": FieldRecord,
