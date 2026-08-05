@@ -33,7 +33,7 @@ export function ReceiptCapturePanel({ reviewer = false }: { reviewer?: boolean }
         const assetIds = assets.map((asset) => asset.id); setUploadedAssetIds(assetIds);
         try {
           const { draft, model } = await financeApi.extractReceipt(assetIds);
-          setVendor(draft.vendor_name ?? ""); setVendorAddress(draft.vendor_address ?? ""); setReceiptTime(draft.receipt_time ?? ""); setCurrency(draft.currency); setEmployeeEmail(draft.employee_email); setReference(draft.reference ?? ""); setDate(draft.receipt_date ?? date);
+          setVendor(draft.vendor_name ?? ""); setVendorAddress(draft.vendor_address ?? ""); setReceiptTime(draft.receipt_time ?? ""); setCurrency(draft.currency); setEmployeeEmail(draft.employee_email); setReference(draft.reference ?? ""); setDate(draft.receipt_date ?? "");
           setSubtotal(draft.subtotal == null ? "" : String(draft.subtotal)); setDiscounts(String(draft.discounts)); setGst(String(draft.gst)); setPst(String(draft.pst)); setOtherTax(String(draft.other_tax)); setTip(String(draft.tip)); setTotal(draft.total == null ? "" : String(draft.total));
           setPaymentMethod(draft.treatment); setCardBrand(draft.card_brand ?? ""); setLastFour(draft.card_last_four ?? ""); setConfidence(draft.confidence); setSourceRegions(draft.source_regions); setDraftFlags(draft.flags);
           setLines(draft.line_items.length ? draft.line_items.map((line) => ({ description: line.description, quantity: String(line.quantity), unitPrice: String(line.unit_price), tax: String(line.tax), total: String(line.line_total), category: line.category, projectId: "", costCode: "", overhead: "", equipmentId: "", confidence: line.confidence, sourceRegion: line.source_region })) : [newLine()]);
