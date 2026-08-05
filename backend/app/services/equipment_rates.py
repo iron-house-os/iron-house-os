@@ -175,7 +175,10 @@ def calculate_equipment_rate(
         benchmark=benchmark,
         current_date=current_date,
     )
-    approval_required = bool(reasons) and payload.approval_status != ApprovalStatus.approved
+    approval_required = bool(reasons) and (
+        payload.approval_status != ApprovalStatus.approved
+        or "override_reason_required" in reasons
+    )
     minimum_billable_amount = (
         0 if payload.waive_minimum else selected_client_rate * payload.minimum_billable_hours
     )
@@ -186,6 +189,7 @@ def calculate_equipment_rate(
         "fuel": payload.fuel_cost,
         "fuel_surcharge": surcharge,
         "attachment_hourly": payload.attachment_rate,
+        "overtime_hour_rate": payload.overtime_hour_rate,
         "delivery": payload.delivery_cost,
         "pickup": payload.pickup_cost,
         "cleanup": payload.cleanup_allowance,
