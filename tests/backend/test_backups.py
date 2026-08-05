@@ -2,6 +2,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import URLError
 from uuid import UUID
 
 import pytest
@@ -197,6 +198,44 @@ def test_low_confidence_is_kept_in_management_triage(monkeypatch) -> None:
     assert current["detected_type"] == "other"
     assert current["confidence"] == 0.51
     assert current["destination_record_id"] is None
+
+
+def test_clear_transaction_structure_classifies_as_receipt_without_external_provider(monkeypatch) -> None:
+    def provider_must_not_be_needed():
+        raise AssertionError("Clear local receipt classification should not call the external provider")
+
+    monkeypatch.setattr(backups, "get_settings", provider_must_not_be_needed)
+    classification = backups._classify(
+        "FORTIS STORE\n2026-08-05 09:02\nGST 0.62\n"
+        "VISA APPROVED\n12.34\n0.62\n12.96\nTHANK YOU"
+    )
+    assert classification.detected_type == "receipt"
+    assert classification.confidence >= backups.MIN_ROUTE_CONFIDENCE
+    assert classification.source == "local_ocr"
+
+
+def test_unmatched_local_text_does_not_report_hard_coded_twenty_five_percent() -> None:
+    classification = backups._local_classification("legible project paperwork with no reliable document type")
+    assert classification.detected_type == "other"
+    assert classification.confidence == 0.0
+    assert classification.source == "local_ocr_unclassified"
+
+
+def test_provider_failure_reports_local_fallback_without_false_confidence(monkeypatch) -> None:
+    monkeypatch.setattr(
+        backups,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openai_api_key="configured-test-key",
+            openai_chat_model="gpt-test",
+            openai_api_base_url="https://api.openai.test/v1",
+        ),
+    )
+    monkeypatch.setattr(backups, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(URLError("offline")))
+    classification = backups._classify("legible project paperwork with no reliable document type")
+    assert classification.detected_type == "other"
+    assert classification.confidence == 0.0
+    assert classification.source == "local_ocr_provider_fallback"
 
 
 @pytest.mark.parametrize(
