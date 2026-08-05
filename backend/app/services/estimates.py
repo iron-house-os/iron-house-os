@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.services.equipment_rates import calculate_equipment_rate
+
 from app.schemas.estimate import (
     DefaultProductionActivity,
     EquipmentResource,
@@ -273,11 +275,31 @@ def calculate_estimate(payload: EstimateCreate) -> EstimateSummary:
 def calculate_line_item(item: EstimateLineItem) -> EstimateLineItemCost:
     item = _apply_default_rate(item)
     hours = _calculate_hours(item)
+    has_all_in_equipment_rate = any(
+        resource.rate_input is not None
+        and (
+            resource.rate_input.operator_included
+            or resource.rate_input.operator_hourly_cost > 0
+        )
+        for resource in item.equipment
+    )
     labour_cost = sum(
-        member.quantity * member.burdened_hourly_rate * hours for member in item.labour
+        member.quantity * member.burdened_hourly_rate * hours
+        for member in item.labour
+        if not (
+            has_all_in_equipment_rate
+            and "operator" in member.role.casefold()
+        )
     )
     equipment_cost = sum(
-        resource.quantity * resource.hourly_rate * hours for resource in item.equipment
+        resource.quantity
+        * (
+            calculate_equipment_rate(resource.rate_input).hourly_all_in_direct_cost
+            if resource.rate_input is not None
+            else resource.hourly_rate
+        )
+        * hours
+        for resource in item.equipment
     )
     material_cost = sum(
         material.quantity * material.unit_cost * (1 + material.waste_percent / 100)
