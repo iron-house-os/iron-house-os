@@ -434,7 +434,7 @@ def _local_classification(text: str) -> Classification:
     receipt_score += 1 if any(term in normalized for term in ("cash", "debit", "credit", "visa", "mastercard", "approved")) else 0
     receipt_score += 1 if any(term in normalized for term in ("gst", "pst", "hst", "sales tax")) else 0
 
-    amount_count = len(re.findall(r"(?<!\\d)(?:[$]\\s*)?\\d{1,6}[.,]\\d{2}(?!\\d)", normalized))
+    amount_count = len(re.findall(r"(?<!\d)(?:[$]\s*)?\d{1,6}[.,]\d{2}(?!\d)", normalized))
     receipt_score += 1 if amount_count >= 2 else 0
     receipt_score += 1 if amount_count >= 4 else 0
 
