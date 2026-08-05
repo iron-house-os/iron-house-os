@@ -97,6 +97,25 @@ describe("BackupsPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("daily controller");
   });
 
+  it("shows meaningful classification diagnostics instead of a fixed fallback confidence", async () => {
+    auth.role = "admin";
+    vi.mocked(backupsApi.list).mockResolvedValue({
+      items: [{
+        ...intake,
+        status: "needs_review",
+        detected_type: "other",
+        confidence: 0,
+        classification_source: "local_ocr_provider_fallback",
+      }],
+      total: 1,
+    });
+    render(<BackupsPage />);
+
+    expect(await screen.findByText("other · 0% confidence")).toBeInTheDocument();
+    expect(screen.getByText("Classification source: Local OCR fallback")).toBeInTheDocument();
+    expect(screen.queryByText(/25% confidence/)).not.toBeInTheDocument();
+  });
+
   it("shows only management controls for the company queue", async () => {
     auth.role = "admin";
     vi.mocked(backupsApi.list).mockResolvedValue({ items: [intake], total: 1 });
