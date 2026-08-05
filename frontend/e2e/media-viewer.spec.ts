@@ -102,6 +102,19 @@ async function mockMediaApi(page: Page) {
       await route.fulfill({ status: 200, json: { role: "admin", modules: { equipment: ["read", "write"], media: ["read", "write"] } } });
       return;
     }
+    if (path.endsWith("/estimates/equipment-rate-library")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          regional_markets: ["vancouver_metro_west", "surrey_fraser_valley_east"],
+          benchmarks: [],
+          default_target_margin_percent: 10,
+          currency: "CAD",
+          gst_included: false,
+        },
+      });
+      return;
+    }
     if (path.endsWith("/equipment")) {
       await route.fulfill({
         status: 200,

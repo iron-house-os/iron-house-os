@@ -127,6 +127,19 @@ async function mockApi(page: Page) {
       await route.fulfill({ status: 200, json: { items: [], total: 0 } });
       return;
     }
+    if (path.endsWith("/estimates/equipment-rate-library")) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          regional_markets: ["vancouver_metro_west", "surrey_fraser_valley_east"],
+          benchmarks: [],
+          default_target_margin_percent: 10,
+          currency: "CAD",
+          gst_included: false,
+        },
+      });
+      return;
+    }
     if (path.endsWith("/estimates/rate-library")) {
       await route.fulfill({ status: 200, json: { production_rates: [] } });
       return;

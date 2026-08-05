@@ -1,6 +1,7 @@
 import { Plus, RefreshCw, Truck } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { EquipmentRateLibraryPanel } from "../components/EquipmentRateLibraryPanel";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 
 import {
@@ -70,6 +71,8 @@ export function EquipmentPage() {
       {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
       <CreateEquipmentForm onSubmit={create} />
+
+      <EquipmentRateLibraryPanel />
 
       <div className="rounded-md border border-iron-100 bg-white p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

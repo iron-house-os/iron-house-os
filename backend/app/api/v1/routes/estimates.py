@@ -16,9 +16,23 @@ from app.schemas.estimate import (
     EstimateSummary,
     RateLibrary,
 )
+from app.schemas.equipment_rates import (
+    ClientRateSheetRequest,
+    EquipmentRateInput,
+    EquipmentRateLibrary,
+    EquipmentRateResult,
+)
 from app.schemas.estimate_validation import EstimateValidationRequest, EstimateValidationResult
 from app.schemas.estimate_workspace import EstimateWorkspaceList, EstimateWorkspaceRead, EstimateWorkspaceSaveRequest
-from app.services import estimate_handoff, estimate_validation, estimate_workspace, estimate_workbooks, estimates
+from app.services import (
+    equipment_rate_sheet_pdf,
+    equipment_rates,
+    estimate_handoff,
+    estimate_validation,
+    estimate_workspace,
+    estimate_workbooks,
+    estimates,
+)
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -27,6 +41,27 @@ DBSession = Annotated[Session, Depends(get_db)]
 @router.get("/rate-library", response_model=RateLibrary)
 def get_rate_library() -> RateLibrary:
     return estimates.get_rate_library()
+
+
+@router.get("/equipment-rate-library", response_model=EquipmentRateLibrary)
+def get_equipment_rate_library() -> EquipmentRateLibrary:
+    return equipment_rates.get_equipment_rate_library()
+
+
+@router.post("/equipment-rate", response_model=EquipmentRateResult)
+def calculate_equipment_rate(payload: EquipmentRateInput) -> EquipmentRateResult:
+    return equipment_rates.calculate_equipment_rate(payload)
+
+
+@router.post("/client-rate-sheet")
+def generate_client_rate_sheet(payload: ClientRateSheetRequest) -> StreamingResponse:
+    pdf_bytes = equipment_rate_sheet_pdf.render_client_rate_sheet_pdf(payload)
+    headers = {"Content-Disposition": 'attachment; filename="Iron_House_Client_Rate_Sheet.pdf"'}
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers=headers,
+    )
 
 
 @router.post("/line-item", response_model=EstimateLineItemCost)

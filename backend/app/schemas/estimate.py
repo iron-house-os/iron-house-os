@@ -2,6 +2,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from app.schemas.equipment_rates import EquipmentRateInput
+
 
 class EstimateItemType(StrEnum):
     self_perform = "self_perform"
@@ -64,6 +66,7 @@ class EquipmentResource(BaseModel):
     hourly_rate: float = Field(default=0, ge=0)
     daily_rate: float | None = Field(default=None, ge=0)
     owned_or_rented: str | None = None
+    rate_input: EquipmentRateInput | None = None
 
 
 class MaterialInput(BaseModel):
