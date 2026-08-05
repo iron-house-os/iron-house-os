@@ -54,6 +54,12 @@ def extract_local_receipt(image_bytes: list[bytes], media_asset_ids: list) -> Re
     if subtotal is None and total is not None and taxes > 0 and total >= taxes:
         subtotal = (total - taxes).quantize(Decimal("0.01"))
 
+    # Do not publish a plausible-looking header when OCR could not verify any
+    # receipt date or amount. The retained image remains available for manual entry.
+    if receipt_date is None and total is None:
+        vendor_name = None
+        reference = None
+
     confidence: dict[str, float] = {}
     for field, value, score in (
         ("vendor_name", vendor_name, 0.74),
@@ -90,6 +96,7 @@ def extract_local_receipt(image_bytes: list[bytes], media_asset_ids: list) -> Re
 def _ocr_image(data: bytes) -> str:
     image = Image.open(io.BytesIO(data))
     image = ImageOps.exif_transpose(image).convert("L")
+    image = _crop_receipt_region(image)
 
     if max(image.size) < 2400:
         scale = min(3, max(2, 2400 // max(image.size)))
@@ -109,13 +116,106 @@ def _ocr_image(data: bytes) -> str:
             text = pytesseract.image_to_string(variant, config=f"--oem 3 --psm {psm}").strip()
             if text:
                 candidates.append(text)
-    return max(candidates, key=_ocr_quality, default="")
+
+    sparse_header = pytesseract.image_to_string(image, config="--oem 3 --psm 11").strip()
+    if sparse_header:
+        candidates.append(sparse_header)
+
+    best = max(candidates, key=_ocr_quality, default="")
+    header = _best_vendor_header(candidates)
+    if header and header.casefold() not in best.casefold():
+        return f"{header}\n{best}".strip()
+    return best
 
 
 def _ocr_quality(text: str) -> tuple[int, int, int]:
     labelled = sum(term in text.lower() for term in ("total", "gst", "subtotal", "invoice", "date"))
     alpha = sum(character.isalpha() for character in text)
     return labelled, alpha, len(text)
+
+
+def _crop_receipt_region(image: Image.Image) -> Image.Image:
+    """Crop a bright paper receipt from a substantially darker photo background."""
+    width, height = image.size
+    if width < 120 or height < 120:
+        return image
+
+    pixels = image.load()
+    bright_columns = [
+        x for x in range(width)
+        if sum(pixels[x, y] >= 145 for y in range(height)) >= max(1, int(height * 0.45))
+    ]
+    horizontal = _longest_run(bright_columns)
+    if not horizontal:
+        return image
+
+    left, right = horizontal[0], horizontal[-1] + 1
+    receipt_width = right - left
+    if receipt_width < width * 0.08 or receipt_width > width * 0.92:
+        return image
+
+    bright_rows = [
+        y for y in range(height)
+        if sum(pixels[x, y] >= 145 for x in range(left, right)) >= max(1, int(receipt_width * 0.45))
+    ]
+    vertical = _longest_run(bright_rows)
+    if not vertical:
+        return image
+
+    top, bottom = vertical[0], vertical[-1] + 1
+    if bottom - top < height * 0.20:
+        return image
+
+    padding = max(4, int(max(width, height) * 0.015))
+    crop_box = (
+        max(0, left - padding),
+        max(0, top - padding),
+        min(width, right + padding),
+        min(height, bottom + padding),
+    )
+    cropped = image.crop(crop_box)
+    if cropped.width * cropped.height >= width * height * 0.92:
+        return image
+    return cropped
+
+
+def _longest_run(values: list[int]) -> list[int]:
+    best: list[int] = []
+    current: list[int] = []
+    for value in values:
+        if current and value != current[-1] + 1:
+            if len(current) > len(best):
+                best = current
+            current = []
+        current.append(value)
+    if len(current) > len(best):
+        best = current
+    return best
+
+
+def _best_vendor_header(candidates: list[str]) -> str | None:
+    scored: list[tuple[int, str]] = []
+    for text in candidates:
+        lines = [_clean_line(line) for line in text.splitlines()[:8]]
+        vendor = _vendor([line for line in lines if line])
+        if vendor:
+            scored.append((_vendor_text_quality(vendor), vendor))
+    score, value = max(scored, default=(0, ""))
+    return value if score >= 25 else None
+
+
+def _vendor_text_quality(value: str) -> int:
+    words = re.findall(r"[A-Za-z]{2,}", value)
+    letters = sum(character.isalpha() for character in value)
+    score = letters
+    if 1 <= len(words) <= 3:
+        score += 12
+    if value.istitle():
+        score += 12
+    if len(value) > 28:
+        score -= min(20, len(value) - 28)
+    score -= 2 * len(re.findall(r"[^A-Za-z0-9 &'().-]", value))
+    return score
 
 
 def _clean_line(line: str) -> str:
