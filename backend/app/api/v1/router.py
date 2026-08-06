@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     daily_timesheets,
     documents,
     drawing_intelligence,
+    employee_onboarding,
     equipment,
     field_operations,
     finance,
@@ -74,6 +75,7 @@ protected_router.include_router(
     prefix="/google-calendar",
     tags=["google-calendar"],
 )
+protected_router.include_router(employee_onboarding.router, prefix="/employee-onboarding", tags=["employee-onboarding"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)
