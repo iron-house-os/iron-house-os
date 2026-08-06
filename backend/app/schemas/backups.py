@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field
 
 BackupsStatus = Literal["pending", "processing", "routed", "needs_review", "failed"]
 BackupsDetectedType = Literal["receipt", "supplier_invoice", "packing_slip", "other"]
+BackupsReviewDestination = Literal[
+    "finance_intake",
+    "finance_receipts",
+    "finance_invoices",
+    "finance_packing_slips",
+    "backups_needs_review",
+]
 
 
 class BackupsIntakeCreate(BaseModel):
@@ -25,6 +32,11 @@ class BackupsAuditRead(BaseModel):
     created_at: datetime
 
 
+class BackupsDestinationUpdate(BaseModel):
+    destination: Literal["finance_receipts", "finance_invoices", "finance_packing_slips", "backups_needs_review"]
+    expected_version: int = Field(ge=0)
+
+
 class BackupsIntakeRead(BaseModel):
     id: UUID
     media_id: UUID
@@ -39,6 +51,8 @@ class BackupsIntakeRead(BaseModel):
     detected_type: BackupsDetectedType | None
     confidence: float | None
     classification_source: str | None
+    review_destination: BackupsReviewDestination | None
+    routing_version: int
     destination_type: str | None
     destination_record_id: UUID | None
     error: str | None

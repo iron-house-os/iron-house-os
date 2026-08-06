@@ -24,6 +24,8 @@ class BackupsIntake(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     detected_type: Mapped[str | None] = mapped_column(String(40), index=True)
     confidence: Mapped[float | None] = mapped_column(Numeric(5, 4))
     classification_source: Mapped[str | None] = mapped_column(String(80))
+    review_destination: Mapped[str | None] = mapped_column(String(80), index=True)
+    routing_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     destination_type: Mapped[str | None] = mapped_column(String(80))
     destination_record_id: Mapped[UUID | None] = mapped_column(index=True)
     error: Mapped[str | None] = mapped_column(Text)
