@@ -3,6 +3,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 
 import { BackupsIntake, backupsApi } from "../api/backups";
 import { mediaApi } from "../api/media";
+import { BackupsDestinationSelect } from "../components/BackupsDestinationSelect";
 import { useAuth } from "../contexts/AuthContext";
 
 export function BackupsPage() {
@@ -64,7 +65,7 @@ export function BackupsPage() {
       setUploadedMediaId(null);
       setNote("");
       setProjectHint("");
-      setMessage("Photo stored. The daily controller will route it for review.");
+      setMessage("Photo stored. Analysis will place it in Finance intake for management review.");
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to submit this photo.");
@@ -110,7 +111,7 @@ export function BackupsPage() {
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-gold">Document intake</div>
             <h1 className="mt-2 text-3xl font-semibold text-brand-silver">Backups</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-100">
-              Save one original photo now. Daily routing creates review-only records and never approves, posts, pays, or accepts documents.
+              Save one original photo now. Analysis places it in Finance intake for management review and never approves, posts, pays, or accepts documents.
             </p>
           </div>
         </div>
@@ -162,7 +163,7 @@ export function BackupsPage() {
                 {item.note ? <div className="mt-1 text-sm text-iron-500">{item.note}</div> : null}
                 {item.sensitive_quarantine ? <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-amber-800"><ShieldCheck className="h-4 w-4" />Sensitive-content quarantine; external AI was skipped.</div> : null}
                 {item.error ? <div className="mt-2 text-sm text-red-700">{item.error}</div> : null}
-                {item.destination_record_id ? <div className="mt-2 text-xs text-iron-500">Review destination: {item.destination_type} · {item.destination_record_id}</div> : null}
+                {isManagement && item.review_destination ? <div className="mt-3 max-w-sm"><BackupsDestinationSelect item={item} disabled={busy} onRouted={(updated) => setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry))} /></div> : null}
                 <div className="mt-2 text-xs text-iron-500">{item.audit_history.length} audit event(s) · {item.attempt_count} controller attempt(s)</div>
                 {isManagement && !item.destination_record_id && ["failed", "needs_review"].includes(item.status) ? <button type="button" disabled={busy} onClick={() => void retry(item.id)} className="mt-3 text-sm font-semibold text-brand-gold-dark underline">Queue one retry</button> : null}
               </div>

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
+import { BackupsReviewQueues } from "../components/BackupsReviewQueues";
 import { financeApi, FinancialSummary, StartupExpenseSummary } from "../api/finance";
 import { projectsApi, Project } from "../api/projects";
 
@@ -29,6 +30,8 @@ export function FinancialControlPage() {
   return <section className="space-y-6">
     <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between"><div><h1 className="text-3xl font-semibold text-iron-950">Financial Control</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">Management-only project financials plus corporate startup costs funded by owners and tracked as an Owner/Shareholder Loan Payable until reimbursement.</p></div><div className="flex gap-2"><button onClick={() => { void refresh(); void refreshStartup(); }} className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-semibold"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</button><a href={financeApi.startupQuickBooksUrl()} className="inline-flex items-center gap-2 rounded-md bg-brand-gold px-3 py-2 text-sm font-semibold text-brand-black"><Download className="h-4 w-4" />Startup CSV</a>{projectId ? <a href={financeApi.quickBooksUrl(projectId)} className="inline-flex items-center gap-2 rounded-md bg-brand-gold px-3 py-2 text-sm font-semibold text-brand-black"><Download className="h-4 w-4" />Project CSV</a> : null}</div></div>
     {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+
+    <BackupsReviewQueues />
 
     <ReceiptCapturePanel reviewer />
 

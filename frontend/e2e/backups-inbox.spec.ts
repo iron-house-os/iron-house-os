@@ -35,6 +35,8 @@ function intake() {
     detected_type: null,
     confidence: null,
     classification_source: null,
+    review_destination: null,
+    routing_version: 0,
     destination_type: null,
     destination_record_id: null,
     error: null,
@@ -70,6 +72,17 @@ async function mockBackupsApi(page: Page) {
     if (path.endsWith("/media") && request.method() === "POST") {
       expect(request.postData() ?? "").toContain('name="files"');
       await route.fulfill({ status: 201, json: [{ id: mediaId }] });
+      return;
+    }
+    if (path.endsWith("/backups/controller/daily") && request.method() === "POST") {
+      items = items.map((item) => ({ ...item, status: "routed", detected_type: "receipt", confidence: 0.94, classification_source: "local_ocr", review_destination: "finance_intake", processed_at: "2026-08-05T12:01:00Z", routed_at: "2026-08-05T12:01:00Z", attempt_count: 1 }));
+      await route.fulfill({ status: 200, json: { claimed: 1, routed: 1, needs_review: 0, failed: 0 } });
+      return;
+    }
+    if (path.endsWith(`/backups/${intakeId}/destination`) && request.method() === "PATCH") {
+      expect(request.postDataJSON()).toEqual({ destination: "finance_receipts", expected_version: 0 });
+      items = items.map((item) => ({ ...item, review_destination: "finance_receipts", routing_version: 1 }));
+      await route.fulfill({ status: 200, json: items[0] });
       return;
     }
     if (path.endsWith("/backups") && request.method() === "POST") {
@@ -113,6 +126,11 @@ test("single-photo Backups intake is responsive, private, and accessible", async
   await expect(page.getByText("Fuel receipt", { exact: true })).toBeVisible();
   await expect(page.getByAltText("Private Backups original")).toBeVisible();
   await expect(page.getByText("1 audit event(s) · 0 controller attempt(s)")).toBeVisible();
+  await page.getByRole("button", { name: "Run daily controller" }).click();
+  const destination = page.getByLabel(`Review destination for ${intakeId}`);
+  await expect(destination).toHaveValue("finance_intake");
+  await destination.selectOption("finance_receipts");
+  await expect(destination).toHaveValue("finance_receipts");
 
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

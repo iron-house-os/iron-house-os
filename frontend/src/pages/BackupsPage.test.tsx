@@ -17,6 +17,7 @@ vi.mock("../api/backups", () => ({
     create: vi.fn(),
     retry: vi.fn(),
     runDaily: vi.fn(),
+    updateDestination: vi.fn(),
   },
 }));
 vi.mock("../api/media", () => ({
@@ -40,6 +41,8 @@ const intake: BackupsIntake = {
   detected_type: null,
   confidence: null,
   classification_source: null,
+  review_destination: null,
+  routing_version: 0,
   destination_type: null,
   destination_record_id: null,
   error: null,
@@ -94,7 +97,7 @@ describe("BackupsPage", () => {
       note: "Fuel receipt",
       project_hint: "Main Street",
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("daily controller");
+    expect(await screen.findByRole("status")).toHaveTextContent("Finance intake");
   });
 
   it("shows meaningful classification diagnostics instead of a fixed fallback confidence", async () => {
@@ -114,6 +117,24 @@ describe("BackupsPage", () => {
     expect(await screen.findByText("other · 0% confidence")).toBeInTheDocument();
     expect(screen.getByText("Classification source: Local OCR fallback")).toBeInTheDocument();
     expect(screen.queryByText(/25% confidence/)).not.toBeInTheDocument();
+  });
+
+  it("lets management route analyzed photos but hides routing from submitters", async () => {
+    auth.role = "admin";
+    const analyzed = { ...intake, status: "routed" as const, detected_type: "receipt" as const, confidence: 0.94, review_destination: "finance_intake" as const, processed_at: "2026-08-05T12:01:00Z" };
+    vi.mocked(backupsApi.list).mockResolvedValue({ items: [analyzed], total: 1 });
+    vi.mocked(backupsApi.updateDestination).mockResolvedValue({ ...analyzed, review_destination: "finance_receipts", routing_version: 1 });
+
+    const { unmount } = render(<BackupsPage />);
+    expect(await screen.findByLabelText("Review destination for intake-1")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Review destination for intake-1"), "finance_receipts");
+    await waitFor(() => expect(backupsApi.updateDestination).toHaveBeenCalledWith("intake-1", "finance_receipts", 0));
+    unmount();
+
+    auth.role = "viewer";
+    render(<BackupsPage />);
+    await screen.findByRole("heading", { name: "My submissions" });
+    expect(screen.queryByLabelText("Review destination for intake-1")).not.toBeInTheDocument();
   });
 
   it("shows only management controls for the company queue", async () => {
