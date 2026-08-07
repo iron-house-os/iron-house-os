@@ -1,4 +1,4 @@
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, ShoppingCart } from "lucide-react";
 import { PropsWithChildren, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -19,6 +19,7 @@ export function AppLayout({ children }: PropsWithChildren) {
         : user?.role === "operations_manager"
           ? "Operations access"
           : "Administrator access";
+  const poPath = user?.role === "viewer" ? `/${portalRole ?? "employee"}-portal/request-po` : "/request-po";
 
   return (
     <div className="min-h-screen bg-iron-50 text-iron-950">
@@ -44,14 +45,10 @@ export function AppLayout({ children }: PropsWithChildren) {
               <NavLink
                 key={module.path}
                 to={modulePathWithProjectContext(module.path, activeProject)}
-                className={({ isActive }) =>
-                  [
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-shadow",
-                    isActive
-                      ? "bg-brand-gold text-brand-black shadow-md"
-                      : "text-iron-100 hover:bg-white/10 hover:text-white",
-                  ].join(" ")
-                }
+                className={({ isActive }) => [
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-shadow",
+                  isActive ? "bg-brand-gold text-brand-black shadow-md" : "text-iron-100 hover:bg-white/10 hover:text-white",
+                ].join(" ")}
                 onClick={() => setIsSidebarOpen(false)}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
@@ -59,6 +56,17 @@ export function AppLayout({ children }: PropsWithChildren) {
               </NavLink>
             );
           })}
+          <NavLink
+            to={poPath}
+            className={({ isActive }) => [
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-shadow",
+              isActive ? "bg-brand-gold text-brand-black shadow-md" : "text-iron-100 hover:bg-white/10 hover:text-white",
+            ].join(" ")}
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+            Request PO
+          </NavLink>
         </nav>
         <div className="border-t border-white/10 px-5 py-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-iron-300">
           Civil • Earthworks • Utilities
@@ -66,39 +74,19 @@ export function AppLayout({ children }: PropsWithChildren) {
       </aside>
 
       {isSidebarOpen ? (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          className="fixed inset-0 z-20 bg-iron-950/60 backdrop-blur-sm lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+        <button type="button" aria-label="Close navigation" className="fixed inset-0 z-20 bg-iron-950/60 backdrop-blur-sm lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       ) : null}
 
       <div className="lg:pl-72">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-brand-gold/20 bg-white/95 px-4 shadow-sm backdrop-blur lg:px-8">
-          <button
-            type="button"
-            className="rounded-md border border-brand-gold/40 p-2 text-iron-800 lg:hidden"
-            onClick={() => setIsSidebarOpen((value) => !value)}
-            aria-label="Open navigation"
-          >
+          <button type="button" className="rounded-md border border-brand-gold/40 p-2 text-iron-800 lg:hidden" onClick={() => setIsSidebarOpen((value) => !value)} aria-label="Open navigation">
             <Menu className="h-5 w-5" />
           </button>
-          <div className="hidden text-sm font-medium text-iron-700 lg:block">
-            {user ? `Signed in as ${user.display_name}` : "Signed out"}
-          </div>
+          <div className="hidden text-sm font-medium text-iron-700 lg:block">{user ? `Signed in as ${user.display_name}` : "Signed out"}</div>
           <div className="flex items-center gap-3">
             <div className="hidden text-xs font-medium text-iron-500 sm:block">{accessLabel}</div>
-            <div className="rounded-md bg-brand-gold px-3 py-1 text-xs font-semibold capitalize text-brand-black">
-              {user?.role.replace("_", " ")}
-            </div>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="rounded-md border border-iron-100 p-2 text-iron-700 transition hover:border-brand-gold hover:bg-brand-gold/10"
-              aria-label="Sign out"
-              title="Sign out"
-            >
+            <div className="rounded-md bg-brand-gold px-3 py-1 text-xs font-semibold capitalize text-brand-black">{user?.role.replace("_", " ")}</div>
+            <button type="button" onClick={() => void logout()} className="rounded-md border border-iron-100 p-2 text-iron-700 transition hover:border-brand-gold hover:bg-brand-gold/10" aria-label="Sign out" title="Sign out">
               <LogOut className="h-4 w-4" />
             </button>
           </div>
