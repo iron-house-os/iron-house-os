@@ -87,6 +87,17 @@ def test_release_workflow_uses_disposable_staging_and_immutable_evidence() -> No
     assert 'backend_image="$(docker image inspect' in workflow
 
 
+def test_staging_deploy_pins_and_verifies_the_live_release() -> None:
+    workflow = (ROOT / ".github/workflows/staging-deploy.yml").read_text()
+
+    assert 'sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose' in workflow
+    assert "exec -T backend alembic heads" in workflow
+    assert 'test "$migration" = "$expected_migration"' in workflow
+    assert 'actual = readiness.get("checks", {}).get("release_id")' in workflow
+    assert 'expected = os.environ["RELEASE_SHA"]' in workflow
+    assert "if actual != expected:" in workflow
+
+
 def test_frontend_proxy_exposes_backend_health_without_spa_fallback() -> None:
     nginx = (ROOT / "frontend/nginx.conf").read_text()
 
