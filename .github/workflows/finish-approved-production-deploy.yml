@@ -1,0 +1,153 @@
+name: Finish approved production deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/finish-approved-production-deploy.yml"
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: iron-house-os-finish-approved-production
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    name: Gate, dispatch, and verify approved production release
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      RELEASE_SHA: 55295263d861e60c535cc0b41185dcd8b18ae4e8
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify approved release remains on main
+        run: |
+          git fetch --quiet origin main
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+
+      - name: Wait for exact CI and Release Readiness gates
+        id: gates
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${RELEASE_SHA}&event=push&per_page=100")"
+            ci="$(jq -r '([.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last // {}) | [.id // "", .status // "", .conclusion // ""] | @tsv' <<<"$runs")"
+            readiness="$(jq -r '([.workflow_runs[] | select(.name == "Release readiness")] | sort_by(.created_at) | last // {}) | [.id // "", .status // "", .conclusion // ""] | @tsv' <<<"$runs")"
+            IFS=$'\t' read -r ci_id ci_status ci_conclusion <<<"$ci"
+            IFS=$'\t' read -r rr_id rr_status rr_conclusion <<<"$readiness"
+
+            if [[ "$ci_status" == "completed" && "$ci_conclusion" != "success" ]]; then
+              echo "blocker=CI run ${ci_id} concluded ${ci_conclusion}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            if [[ "$rr_status" == "completed" && "$rr_conclusion" != "success" ]]; then
+              echo "blocker=Release Readiness run ${rr_id} concluded ${rr_conclusion}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            if [[ "$ci_status" == "completed" && "$ci_conclusion" == "success" && "$rr_status" == "completed" && "$rr_conclusion" == "success" ]]; then
+              echo "ci_run_id=$ci_id" >> "$GITHUB_OUTPUT"
+              echo "evidence_run_id=$rr_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "blocker=Timed out waiting for successful CI and Release Readiness runs for ${RELEASE_SHA}" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Dispatch approved Production deploy
+        id: dispatch
+        env:
+          EVIDENCE_RUN_ID: ${{ steps.gates.outputs.evidence_run_id }}
+        run: |
+          set -euo pipefail
+          started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          gh workflow run production-deploy.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f release_sha="$RELEASE_SHA" \
+            -f evidence_run_id="$EVIDENCE_RUN_ID"
+
+          for attempt in $(seq 1 20); do
+            run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/production-deploy.yml/runs?event=workflow_dispatch&per_page=30" \
+              --jq ".workflow_runs | map(select(.created_at >= \"${started}\" and .head_branch == \"main\")) | sort_by(.created_at) | first | .id // empty")"
+            if [[ -n "$run_id" ]]; then
+              echo "production_run_id=$run_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "blocker=Production deploy dispatch was accepted but no workflow run appeared" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Wait for approved Production deploy result
+        id: production
+        env:
+          PRODUCTION_RUN_ID: ${{ steps.dispatch.outputs.production_run_id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 100); do
+            run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRODUCTION_RUN_ID}")"
+            status="$(jq -r '.status' <<<"$run")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
+            if [[ "$status" == "completed" ]]; then
+              if [[ "$conclusion" == "success" ]]; then
+                exit 0
+              fi
+              jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRODUCTION_RUN_ID}/jobs?per_page=100")"
+              failed="$(jq -r '[.jobs[] | {job: .name, step: ([.steps[] | select(.conclusion == "failure")][0].name // "unknown step")} | select(.step != "unknown step")] | first | if . then (.job + " / " + .step) else "unknown failing step" end' <<<"$jobs")"
+              echo "blocker=Production deploy run ${PRODUCTION_RUN_ID} concluded ${conclusion} at ${failed}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "blocker=Timed out waiting for Production deploy run ${PRODUCTION_RUN_ID}" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Verify public production endpoints and exact release
+        id: verify
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error https://os.ironhousecivil.com/ >/dev/null
+          health="$(curl --fail --silent --show-error https://os.ironhousecivil.com/health)"
+          readiness="$(curl --fail --silent --show-error https://os.ironhousecivil.com/readiness)"
+          printf '%s\n' "$health"
+          printf '%s\n' "$readiness"
+          READINESS_JSON="$readiness" EXPECTED_RELEASE="$RELEASE_SHA" python3 - <<'PY'
+          import json
+          import os
+
+          payload = json.loads(os.environ["READINESS_JSON"])
+          if payload.get("status") != "ready":
+              raise SystemExit(f"Production readiness is not ready: {payload}")
+          actual = payload.get("checks", {}).get("release_id")
+          expected = os.environ["EXPECTED_RELEASE"]
+          if actual != expected:
+              raise SystemExit(f"Production release mismatch: expected {expected}, got {actual}")
+          PY
+
+      - name: Record blocker for operator follow-up
+        if: failure()
+        env:
+          GATE_BLOCKER: ${{ steps.gates.outputs.blocker }}
+          DISPATCH_BLOCKER: ${{ steps.dispatch.outputs.blocker }}
+          PRODUCTION_BLOCKER: ${{ steps.production.outputs.blocker }}
+          PRODUCTION_RUN_ID: ${{ steps.dispatch.outputs.production_run_id }}
+        run: |
+          blocker="${GATE_BLOCKER:-${DISPATCH_BLOCKER:-${PRODUCTION_BLOCKER:-Endpoint verification failed}}}"
+          body="Approved production deployment for \`${RELEASE_SHA}\` stopped without bypassing gates.\n\n**Blocker:** ${blocker}\n\n**Exact next action:** correct the reported failing gate or production step, rerun the affected gate if needed, then rerun Production deploy with the same exact release SHA and its successful matching Release Readiness run ID."
+          if [[ -n "${PRODUCTION_RUN_ID:-}" ]]; then
+            body="${body}\n\nProduction run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${PRODUCTION_RUN_ID}"
+          fi
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Production deployment blocker: ${RELEASE_SHA}" \
+            --body "$body"
