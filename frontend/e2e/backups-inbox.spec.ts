@@ -35,6 +35,7 @@ function intake() {
     detected_type: null,
     confidence: null,
     classification_source: null,
+    review_destination: null,
     destination_type: null,
     destination_record_id: null,
     error: null,
@@ -70,6 +71,27 @@ async function mockBackupsApi(page: Page) {
     if (path.endsWith("/media") && request.method() === "POST") {
       expect(request.postData() ?? "").toContain('name="files"');
       await route.fulfill({ status: 201, json: [{ id: mediaId }] });
+      return;
+    }
+    if (path.endsWith("/backups/controller/daily") && request.method() === "POST") {
+      items = items.map((item) => ({ ...item, status: "routed", detected_type: "receipt", confidence: 0.94, classification_source: "local_ocr", review_destination: "finance_intake", attempt_count: 1, processing_started_at: "2026-08-05T12:01:00Z", processed_at: "2026-08-05T12:02:00Z", routed_at: "2026-08-05T12:02:00Z" }));
+      await route.fulfill({ status: 200, json: { claimed: 1, routed: 1, needs_review: 0, failed: 0 } });
+      return;
+    }
+    if (path.endsWith(`/${intakeId}/destination`) && request.method() === "PATCH") {
+      expect(request.postDataJSON()).toEqual({ previous_destination: "finance_intake", destination: "finance_receipts" });
+      items = items.map((item) => ({ ...item, review_destination: "finance_receipts" }));
+      await route.fulfill({ status: 200, json: items[0] });
+      return;
+    }
+    if (path.endsWith("/finance/backups-review")) {
+      const destination = new URL(request.url()).searchParams.get("destination");
+      const queued = items.filter((item) => item.review_destination === destination);
+      await route.fulfill({ status: 200, json: { items: queued, total: queued.length } });
+      return;
+    }
+    if (path.endsWith("/finance/startup-expenses")) {
+      await route.fulfill({ status: 200, json: { total_startup_costs: 0, owner_loan_payable: 0, reimbursed_to_owner: 0, pending_review: 0, approved_unreimbursed: 0, entries: [] } });
       return;
     }
     if (path.endsWith("/backups") && request.method() === "POST") {
@@ -113,17 +135,34 @@ test("single-photo Backups intake is responsive, private, and accessible", async
   await expect(page.getByText("Fuel receipt", { exact: true })).toBeVisible();
   await expect(page.getByAltText("Private Backups original")).toBeVisible();
   await expect(page.getByText("1 audit event(s) · 0 controller attempt(s)")).toBeVisible();
+  await page.getByRole("button", { name: "Run daily controller" }).click();
+  const destination = page.getByRole("combobox", { name: `Destination for ${intakeId}` });
+  await expect(destination).toHaveValue("finance_intake");
+  await destination.selectOption("finance_receipts");
+  await expect(page.getByRole("status")).toContainText("No financial action was taken");
+  await expect(destination).toHaveValue("finance_receipts");
 
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
   }));
   expect(overflow.scrollWidth).toBe(overflow.clientWidth);
-  const accessibility = await new AxeBuilder({ page })
+  const backupsAccessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(
-    accessibility.violations.filter(({ impact }) => impact === "critical" || impact === "serious"),
-    JSON.stringify(accessibility.violations, null, 2),
+    backupsAccessibility.violations.filter(({ impact }) => impact === "critical" || impact === "serious"),
+    JSON.stringify(backupsAccessibility.violations, null, 2),
+  ).toEqual([]);
+
+  await page.goto("/finance");
+  await expect(page.getByRole("heading", { name: "Backups review queues" })).toBeVisible();
+  for (const name of ["Finance intake", "Receipts", "Invoices", "Packing Slips"]) await expect(page.getByRole("heading", { name })).toBeVisible();
+  const financeAccessibility = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    financeAccessibility.violations.filter(({ impact }) => impact === "critical" || impact === "serious"),
+    JSON.stringify(financeAccessibility.violations, null, 2),
   ).toEqual([]);
 });
