@@ -11,14 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.models.backups import BackupsAuditEvent, BackupsIntake, BackupsRoute
+from app.models.backups import BackupsAuditEvent, BackupsIntake
 from app.models.document import Document
-from app.models.finance import Receipt, ReceiptAuditEvent
-from app.models.media import MediaAsset, MediaRecordLink
+from app.models.media import MediaAsset
 from app.models.user import Employee
 from app.schemas.backups import (
     BackupsAuditRead,
     BackupsControllerResult,
+    BackupsDestinationUpdate,
     BackupsIntakeCreate,
     BackupsIntakeList,
     BackupsIntakeRead,
@@ -31,6 +31,7 @@ from app.services.media_access import MANAGEMENT_ROLES
 CONTROLLER_ACTOR = "daily-backups-controller@ironhouse.local"
 MIN_ROUTE_CONFIDENCE = 0.75
 MAX_EXTERNAL_TEXT = 12_000
+FINANCE_INTAKE = "finance_intake"
 SENSITIVE_TERMS = (
     "bank statement",
     "bank account",
@@ -105,8 +106,68 @@ def list_intakes(db: Session, user: AuthenticatedUser) -> BackupsIntakeList:
     return BackupsIntakeList(items=items, total=len(items))
 
 
+def list_finance_review_queue(
+    db: Session,
+    user: AuthenticatedUser,
+    destination: str,
+) -> BackupsIntakeList:
+    _require_management(user)
+    statement = (
+        select(BackupsIntake)
+        .where(BackupsIntake.review_destination == destination)
+        .order_by(BackupsIntake.processed_at.desc(), BackupsIntake.id)
+    )
+    items = [_to_read(db, intake) for intake in db.scalars(statement).all()]
+    return BackupsIntakeList(items=items, total=len(items))
+
+
 def get_intake(db: Session, intake_id: UUID, user: AuthenticatedUser) -> BackupsIntakeRead:
     return _to_read(db, _require_intake(db, intake_id, user))
+
+
+def update_review_destination(
+    db: Session,
+    intake_id: UUID,
+    payload: BackupsDestinationUpdate,
+    user: AuthenticatedUser,
+) -> BackupsIntakeRead:
+    _require_management(user)
+    intake = _require_intake(db, intake_id, user)
+    if intake.processed_at is None or intake.review_destination is None:
+        raise AppError("Only analyzed Backups items can be routed.", status_code=409)
+    if intake.review_destination == payload.destination:
+        return _to_read(db, intake)
+
+    changed_at = datetime.now(UTC)
+    result = db.execute(
+        update(BackupsIntake)
+        .where(
+            BackupsIntake.id == intake_id,
+            BackupsIntake.review_destination == payload.previous_destination,
+        )
+        .values(review_destination=payload.destination, updated_at=changed_at)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise AppError(
+            "This item was routed by another reviewer. Refresh before choosing a destination.",
+            status_code=409,
+        )
+    db.expire(intake)
+    _audit(
+        db,
+        intake,
+        "review_destination_changed",
+        user.email,
+        from_status=intake.status,
+        to_status=intake.status,
+        details={
+            "previous_destination": payload.previous_destination,
+            "new_destination": payload.destination,
+        },
+    )
+    db.commit()
+    return get_intake(db, intake_id, user)
 
 
 def retry_intake(db: Session, intake_id: UUID, user: AuthenticatedUser) -> BackupsIntakeRead:
@@ -114,6 +175,8 @@ def retry_intake(db: Session, intake_id: UUID, user: AuthenticatedUser) -> Backu
     intake = _require_intake(db, intake_id, user)
     if intake.status == "routed" or intake.destination_record_id is not None:
         raise AppError("A routed intake cannot be retried.", status_code=409)
+    if intake.review_destination not in {None, FINANCE_INTAKE}:
+        raise AppError("A manually routed intake cannot be retried.", status_code=409)
     previous = intake.status
     if previous not in {"failed", "needs_review"}:
         raise AppError("Only failed or triage items can be retried.", status_code=409)
@@ -121,6 +184,7 @@ def retry_intake(db: Session, intake_id: UUID, user: AuthenticatedUser) -> Backu
     intake.detected_type = None
     intake.confidence = None
     intake.classification_source = None
+    intake.review_destination = None
     intake.error = None
     intake.sensitive_quarantine = False
     intake.processing_started_at = None
@@ -224,10 +288,8 @@ def _process_claimed_intake(db: Session, intake_id: UUID) -> str:
             )
             return "needs_review"
 
-        destination_type, destination_id = _route_review_record(db, intake)
         now = datetime.now(UTC)
-        intake.destination_type = destination_type
-        intake.destination_record_id = destination_id
+        intake.review_destination = FINANCE_INTAKE
         intake.status = "routed"
         intake.processed_at = now
         intake.routed_at = now
@@ -242,8 +304,7 @@ def _process_claimed_intake(db: Session, intake_id: UUID) -> str:
             details={
                 "detected_type": intake.detected_type,
                 "confidence": float(intake.confidence),
-                "destination_type": destination_type,
-                "destination_record_id": str(destination_id),
+                "review_destination": FINANCE_INTAKE,
             },
         )
         db.commit()
@@ -284,6 +345,7 @@ def _complete_triage(
     intake.detected_type = "other"
     intake.confidence = confidence
     intake.classification_source = source
+    intake.review_destination = FINANCE_INTAKE
     intake.status = "needs_review"
     intake.error = error
     intake.sensitive_quarantine = sensitive
@@ -295,110 +357,13 @@ def _complete_triage(
         CONTROLLER_ACTOR,
         from_status="processing",
         to_status="needs_review",
-        details={"confidence": confidence, "sensitive_quarantine": sensitive},
-    )
-    db.commit()
-
-
-def _route_review_record(db: Session, intake: BackupsIntake) -> tuple[str, UUID]:
-    existing = db.scalar(
-        select(BackupsRoute).where(
-            BackupsRoute.media_hash == intake.media_hash,
-            BackupsRoute.detected_type == intake.detected_type,
-        )
-    )
-    if existing is not None:
-        _ensure_media_link(db, intake.media_id, existing.destination_type, existing.destination_record_id)
-        return existing.destination_type, existing.destination_record_id
-
-    if intake.detected_type == "receipt":
-        destination_type, destination_id = "receipt", _create_receipt_draft(db, intake)
-    elif intake.detected_type in {"supplier_invoice", "packing_slip"}:
-        destination_type, destination_id = "document", _create_document_draft(db, intake)
-    else:
-        raise RuntimeError("unsupported routed classification")
-
-    db.add(
-        BackupsRoute(
-            media_hash=intake.media_hash,
-            detected_type=intake.detected_type,
-            destination_type=destination_type,
-            destination_record_id=destination_id,
-            created_by_intake_id=intake.id,
-        )
-    )
-    return destination_type, destination_id
-
-
-def _create_receipt_draft(db: Session, intake: BackupsIntake) -> UUID:
-    receipt = Receipt(
-        status="needs_review",
-        submitter_id=intake.uploader_id,
-        submitter_email=intake.uploader_email,
-        media_asset_ids=[str(intake.media_id)],
-        image_hash=intake.media_hash,
-        currency="CAD",
-        discounts=0,
-        gst=0,
-        pst=0,
-        other_tax=0,
-        tip=0,
-        treatment="needs_review",
-        confidence_json={"document_type": float(intake.confidence or 0)},
-        source_regions_json={},
-        flags_json=["backups_routed", "needs_review"],
-        version=1,
-    )
-    db.add(receipt)
-    db.flush()
-    _ensure_media_link(db, intake.media_id, "receipt", receipt.id)
-    db.add(
-        ReceiptAuditEvent(
-            receipt_id=receipt.id,
-            action="backups_routed_for_review",
-            actor_email=CONTROLLER_ACTOR,
-            to_status="needs_review",
-            changes_json={"backups_intake_id": str(intake.id)},
-        )
-    )
-    return receipt.id
-
-
-def _create_document_draft(db: Session, intake: BackupsIntake) -> UUID:
-    label = "Supplier invoice" if intake.detected_type == "supplier_invoice" else "Packing slip / delivery ticket"
-    document = Document(
-        title=f"{label} — Backups review",
-        category="other",
-        status="registered",
-        description=intake.note or f"{label} routed from Backups for review.",
-        metadata_json={
-            "workflow_status": "needs_review",
-            "backups_detected_type": intake.detected_type,
-            "backups_intake_id": str(intake.id),
-            "source_media_id": str(intake.media_id),
-            "source_media_hash": intake.media_hash,
-            "project_hint": intake.project_hint,
-            "posted": False,
-            "approved": False,
-            "accepted": False,
+        details={
+            "confidence": confidence,
+            "sensitive_quarantine": sensitive,
+            "review_destination": FINANCE_INTAKE,
         },
     )
-    db.add(document)
-    db.flush()
-    _ensure_media_link(db, intake.media_id, "document", document.id)
-    return document.id
-
-
-def _ensure_media_link(db: Session, media_id: UUID, record_type: str, record_id: UUID) -> None:
-    existing = db.scalar(
-        select(MediaRecordLink).where(
-            MediaRecordLink.asset_id == media_id,
-            MediaRecordLink.record_type == record_type,
-            MediaRecordLink.record_id == record_id,
-        )
-    )
-    if existing is None:
-        db.add(MediaRecordLink(asset_id=media_id, record_type=record_type, record_id=record_id))
+    db.commit()
 
 
 def _classify(text: str) -> Classification:
@@ -589,6 +554,7 @@ def _to_read(db: Session, intake: BackupsIntake) -> BackupsIntakeRead:
         detected_type=intake.detected_type,
         confidence=float(intake.confidence) if intake.confidence is not None else None,
         classification_source=intake.classification_source,
+        review_destination=intake.review_destination,
         destination_type=intake.destination_type,
         destination_record_id=intake.destination_record_id,
         error=intake.error,
