@@ -9,15 +9,17 @@ Issue: #154. Backups is a single-photo, review-only document intake path. It reu
 3. The daily controller atomically claims each pending intake once and reads the original media version.
 4. Local OCR runs before classification. Banking, payroll, SIN, medical, or valid full-card content is quarantined without an external request.
 5. When configured and permitted, the OpenAI Responses API receives only screened OCR text, uses a strict four-label schema, and has `store` disabled. Local heuristics are the offline/failure fallback.
-6. A receipt becomes an unapproved `needs_review` receipt. A supplier invoice or packing slip becomes a registered document whose workflow metadata is `needs_review`. Other and low-confidence items stay in Backups triage.
+6. Every analyzed item enters `finance_intake`, including unknown, low-confidence, and quarantined items. Analysis does not create, approve, post, export, reconcile, pay, or accept a financial or delivery record.
+7. Management can change the single review destination to Finance Receipts, Finance Invoices, Finance Packing Slips, or Backups Needs Review. A compare-and-set update prevents competing reviewers from overwriting each other, and selecting the current destination is idempotent.
 
-The intake status is one of `pending`, `processing`, `routed`, `needs_review`, or `failed`. Audit events record submission, claim, routing/triage/failure, and retry. The route ledger's unique media-hash/type key plus unique intake media ID prevents duplicate intake or destination records across retries.
+The intake status is one of `pending`, `processing`, `routed`, `needs_review`, or `failed`. Audit events record submission, claim, analysis/triage/failure, retry, and every destination change with its actor, timestamp, previous destination, and new destination. The unique intake media ID and single destination column prevent duplicate destination records.
 
 ## Authorization
 
 - Every authenticated administrator, management user, estimator, employee, foreman, and operator can submit.
 - Non-management users can list/read only their own intake records and original images.
-- Management and administrators can view the company queue, run the controller, and retry failed or triage records.
+- Management and administrators can view the company queue and Finance review queues, change destinations, run the controller, and retry failed or triage records.
+- Routing changes queue placement only. Receipt approval/export/reconciliation and payment controls remain management-only; packing slips never confirm delivery, quantity, quality, acceptance, or project cost.
 - Existing project, document, receipt, and private-media authorization continues to govern destination access.
 
 ## Controller entry points
@@ -55,11 +57,11 @@ Live staging deployment and acceptance require owner authorization and are not p
 
 Application rollback is the preferred first action: restore the prior reviewed artifact while leaving the additive Backups tables intact. This preserves uploaded originals and intake evidence.
 
-Only in a disposable or explicitly approved non-production environment, after exporting or confirming no Backups evidence must be retained, the schema migration can be reversed:
+Only in a disposable or explicitly approved non-production environment, the management-routing schema can be reversed without dropping the original Backups tables:
 
 ```bash
 cd backend
-alembic downgrade 20260802_0014
+alembic downgrade 20260805_0015
 ```
 
-That downgrade drops the three Backups tables and their intake/audit/route data. It does not delete shared media originals or routed receipt/document records. Never run the downgrade against production without explicit owner approval and a verified backup.
+That downgrade removes only the review-destination column and index. It preserves uploaded originals, uploader identity, intake records, legacy route records, and audit events. Never run the downgrade against production without explicit owner approval and a verified backup.
