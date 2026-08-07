@@ -12,10 +12,8 @@ from sqlalchemy import func, select
 
 from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
-from app.models.backups import BackupsIntake
-from app.models.document import Document
+from app.models.backups import BackupsAuditEvent, BackupsIntake, BackupsRoute
 from app.models.finance import Receipt
-from app.models.media import MediaRecordLink
 from app.models.user import Employee
 from app.services import backups
 from app.services.auth import AuthenticatedUser
@@ -135,19 +133,19 @@ def test_viewer_portal_role_is_recorded_and_visibility_and_private_media_are_sco
 
 
 @pytest.mark.parametrize(
-    ("ocr_text", "detected_type", "destination_type"),
+    ("ocr_text", "detected_type", "expected_status"),
     [
-        ("STORE RECEIPT\nSUBTOTAL 10.00\nTOTAL 10.50\nTHANK YOU", "receipt", "receipt"),
-        ("SUPPLIER INVOICE\nINVOICE NUMBER 100\nAMOUNT DUE 500.00", "supplier_invoice", "document"),
-        ("PACKING SLIP\nDELIVERY TICKET 100\n2 PIPE FITTINGS", "packing_slip", "document"),
-        ("A blurry unrecognized jobsite note", "other", None),
+        ("STORE RECEIPT\nSUBTOTAL 10.00\nTOTAL 10.50\nTHANK YOU", "receipt", "routed"),
+        ("SUPPLIER INVOICE\nINVOICE NUMBER 100\nAMOUNT DUE 500.00", "supplier_invoice", "routed"),
+        ("PACKING SLIP\nDELIVERY TICKET 100\n2 PIPE FITTINGS", "packing_slip", "routed"),
+        ("A blurry unrecognized jobsite note", "other", "needs_review"),
     ],
 )
-def test_daily_controller_routes_all_four_classifications_conservatively(
+def test_daily_controller_places_every_analyzed_item_in_finance_intake_without_financial_action(
     monkeypatch,
     ocr_text: str,
     detected_type: str,
-    destination_type: str | None,
+    expected_status: str,
 ) -> None:
     monkeypatch.setattr(backups, "extract_local_text", lambda _images: ocr_text)
     intake = _intake(_upload(content=ocr_text.encode()))
@@ -156,32 +154,14 @@ def test_daily_controller_routes_all_four_classifications_conservatively(
 
     assert result["claimed"] == 1
     assert current["detected_type"] == detected_type
-    assert current["audit_history"][-1]["action"] in {"routed_for_review", "triage_required"}
-    if destination_type is None:
-        assert current["status"] == "needs_review"
-        assert current["destination_record_id"] is None
-        return
-
-    assert current["status"] == "routed"
-    assert current["destination_type"] == destination_type
-    assert current["destination_record_id"]
+    assert current["status"] == expected_status
+    assert current["review_destination"] == "finance_intake"
+    assert current["destination_type"] is None
+    assert current["destination_record_id"] is None
+    assert current["audit_history"][-1]["details"]["review_destination"] == "finance_intake"
     with TestingSessionLocal() as db:
-        if destination_type == "receipt":
-            receipt = db.get(Receipt, UUID(current["destination_record_id"]))
-            assert receipt is not None
-            assert receipt.status == "needs_review"
-            assert receipt.treatment == "needs_review"
-            assert receipt.approved_by is None
-            assert receipt.exported_by is None
-        else:
-            document = db.get(Document, UUID(current["destination_record_id"]))
-            assert document is not None
-            assert document.status == "registered"
-            assert document.metadata_json["workflow_status"] == "needs_review"
-            assert document.metadata_json["posted"] is False
-            assert document.metadata_json["approved"] is False
-            assert document.metadata_json["accepted"] is False
-            assert document.project_id is None
+        assert db.scalar(select(func.count()).select_from(BackupsRoute)) == 0
+        assert db.scalar(select(func.count()).select_from(Receipt)) == 0
 
 
 def test_low_confidence_is_kept_in_management_triage(monkeypatch) -> None:
@@ -357,31 +337,104 @@ def test_failure_retry_and_controller_idempotency(monkeypatch) -> None:
     assert duplicate_request["id"] == intake["id"]
     with TestingSessionLocal() as db:
         assert db.scalar(select(func.count()).select_from(BackupsIntake)) == 1
-        assert db.scalar(select(func.count()).select_from(Receipt)) == 1
+        assert db.scalar(select(func.count()).select_from(Receipt)) == 0
 
 
-def test_same_image_hash_reuses_one_destination_across_distinct_media(monkeypatch) -> None:
+def test_same_image_hash_creates_distinct_intakes_but_no_duplicate_destination_records(monkeypatch) -> None:
     monkeypatch.setattr(backups, "extract_local_text", lambda _images: "RECEIPT SUBTOTAL 10 TOTAL 10 THANK YOU")
     first = _intake(_upload(content=b"same-original", filename="first.jpg"))
     _run()
-    first = client.get(f"/api/v1/backups/{first['id']}").json()
-
     second = _intake(_upload(content=b"same-original", filename="second.jpg"))
     _run()
-    second = client.get(f"/api/v1/backups/{second['id']}").json()
 
-    assert second["destination_record_id"] == first["destination_record_id"]
+    assert client.get(f"/api/v1/backups/{first['id']}").json()["review_destination"] == "finance_intake"
+    assert client.get(f"/api/v1/backups/{second['id']}").json()["review_destination"] == "finance_intake"
     with TestingSessionLocal() as db:
-        assert db.scalar(select(func.count()).select_from(Receipt)) == 1
-        links = list(
-            db.scalars(
-                select(MediaRecordLink).where(
-                    MediaRecordLink.record_type == "receipt",
-                    MediaRecordLink.record_id == UUID(first["destination_record_id"]),
-                )
+        assert db.scalar(select(func.count()).select_from(BackupsIntake)) == 2
+        assert db.scalar(select(func.count()).select_from(BackupsRoute)) == 0
+        assert db.scalar(select(func.count()).select_from(Receipt)) == 0
+
+
+def test_management_routing_is_audited_idempotent_and_concurrency_safe(monkeypatch) -> None:
+    monkeypatch.setattr(backups, "extract_local_text", lambda _images: "RECEIPT SUBTOTAL 10 TOTAL 10 THANK YOU")
+    intake = _intake(_upload(content=b"route-review"))
+    _run()
+
+    first = client.patch(
+        f"/api/v1/backups/{intake['id']}/destination",
+        json={"previous_destination": "finance_intake", "destination": "finance_receipts"},
+    )
+    assert first.status_code == 200
+    assert first.json()["review_destination"] == "finance_receipts"
+    event = first.json()["audit_history"][-1]
+    assert event["action"] == "review_destination_changed"
+    assert event["actor_email"] == "test-admin@ironhousecontracting.com"
+    assert event["created_at"]
+    assert event["details"] == {
+        "previous_destination": "finance_intake",
+        "new_destination": "finance_receipts",
+    }
+
+    duplicate = client.patch(
+        f"/api/v1/backups/{intake['id']}/destination",
+        json={"previous_destination": "finance_intake", "destination": "finance_receipts"},
+    )
+    assert duplicate.status_code == 200
+    stale_competing = client.patch(
+        f"/api/v1/backups/{intake['id']}/destination",
+        json={"previous_destination": "finance_intake", "destination": "finance_invoices"},
+    )
+    assert stale_competing.status_code == 409
+    with TestingSessionLocal() as db:
+        assert db.scalar(
+            select(func.count()).select_from(BackupsAuditEvent).where(
+                BackupsAuditEvent.intake_id == UUID(intake["id"]),
+                BackupsAuditEvent.action == "review_destination_changed",
             )
-        )
-        assert len(links) == 2
+        ) == 1
+        assert db.scalar(select(func.count()).select_from(BackupsRoute)) == 0
+
+    queue = client.get("/api/v1/finance/backups-review?destination=finance_receipts")
+    assert queue.status_code == 200
+    assert [item["id"] for item in queue.json()["items"]] == [intake["id"]]
+
+
+def test_manual_low_confidence_route_cannot_be_erased_by_retry(monkeypatch) -> None:
+    monkeypatch.setattr(backups, "extract_local_text", lambda _images: "A blurry unrecognized jobsite note")
+    intake = _intake(_upload(content=b"manual-route-review"))
+    _run()
+    current = client.get(f"/api/v1/backups/{intake['id']}").json()
+    assert current["status"] == "needs_review"
+    assert current["review_destination"] == "finance_intake"
+
+    routed = client.patch(
+        f"/api/v1/backups/{intake['id']}/destination",
+        json={"previous_destination": "finance_intake", "destination": "finance_invoices"},
+    )
+    assert routed.status_code == 200
+    assert routed.json()["review_destination"] == "finance_invoices"
+
+    retry = client.post(f"/api/v1/backups/{intake['id']}/retry")
+    assert retry.status_code == 409
+    current = client.get(f"/api/v1/backups/{intake['id']}").json()
+    assert current["review_destination"] == "finance_invoices"
+
+
+def test_submitter_cannot_route_or_view_company_finance_queue(monkeypatch) -> None:
+    monkeypatch.setattr(backups, "extract_local_text", lambda _images: "RECEIPT SUBTOTAL 10 TOTAL 10 THANK YOU")
+    intake = _intake(_upload(content=b"unauthorized-route"))
+    _run()
+    viewer = _principal(
+        "00000000-0000-0000-0000-000000000001",
+        "test-admin@ironhousecontracting.com",
+        "viewer",
+    )
+    _use_user(viewer)
+    assert client.patch(
+        f"/api/v1/backups/{intake['id']}/destination",
+        json={"previous_destination": "finance_intake", "destination": "finance_receipts"},
+    ).status_code == 403
+    assert client.get("/api/v1/finance/backups-review?destination=finance_intake").status_code == 403
 
 
 def test_submitter_cannot_run_controller_or_retry_company_queue(monkeypatch) -> None:
