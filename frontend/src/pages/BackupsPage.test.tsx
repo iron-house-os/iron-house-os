@@ -15,6 +15,7 @@ vi.mock("../api/backups", () => ({
   backupsApi: {
     list: vi.fn(),
     create: vi.fn(),
+    route: vi.fn(),
     retry: vi.fn(),
     runDaily: vi.fn(),
   },
@@ -40,6 +41,7 @@ const intake: BackupsIntake = {
   detected_type: null,
   confidence: null,
   classification_source: null,
+  review_destination: null,
   destination_type: null,
   destination_record_id: null,
   error: null,
@@ -114,6 +116,30 @@ describe("BackupsPage", () => {
     expect(await screen.findByText("other · 0% confidence")).toBeInTheDocument();
     expect(screen.getByText("Classification source: Local OCR fallback")).toBeInTheDocument();
     expect(screen.queryByText(/25% confidence/)).not.toBeInTheDocument();
+  });
+
+  it("lets only management route analyzed photos and persists through refresh", async () => {
+    auth.role = "admin";
+    const analyzed = { ...intake, status: "routed" as const, detected_type: "receipt" as const, confidence: 0.94, processed_at: "2026-08-05T12:05:00Z", review_destination: "finance_intake" as const };
+    const routed = { ...analyzed, review_destination: "finance_receipts" as const };
+    vi.mocked(backupsApi.list).mockResolvedValueOnce({ items: [analyzed], total: 1 }).mockResolvedValueOnce({ items: [routed], total: 1 });
+    vi.mocked(backupsApi.route).mockResolvedValue(routed);
+    const user = userEvent.setup();
+    render(<BackupsPage />);
+
+    const dropdown = await screen.findByRole("combobox", { name: "Destination for intake-1" });
+    expect(dropdown).toHaveValue("finance_intake");
+    await user.selectOptions(dropdown, "finance_receipts");
+    await waitFor(() => expect(backupsApi.route).toHaveBeenCalledWith("intake-1", "finance_intake", "finance_receipts"));
+    expect(await screen.findByRole("status")).toHaveTextContent("No financial action was taken");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Destination for intake-1" })).toHaveValue("finance_receipts"));
+  });
+
+  it("does not show routing controls to submitters", async () => {
+    vi.mocked(backupsApi.list).mockResolvedValue({ items: [{ ...intake, status: "routed", detected_type: "receipt", processed_at: "2026-08-05T12:05:00Z", review_destination: "finance_intake" }], total: 1 });
+    render(<BackupsPage />);
+    expect(await screen.findByText("Submitted for management review.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
   it("shows only management controls for the company queue", async () => {

@@ -2,6 +2,8 @@ import { apiFetch } from "./client";
 
 export type BackupsStatus = "pending" | "processing" | "routed" | "needs_review" | "failed";
 export type BackupsDetectedType = "receipt" | "supplier_invoice" | "packing_slip" | "other";
+export type BackupsReviewDestination = "finance_intake" | "finance_receipts" | "finance_invoices" | "finance_packing_slips" | "backups_needs_review";
+export type BackupsRoutableDestination = Exclude<BackupsReviewDestination, "finance_intake">;
 
 export type BackupsAuditEvent = {
   id: string;
@@ -27,6 +29,7 @@ export type BackupsIntake = {
   detected_type: BackupsDetectedType | null;
   confidence: number | null;
   classification_source: string | null;
+  review_destination: BackupsReviewDestination | null;
   destination_type: string | null;
   destination_record_id: string | null;
   error: string | null;
@@ -69,6 +72,11 @@ export const backupsApi = {
   list: () => request<{ items: BackupsIntake[]; total: number }>("/backups"),
   create: (payload: { media_id: string; note?: string | null; project_hint?: string | null }) =>
     request<BackupsIntake>("/backups", { method: "POST", body: JSON.stringify(payload) }),
+  route: (id: string, previousDestination: BackupsReviewDestination, destination: BackupsRoutableDestination) =>
+    request<BackupsIntake>(`/backups/${id}/destination`, {
+      method: "PATCH",
+      body: JSON.stringify({ previous_destination: previousDestination, destination }),
+    }),
   retry: (id: string) => request<BackupsIntake>(`/backups/${id}/retry`, { method: "POST" }),
   runDaily: () => request<BackupsControllerResult>("/backups/controller/daily", { method: "POST" }),
 };

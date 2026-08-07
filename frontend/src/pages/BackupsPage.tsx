@@ -1,7 +1,7 @@
 import { Camera, RefreshCw, ShieldCheck } from "lucide-react";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { BackupsIntake, backupsApi } from "../api/backups";
+import { BackupsIntake, BackupsRoutableDestination, backupsApi } from "../api/backups";
 import { mediaApi } from "../api/media";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -87,6 +87,22 @@ export function BackupsPage() {
     }
   }
 
+  async function route(item: BackupsIntake, destination: BackupsRoutableDestination) {
+    if (!item.review_destination) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await backupsApi.route(item.id, item.review_destination, destination);
+      setMessage("Review destination updated. No financial action was taken.");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to route this intake.");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function retry(id: string) {
     setBusy(true);
     setError(null);
@@ -162,9 +178,11 @@ export function BackupsPage() {
                 {item.note ? <div className="mt-1 text-sm text-iron-500">{item.note}</div> : null}
                 {item.sensitive_quarantine ? <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-amber-800"><ShieldCheck className="h-4 w-4" />Sensitive-content quarantine; external AI was skipped.</div> : null}
                 {item.error ? <div className="mt-2 text-sm text-red-700">{item.error}</div> : null}
-                {item.destination_record_id ? <div className="mt-2 text-xs text-iron-500">Review destination: {item.destination_type} · {item.destination_record_id}</div> : null}
+                {isManagement && item.processed_at && item.review_destination ? <label className="mt-3 grid max-w-sm gap-1 text-sm font-semibold text-iron-700">Review destination<select aria-label={`Destination for ${item.id}`} disabled={busy} value={item.review_destination} onChange={(event) => void route(item, event.target.value as BackupsRoutableDestination)} className="rounded-md border border-iron-100 bg-white px-3 py-2 font-normal"><option value="finance_intake" disabled>Finance — Intake</option><option value="finance_receipts">Finance — Receipts</option><option value="finance_invoices">Finance — Invoices</option><option value="finance_packing_slips">Finance — Packing Slips</option><option value="backups_needs_review">Backups — Needs Review</option></select></label> : null}
+                {!isManagement && item.review_destination ? <div className="mt-2 text-xs text-iron-500">Submitted for management review.</div> : null}
+                {item.destination_record_id ? <div className="mt-2 text-xs text-iron-500">Legacy review record: {item.destination_type} · {item.destination_record_id}</div> : null}
                 <div className="mt-2 text-xs text-iron-500">{item.audit_history.length} audit event(s) · {item.attempt_count} controller attempt(s)</div>
-                {isManagement && !item.destination_record_id && ["failed", "needs_review"].includes(item.status) ? <button type="button" disabled={busy} onClick={() => void retry(item.id)} className="mt-3 text-sm font-semibold text-brand-gold-dark underline">Queue one retry</button> : null}
+                {isManagement && !item.destination_record_id && (item.review_destination === null || item.review_destination === "finance_intake") && ["failed", "needs_review"].includes(item.status) ? <button type="button" disabled={busy} onClick={() => void retry(item.id)} className="mt-3 text-sm font-semibold text-brand-gold-dark underline">Queue one retry</button> : null}
               </div>
             </article>
           ))}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
+from app.schemas.backups import BackupsIntakeList, BackupsReviewDestination
 from app.schemas.receipt import (
     ReceiptAction, ReceiptCreate, ReceiptExtractionRequest, ReceiptExtractionResponse,
     ReceiptList, ReceiptRead, ReceiptUpdate,
@@ -22,10 +23,19 @@ from app.schemas.finance import (
     StartupExpenseSummary,
     StartupExpenseUpdate,
 )
-from app.services import finance, receipt_extraction, receipts
+from app.services import backups, finance, receipt_extraction, receipts
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/backups-review", response_model=BackupsIntakeList)
+def backups_review_queue(
+    destination: BackupsReviewDestination,
+    db: DBSession,
+    user: CurrentUser,
+) -> BackupsIntakeList:
+    return backups.list_finance_review_queue(db, user, destination)
 
 
 @router.post("/receipts", response_model=ReceiptRead, status_code=status.HTTP_201_CREATED)

@@ -8,6 +8,7 @@ from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.backups import (
     BackupsControllerResult,
+    BackupsDestinationUpdate,
     BackupsIntakeCreate,
     BackupsIntakeList,
     BackupsIntakeRead,
@@ -35,6 +36,16 @@ def list_intakes(user: CurrentUser, db: DBSession) -> BackupsIntakeList:
 @router.get("/{intake_id}", response_model=BackupsIntakeRead)
 def read_intake(intake_id: UUID, user: CurrentUser, db: DBSession) -> BackupsIntakeRead:
     return backups.get_intake(db, intake_id, user)
+
+
+@router.patch("/{intake_id}/destination", response_model=BackupsIntakeRead)
+def update_destination(
+    intake_id: UUID,
+    payload: BackupsDestinationUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> BackupsIntakeRead:
+    return backups.update_review_destination(db, intake_id, payload, user)
 
 
 @router.post("/{intake_id}/retry", response_model=BackupsIntakeRead)
