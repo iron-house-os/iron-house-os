@@ -4,6 +4,7 @@ from app.models.assistant import AssistantConversation, AssistantMessage, Meetin
 from app.models.calendar import GoogleCalendarConnection, GoogleCalendarOAuthState
 from app.models.contact import Contact
 from app.models.document import Document, Drawing, Takeoff
+from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardingAudit
 from app.models.equipment import Equipment
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.finance import (
@@ -44,6 +45,8 @@ __all__ = [
     "Document",
     "Drawing",
     "Employee",
+    "EmployeeOnboarding",
+    "EmployeeOnboardingAudit",
     "Equipment",
     "EmployeeCertification",
     "FieldRecord",

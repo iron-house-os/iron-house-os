@@ -13,6 +13,8 @@ from app.api.v1.routes import (
     daily_timesheets,
     documents,
     drawing_intelligence,
+    employee_onboarding,
+    employee_onboarding_portal,
     equipment,
     field_operations,
     finance,
@@ -34,6 +36,11 @@ from app.api.v1.routes import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(
+    employee_onboarding_portal.router,
+    prefix="/employee-onboarding/portal",
+    tags=["employee-onboarding-portal"],
+)
 
 protected_router = APIRouter(
     dependencies=[Depends(require_authenticated_user), Depends(require_module_access)]
@@ -74,6 +81,7 @@ protected_router.include_router(
     prefix="/google-calendar",
     tags=["google-calendar"],
 )
+protected_router.include_router(employee_onboarding.router, prefix="/employee-onboarding", tags=["employee-onboarding"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
 api_router.include_router(protected_router)
