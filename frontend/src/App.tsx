@@ -29,6 +29,7 @@ import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
 import { ProjectWorkspacePage } from "./pages/ProjectWorkspacePage";
+import { PurchaseOrderRequestPage } from "./pages/PurchaseOrderRequestPage";
 import { QuantityTakeoffPage } from "./pages/QuantityTakeoffPage";
 import { QuoteComparisonPage } from "./pages/QuoteComparisonPage";
 import { RFQAutomationPage } from "./pages/RFQAutomationPage";
@@ -64,7 +65,7 @@ function AuthenticatedApp() {
     const root = `/${portalRole ?? "employee"}-portal`;
     const sections = portalRole === "foreman" ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "backups", "receipts", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/backups" element={<BackupsPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -72,6 +73,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/request-po" element={<PurchaseOrderRequestPage />} />
         <Route path="/backups" element={<BackupsPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
         <Route path="/employee-portal/:section" element={<EmployeePortalRoute />} />
