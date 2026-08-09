@@ -6,11 +6,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import create_app
 from app.models.user import LoginThrottle, UserAccount
-from app.services.auth import hash_password
+from app.services.auth import hash_password, login_subject_hash
 from app.services.document_audit import (
     clear_recent_document_audit_events,
     list_recent_document_audit_events,
@@ -152,7 +153,14 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
     assert client.get("/api/v1/projects").status_code == 200
 
     with testing_session() as db:
-        assert db.scalars(select(LoginThrottle)).all() == []
+        account_throttles = db.scalars(
+            select(LoginThrottle).where(
+                LoginThrottle.key_hash.in_(
+                    [login_subject_hash(ADMIN_EMAIL), login_subject_hash("recovering-estimator@ironhousecontracting.com")]
+                )
+            )
+        ).all()
+        assert account_throttles == []
 
     events = list_recent_document_audit_events()
     rendered = json.dumps(events)
@@ -164,3 +172,75 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
         for event in events
     )
     assert any(event["action"] == "password_change" for event in events)
+
+
+def test_ip_throttle_blocks_other_accounts_from_the_same_source(monkeypatch) -> None:
+    monkeypatch.setenv("LOGIN_IP_MAX_FAILED_ATTEMPTS", "3")
+    monkeypatch.setenv("LOGIN_IP_LOCKOUT_MINUTES", "15")
+    get_settings.cache_clear()
+    try:
+        client, testing_session = _client()
+        with testing_session() as db:
+            db.add(
+                UserAccount(
+                    email="second-user@ironhousecontracting.com",
+                    display_name="Second User",
+                    role="viewer",
+                    password_hash=hash_password("second-correct-password-2026"),
+                    is_active=True,
+                    session_version=1,
+                )
+            )
+            db.commit()
+
+        attacker = TestClient(client.app, client=("203.0.113.7", 51000))
+        for attempt in range(1, 4):
+            response = attacker.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": f"nonexistent-{attempt}@ironhousecontracting.com",
+                    "password": "wrong-password",
+                },
+            )
+            assert response.status_code == (429 if attempt == 3 else 401)
+
+        blocked_admin = attacker.post(
+            "/api/v1/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        )
+        assert blocked_admin.status_code == 429
+        assert int(blocked_admin.headers["retry-after"]) > 0
+
+        blocked_second_account = attacker.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "second-user@ironhousecontracting.com",
+                "password": "second-correct-password-2026",
+            },
+        )
+        assert blocked_second_account.status_code == 429
+
+        with testing_session() as db:
+            admin_throttle = db.scalar(
+                select(LoginThrottle).where(LoginThrottle.key_hash == login_subject_hash(ADMIN_EMAIL))
+            )
+            second_user_throttle = db.scalar(
+                select(LoginThrottle).where(
+                    LoginThrottle.key_hash == login_subject_hash("second-user@ironhousecontracting.com")
+                )
+            )
+            assert admin_throttle is None
+            assert second_user_throttle is None
+
+            ip_throttle = db.scalar(select(LoginThrottle).where(LoginThrottle.failed_attempts == 3))
+            assert ip_throttle is not None
+            assert ip_throttle.locked_until is not None
+
+        other_source = TestClient(client.app, client=("198.51.100.9", 51000))
+        unaffected = other_source.post(
+            "/api/v1/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        )
+        assert unaffected.status_code == 200
+    finally:
+        get_settings.cache_clear()

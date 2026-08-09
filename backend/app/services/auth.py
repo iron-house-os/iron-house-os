@@ -92,6 +92,10 @@ def login_subject_hash(email: str) -> str:
     return hashlib.sha256(normalize_email(email).encode()).hexdigest()
 
 
+def login_ip_subject_hash(ip_address: str) -> str:
+    return hashlib.sha256(f"ip:{ip_address}".encode()).hexdigest()
+
+
 def _utc(value: datetime | None) -> datetime | None:
     if value is None or value.tzinfo is not None:
         return value
@@ -143,25 +147,45 @@ def account_to_principal(account: UserAccount) -> AuthenticatedUser:
     )
 
 
-def authenticate(db: Session, email: str, password: str) -> AuthenticationResult:
+def _load_throttle(db: Session, key_hash: str) -> LoginThrottle | None:
+    return db.scalar(
+        select(LoginThrottle).where(LoginThrottle.key_hash == key_hash).with_for_update()
+    )
+
+
+def authenticate(
+    db: Session,
+    email: str,
+    password: str,
+    *,
+    ip_address: str | None = None,
+) -> AuthenticationResult:
     normalized_email = normalize_email(email)
     subject_hash = login_subject_hash(normalized_email)
+    ip_hash = login_ip_subject_hash(ip_address) if ip_address else None
     now = datetime.now(UTC)
-    throttle = db.scalar(
-        select(LoginThrottle)
-        .where(LoginThrottle.key_hash == subject_hash)
-        .with_for_update()
-    )
-    locked_until = _utc(throttle.locked_until) if throttle is not None else None
-    if locked_until is not None and locked_until > now:
+    settings = get_settings()
+
+    account_throttle = _load_throttle(db, subject_hash)
+    ip_throttle = _load_throttle(db, ip_hash) if ip_hash is not None else None
+
+    active_locks = [
+        _utc(throttle.locked_until)
+        for throttle in (account_throttle, ip_throttle)
+        if throttle is not None and throttle.locked_until is not None
+    ]
+    active_locks = [locked_until for locked_until in active_locks if locked_until > now]
+    if active_locks:
         return AuthenticationResult(
             status=AuthenticationStatus.LOCKED,
             subject_hash=subject_hash,
-            locked_until=locked_until,
+            locked_until=max(active_locks),
         )
-    if throttle is not None and throttle.locked_until is not None:
-        throttle.failed_attempts = 0
-        throttle.locked_until = None
+
+    for throttle in (account_throttle, ip_throttle):
+        if throttle is not None and throttle.locked_until is not None:
+            throttle.failed_attempts = 0
+            throttle.locked_until = None
 
     account = db.scalar(select(UserAccount).where(func.lower(UserAccount.email) == normalized_email))
     password_matches = verify_password(
@@ -169,25 +193,38 @@ def authenticate(db: Session, email: str, password: str) -> AuthenticationResult
         account.password_hash if account is not None else DUMMY_PASSWORD_HASH,
     )
     if account is None or not account.is_active or not password_matches:
-        if throttle is None:
-            throttle = LoginThrottle(key_hash=subject_hash, failed_attempts=0)
-        throttle.failed_attempts += 1
-        throttle.last_failed_at = now
-        settings = get_settings()
-        status = AuthenticationStatus.INVALID
-        if throttle.failed_attempts >= settings.login_max_failed_attempts:
-            throttle.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
-            status = AuthenticationStatus.LOCKED
-        db.add(throttle)
+        if account_throttle is None:
+            account_throttle = LoginThrottle(key_hash=subject_hash, failed_attempts=0)
+        account_throttle.failed_attempts += 1
+        account_throttle.last_failed_at = now
+        if account_throttle.failed_attempts >= settings.login_max_failed_attempts:
+            account_throttle.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+        db.add(account_throttle)
+
+        if ip_hash is not None:
+            if ip_throttle is None:
+                ip_throttle = LoginThrottle(key_hash=ip_hash, failed_attempts=0)
+            ip_throttle.failed_attempts += 1
+            ip_throttle.last_failed_at = now
+            if ip_throttle.failed_attempts >= settings.login_ip_max_failed_attempts:
+                ip_throttle.locked_until = now + timedelta(minutes=settings.login_ip_lockout_minutes)
+            db.add(ip_throttle)
+
+        new_locks = [
+            _utc(throttle.locked_until)
+            for throttle in (account_throttle, ip_throttle)
+            if throttle is not None and throttle.locked_until is not None
+        ]
+        status = AuthenticationStatus.LOCKED if new_locks else AuthenticationStatus.INVALID
         db.commit()
         return AuthenticationResult(
             status=status,
             subject_hash=subject_hash,
-            locked_until=_utc(throttle.locked_until),
+            locked_until=max(new_locks) if new_locks else None,
         )
 
-    if throttle is not None:
-        db.delete(throttle)
+    if account_throttle is not None:
+        db.delete(account_throttle)
     account.last_login_at = datetime.now(UTC)
     db.add(account)
     db.commit()

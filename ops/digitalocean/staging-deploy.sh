@@ -122,6 +122,8 @@ write_staging_environment() {
     echo "SESSION_COOKIE_SECURE=true"
     echo "LOGIN_MAX_FAILED_ATTEMPTS=5"
     echo "LOGIN_LOCKOUT_MINUTES=15"
+    echo "LOGIN_IP_MAX_FAILED_ATTEMPTS=15"
+    echo "LOGIN_IP_LOCKOUT_MINUTES=15"
     echo "BACKEND_CORS_ORIGINS='[\"https://$staging_host\"]'"
     echo "IHOS_STORAGE_BACKEND=local"
     echo "IHOS_STORAGE_ROOT=/app/data/uploads"

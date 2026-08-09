@@ -22,6 +22,10 @@ def normalize_request_id(value: str | None) -> str:
     return f"req-{uuid4().hex}"
 
 
+def get_client_ip(request: Request) -> str | None:
+    return request.client.host if request.client is not None else None
+
+
 def get_request_audit_context(request: Request) -> RequestAuditContext:
     authenticated_user: AuthenticatedUser | None = getattr(
         request.state,

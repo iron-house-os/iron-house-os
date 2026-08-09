@@ -19,7 +19,7 @@ from app.services import auth
 from app.services.access_control import describe_role_access
 from app.services.auth import AuthenticationStatus, authenticate, create_session_token
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
-from app.services.request_context import get_request_audit_context
+from app.services.request_context import get_client_ip, get_request_audit_context
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -49,7 +49,7 @@ def auth_capability() -> dict[str, str]:
 
 @router.post("/login", response_model=AuthStatus, status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, request: Request, response: Response, db: DBSession) -> AuthStatus:
-    result = authenticate(db, str(payload.email), payload.password)
+    result = authenticate(db, str(payload.email), payload.password, ip_address=get_client_ip(request))
     context = get_request_audit_context(request)
     if result.status == AuthenticationStatus.LOCKED:
         retry_after = max(

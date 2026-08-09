@@ -24,5 +24,14 @@ Login denial, lockout, successful login, administrator recovery, denied password
 
 ## Known limits
 
-- Throttling is per normalized email subject, not per network address or device.
+- Throttling is per normalized email subject and, separately, per source IP address (see below); it is not per device.
 - Multi-factor authentication and external identity providers remain future work.
+
+## IP-based throttling (added after Build 211)
+
+Failed login attempts are also throttled per source IP address, independently of the per-account
+throttle above, so a single IP cannot hammer many different accounts without ever tripping an
+individual account's lock. It reuses the same `login_throttles` table (keyed by a distinct hash
+namespace) and the same lockout shape, configured separately via `LOGIN_IP_MAX_FAILED_ATTEMPTS`
+(default 15) and `LOGIN_IP_LOCKOUT_MINUTES` (default 15). A lock from either dimension returns the
+same generic `429` response, so clients cannot tell whether the account or the IP triggered it.

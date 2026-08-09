@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = False
     login_max_failed_attempts: int = Field(default=5, ge=3, le=20)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    login_ip_max_failed_attempts: int = Field(default=15, ge=3, le=100)
+    login_ip_lockout_minutes: int = Field(default=15, ge=1, le=1440)
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = None
     bootstrap_admin_name: str = "Iron House Administrator"

@@ -23,7 +23,7 @@ openssl rand -hex 32
 
 Use generated values for the database password, application secret, and bootstrap administrator password. Keep `.env.production` out of source control. Leave `SESSION_COOKIE_SECURE=true` for every HTTPS deployment.
 
-The default login safeguard locks a normalized email subject after five failures for 15 minutes. Override `LOGIN_MAX_FAILED_ATTEMPTS` or `LOGIN_LOCKOUT_MINUTES` only through the protected environment file and keep values within the application validation bounds.
+The default login safeguard locks a normalized email subject after five failures for 15 minutes. Override `LOGIN_MAX_FAILED_ATTEMPTS` or `LOGIN_LOCKOUT_MINUTES` only through the protected environment file and keep values within the application validation bounds. A second, independent safeguard locks the source IP address after 15 failures within the same 15-minute window, so a single IP cannot exhaust attempts across many different accounts without ever locking one of them; override it with `LOGIN_IP_MAX_FAILED_ATTEMPTS` and `LOGIN_IP_LOCKOUT_MINUTES`. The IP safeguard relies on nginx forwarding `X-Forwarded-For` and uvicorn running with `--proxy-headers --forwarded-allow-ips="*"` (already configured for staging and production) so the backend sees the real client IP instead of the proxy's.
 
 2. Validate the fully rendered Compose configuration.
 
