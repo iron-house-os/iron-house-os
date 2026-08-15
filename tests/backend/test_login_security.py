@@ -164,3 +164,49 @@ def test_admin_recovery_forces_password_change_and_clears_lockout() -> None:
         for event in events
     )
     assert any(event["action"] == "password_change" for event in events)
+
+
+
+def test_failed_logins_across_accounts_are_throttled_by_privacy_preserving_ip() -> None:
+    client, testing_session = _client()
+
+    for attempt in range(1, 21):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": f"unknown-{attempt}@example.invalid",
+                "password": "wrong-password",
+            },
+        )
+        assert response.status_code == (429 if attempt == 20 else 401)
+
+    with testing_session() as db:
+        throttles = db.scalars(select(LoginThrottle)).all()
+        ip_throttles = [throttle for throttle in throttles if throttle.failed_attempts == 20]
+        assert len(ip_throttles) == 1
+        assert ip_throttles[0].locked_until is not None
+        assert "testclient" not in ip_throttles[0].key_hash
+        assert len(ip_throttles[0].key_hash) == 64
+
+
+def test_successful_login_clears_ip_throttle_without_weakening_account_lockout() -> None:
+    client, testing_session = _client()
+
+    for attempt in range(4):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": f"unknown-{attempt}@example.invalid",
+                "password": "wrong-password",
+            },
+        )
+        assert response.status_code == 401
+
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+    ).status_code == 200
+
+    with testing_session() as db:
+        throttles = db.scalars(select(LoginThrottle)).all()
+        assert all(throttle.failed_attempts == 1 for throttle in throttles)
