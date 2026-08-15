@@ -45,7 +45,7 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
     assert "name: Checkout trusted deploy tooling at workflow commit" in workflow
     assert "name: Checkout approved release SHA" in workflow
     assert f"uses: actions/checkout@{CHECKOUT_PIN}" in workflow
-    assert "ref: ${{ github.sha }}" in workflow
+    assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
     assert "persist-credentials: false" in workflow
     assert (
