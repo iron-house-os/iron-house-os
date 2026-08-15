@@ -68,7 +68,8 @@ jobs:
           [[ "$run_result" == "success" ]]
           [[ "$run_name" == "Release readiness" ]]
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Checkout trusted deploy tooling at workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
           path: .deploy-tooling
@@ -79,6 +80,7 @@ jobs:
           ref: ${{ inputs.release_sha }}
           clean: true
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify approved main release
         env:

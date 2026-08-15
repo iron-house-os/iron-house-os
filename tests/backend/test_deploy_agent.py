@@ -42,6 +42,7 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
     )
 
     assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in workflow
+    assert "name: Checkout trusted deploy tooling at workflow commit" in workflow
     assert f"uses: actions/checkout@{CHECKOUT_PIN}" in workflow
     assert "ref: ${{ github.sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
