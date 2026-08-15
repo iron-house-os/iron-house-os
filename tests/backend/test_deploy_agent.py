@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CHECKOUT_PIN = "11d5960a326750d5838078e36cf38b85af677262"
 
 
 def test_deploy_agent_requires_both_release_gates_and_allowlisted_cutover() -> None:
@@ -41,7 +42,7 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
     )
 
     assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in workflow
-    assert "uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in workflow
+    assert f"uses: actions/checkout@{CHECKOUT_PIN}" in workflow
     assert "ref: ${{ github.sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
     assert "persist-credentials: false" in workflow
