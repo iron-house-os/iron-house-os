@@ -75,7 +75,8 @@ jobs:
           path: .deploy-tooling
           persist-credentials: false
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Checkout approved release SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.release_sha }}
           clean: true
