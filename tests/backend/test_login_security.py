@@ -174,7 +174,7 @@ def test_failed_logins_across_accounts_are_throttled_by_privacy_preserving_ip() 
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": f"unknown-{attempt}@example.invalid",
+                "email": f"unknown-{attempt}@example.com",
                 "password": "wrong-password",
             },
         )
@@ -196,7 +196,7 @@ def test_successful_login_clears_ip_throttle_without_weakening_account_lockout()
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "email": f"unknown-{attempt}@example.invalid",
+                "email": f"unknown-{attempt}@example.com",
                 "password": "wrong-password",
             },
         )
