@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request, build_opener
+from urllib.request import Request
 
 from release_smoke import _json_request, build_smoke_opener
 
