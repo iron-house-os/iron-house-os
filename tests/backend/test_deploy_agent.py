@@ -33,3 +33,15 @@ def test_production_cutover_handoff_is_permission_safe() -> None:
 
     assert 'exec /bin/bash "$release_root/ops/digitalocean/cutover.sh"' in wrapper
     assert cutover.stat().st_mode & stat.S_IXUSR
+
+
+def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
+    workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "path: .deploy-tooling" in workflow
+    assert (
+        'sudo /bin/bash "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"'
+        in workflow
+    )
