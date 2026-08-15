@@ -42,6 +42,7 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
 
     assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
+    assert "persist-credentials: false" in workflow
     assert (
         'sudo /bin/bash "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"'
         in workflow
