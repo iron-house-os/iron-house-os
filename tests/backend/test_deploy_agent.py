@@ -40,7 +40,7 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
         encoding="utf-8"
     )
 
-    assert "ref: ${{ github.sha }}" in workflow
+    assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
     assert (
         'sudo /bin/bash "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"'
