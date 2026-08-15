@@ -108,10 +108,7 @@ jobs:
       - name: Execute restricted production cutover
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
-        run: |
-          sudo /bin/bash "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh" \
-          --release "$RELEASE_SHA" \
-          --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
+        run: sudo /bin/bash "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh" --release "$RELEASE_SHA" --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
 
       - name: Verify public production endpoints
         run: |
