@@ -23,7 +23,9 @@ openssl rand -hex 32
 
 Use generated values for the database password, application secret, and bootstrap administrator password. Keep `.env.production` out of source control. Leave `SESSION_COOKIE_SECURE=true` for every HTTPS deployment.
 
-The default login safeguard locks a normalized email subject after five failures for 15 minutes. Override `LOGIN_MAX_FAILED_ATTEMPTS` or `LOGIN_LOCKOUT_MINUTES` only through the protected environment file and keep values within the application validation bounds.
+The default login safeguards lock a normalized email subject after five failures and a keyed, privacy-preserving client-IP bucket after 20 failures, both for 15 minutes. Override `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_IP_MAX_FAILED_ATTEMPTS`, or `LOGIN_LOCKOUT_MINUTES` only through the protected environment file and keep values within the application validation bounds. Raw client addresses are not stored in login throttle records.
+
+Production startup fails closed when `SECRET_KEY` is short or placeholder-like, secure session cookies are disabled, CORS contains a wildcard, or bootstrap administrator credentials are missing/example values. Validate rendered Compose configuration with explicit secure values before starting the backend.
 
 2. Validate the fully rendered Compose configuration.
 
@@ -155,7 +157,7 @@ The release-readiness workflow performs the same backup and restore against a di
 
 - Build 207 does not provision a cloud account, domain, certificate, or paid infrastructure.
 - User roles currently control account administration and document-audit access; fine-grained permissions for every business module remain future work.
-- Login throttling, password recovery email, and multi-factor authentication are not yet implemented.
+- Password recovery email and multi-factor authentication are not yet implemented.
 - Local Docker volumes remain single-node storage; scheduling and off-host retention of recovery bundles are operator responsibilities.
 - S3 bucket creation, versioning, replication, lifecycle policy, encryption-key policy, and spend approval remain infrastructure responsibilities.
 - Gmail and Drive remain preview-only and perform no external actions.
