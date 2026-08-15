@@ -47,7 +47,7 @@ jobs:
 
   deploy:
     name: Approved production cutover
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
@@ -70,7 +70,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ github.sha }}
           path: .deploy-tooling
           persist-credentials: false
 

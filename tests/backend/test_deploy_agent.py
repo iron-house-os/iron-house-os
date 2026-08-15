@@ -40,7 +40,8 @@ def test_production_deploy_workflow_uses_tooling_wrapper_for_cutover() -> None:
         encoding="utf-8"
     )
 
-    assert "ref: ${{ github.workflow_sha }}" in workflow
+    assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in workflow
+    assert "ref: ${{ github.sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
     assert "persist-credentials: false" in workflow
     assert (
