@@ -68,7 +68,7 @@ jobs:
           [[ "$run_result" == "success" ]]
           [[ "$run_name" == "Release readiness" ]]
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
           path: .deploy-tooling
