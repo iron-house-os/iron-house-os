@@ -3,14 +3,13 @@
 
 from argparse import ArgumentParser
 from datetime import UTC, datetime
-from http.cookiejar import CookieJar
 import json
 import os
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import Request
 
-from release_smoke import _json_request
+from release_smoke import _json_request, build_smoke_opener
 
 
 def _login(base_url: str, opener, email: str, password: str) -> None:
@@ -26,7 +25,7 @@ def _login(base_url: str, opener, email: str, password: str) -> None:
 
 
 def create_marker(base_url: str, email: str, password: str, output: Path) -> dict[str, str]:
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = build_smoke_opener(base_url)
     _login(base_url, opener, email, password)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     project = _json_request(
@@ -48,7 +47,7 @@ def create_marker(base_url: str, email: str, password: str, output: Path) -> dic
 
 def verify_absent(base_url: str, email: str, password: str, source: Path) -> dict[str, str]:
     expected = json.loads(source.read_text(encoding="utf-8"))
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = build_smoke_opener(base_url)
     _login(base_url, opener, email, password)
     request = Request(
         f"{base_url.rstrip('/')}/api/v1/projects/{expected['project_id']}",

@@ -49,7 +49,13 @@ def auth_capability() -> dict[str, str]:
 
 @router.post("/login", response_model=AuthStatus, status_code=status.HTTP_200_OK)
 def login(payload: LoginRequest, request: Request, response: Response, db: DBSession) -> AuthStatus:
-    result = authenticate(db, str(payload.email), payload.password)
+    client_ip = request.client.host if request.client is not None else None
+    result = authenticate(
+        db,
+        str(payload.email),
+        payload.password,
+        client_ip=client_ip,
+    )
     context = get_request_audit_context(request)
     if result.status == AuthenticationStatus.LOCKED:
         retry_after = max(
