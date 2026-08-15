@@ -254,7 +254,8 @@ jobs:
       BOOTSTRAP_ADMIN_EMAIL: build209@ironhousecontracting.com
       BOOTSTRAP_ADMIN_PASSWORD: build-209-ci-login-password
       BOOTSTRAP_ADMIN_NAME: Build 209 Release User
-      SESSION_COOKIE_SECURE: "false"
+      SESSION_COOKIE_SECURE: "true"
+      IHOS_ALLOW_SECURE_COOKIE_OVER_LOOPBACK: "true"
       IHOS_PORT: "8080"
     steps:
       - uses: actions/checkout@v4
