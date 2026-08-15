@@ -2,7 +2,7 @@ from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_production_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.middleware.observability import RequestObservabilityMiddleware
@@ -13,6 +13,7 @@ from app.services.system_readiness import get_system_readiness
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    validate_production_settings(settings)
     configure_logging(settings.log_level)
     configure_document_audit_store(create_document_audit_store_from_environment())
 
