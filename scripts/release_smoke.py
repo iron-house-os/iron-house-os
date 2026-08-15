@@ -3,12 +3,27 @@
 
 from argparse import ArgumentParser
 from datetime import UTC, datetime
-from http.cookiejar import CookieJar
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 import json
 import os
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import HTTPCookieProcessor, OpenerDirector, Request, build_opener
 from uuid import uuid4
+
+
+def build_smoke_opener(base_url: str) -> OpenerDirector:
+    """Build a cookie opener; allow Secure cookies over HTTP only for explicit loopback CI."""
+    allow_loopback = os.getenv("IHOS_ALLOW_SECURE_COOKIE_OVER_LOOPBACK", "").lower() == "true"
+    if allow_loopback:
+        hostname = urlparse(base_url).hostname
+        if hostname not in {"127.0.0.1", "localhost", "::1"}:
+            raise RuntimeError(
+                "IHOS_ALLOW_SECURE_COOKIE_OVER_LOOPBACK is restricted to loopback test URLs."
+            )
+        policy = DefaultCookiePolicy(secure_protocols=("https", "http"))
+        return build_opener(HTTPCookieProcessor(CookieJar(policy=policy)))
+    return build_opener(HTTPCookieProcessor(CookieJar()))
 
 
 def _request(
@@ -330,7 +345,7 @@ def main() -> None:
     args = parser.parse_args()
     if not args.email or not args.password:
         raise SystemExit("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required.")
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = build_smoke_opener(args.base_url)
     print(json.dumps(run(args.base_url, opener, args.email, args.password, args.full), indent=2))
 
 
