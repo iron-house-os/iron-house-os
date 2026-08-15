@@ -6,9 +6,7 @@ from datetime import UTC, datetime
 import json
 import os
 from pathlib import Path
-from urllib.request import build_opener
-
-from release_smoke import _json_request, build_smoke_opener, _minimal_pdf, _multipart, build_smoke_opener
+from release_smoke import _json_request, _minimal_pdf, _multipart, build_smoke_opener
 
 
 def _login(base_url: str, opener, email: str, password: str) -> None:
