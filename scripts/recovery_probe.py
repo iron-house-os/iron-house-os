@@ -3,13 +3,12 @@
 
 from argparse import ArgumentParser
 from datetime import UTC, datetime
-from http.cookiejar import CookieJar
 import json
 import os
 from pathlib import Path
-from urllib.request import HTTPCookieProcessor, build_opener
+from urllib.request import build_opener
 
-from release_smoke import _json_request, _minimal_pdf, _multipart
+from release_smoke import _json_request, build_smoke_opener, _minimal_pdf, _multipart, build_smoke_opener
 
 
 def _login(base_url: str, opener, email: str, password: str) -> None:
@@ -25,7 +24,7 @@ def _login(base_url: str, opener, email: str, password: str) -> None:
 
 
 def create_probe(base_url: str, email: str, password: str, output: Path) -> dict:
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = build_smoke_opener(base_url)
     _login(base_url, opener, email, password)
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     project = _json_request(
@@ -68,7 +67,7 @@ def create_probe(base_url: str, email: str, password: str, output: Path) -> dict
 
 def verify_probe(base_url: str, email: str, password: str, source: Path) -> dict:
     expected = json.loads(source.read_text())
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = build_smoke_opener(base_url)
     _login(base_url, opener, email, password)
     project = _json_request(
         base_url,
