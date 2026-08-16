@@ -395,15 +395,16 @@ def export_certifications_csv(db: Session, user: AuthenticatedUser) -> str:
         "document_id",
         "notes",
     ])
+
     def safe_cell(value: object) -> object:
         if not isinstance(value, str):
             return value
-        return f"'{value}" if value.startswith(("=", "+", "-", "@")) else value
+        return f"'{value}" if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
     for item in certifications:
         employee = employees.get(item.employee_id)
         status = certification_schema(item)
-        writer.writerow([safe_cell(value) for value in [
+        row = [
             f"{employee.first_name} {employee.last_name}" if employee else "Unknown employee",
             employee.status if employee else "unknown",
             employee.role or employee.portal_role if employee else "",
@@ -416,7 +417,8 @@ def export_certifications_csv(db: Session, user: AuthenticatedUser) -> str:
             status.days_until_expiry if status.days_until_expiry is not None else "",
             str(item.document_id) if item.document_id else "",
             item.notes or "",
-        ]])
+        ]
+        writer.writerow([safe_cell(value) for value in row])
     return output.getvalue()
 
 
