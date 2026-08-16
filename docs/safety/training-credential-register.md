@@ -5,7 +5,7 @@ This increment advances issue #70 Phase 3 by replacing the browser-local People 
 ## Controls
 
 - Only administrators and operations managers can add credential records or export the company register.
-- Employees and other portal roles continue to receive only the certification records already scoped to their own bootstrap response.
+- Portal roles continue to receive only the certification records allowed by the existing field-operations bootstrap authorization; the company-wide export is management-only.
 - Expiry status is calculated from the stored expiry date: `current`, `expires_soon` (60 days or fewer), `expired`, or `no_expiry`.
 - Management alerts continue to identify credentials expiring within 60 days.
 - The CSV export neutralizes spreadsheet-formula prefixes in user-entered text and is delivered as `safety-credential-status.csv`.
