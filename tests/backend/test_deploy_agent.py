@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CHECKOUT_PIN = "11d5960a326750d5838078e36cf38b85af677262"
 
 
 def test_deploy_agent_requires_both_release_gates_and_allowlisted_cutover() -> None:
@@ -33,3 +34,21 @@ def test_production_cutover_handoff_is_permission_safe() -> None:
 
     assert 'exec /bin/bash "$release_root/ops/digitalocean/cutover.sh"' in wrapper
     assert cutover.stat().st_mode & stat.S_IXUSR
+
+
+def test_production_deploy_uses_trusted_workflow_tooling() -> None:
+    workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in workflow
+    assert "name: Checkout trusted deploy tooling at workflow commit" in workflow
+    assert "name: Checkout approved release SHA" in workflow
+    assert workflow.count(f"uses: actions/checkout@{CHECKOUT_PIN}") == 3
+    assert "ref: ${{ github.workflow_sha }}" in workflow
+    assert "path: .deploy-tooling" in workflow
+    assert workflow.count("persist-credentials: false") == 2
+    assert (
+        '"$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"'
+        in workflow
+    )

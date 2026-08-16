@@ -118,17 +118,6 @@ if not ports or any(port.get("host_ip") != "127.0.0.1" for port in ports):
     raise SystemExit("Frontend must bind only to 127.0.0.1 before cutover.")
 '
 
-install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
-nginx -t
-systemctl reload nginx
-"${compose[@]}" up -d --build --wait
-curl -fsS "http://127.0.0.1:${IHOS_PORT:-8080}/readiness" | python -c '
-import json, sys
-payload = json.load(sys.stdin)
-if payload.get("status") != "ready":
-    raise SystemExit(f"Loopback readiness failed: {payload}")
-'
-
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="pre-cutover-$stamp" \
@@ -142,20 +131,54 @@ certbot certonly \
   --non-interactive \
   --keep-until-expiring
 
-live_enabled=0
+gateway_config=/etc/nginx/sites-available/iron-house-os
+previous_gateway=$(mktemp)
+previous_gateway_present=0
+if [[ -f "$gateway_config" ]]; then
+  cp --preserve=mode "$gateway_config" "$previous_gateway"
+  previous_gateway_present=1
+fi
+gateway_mutated=0
+application_ready=0
 rollback_maintenance() {
   status=$?
-  if ((status != 0 && live_enabled == 1)); then
-    install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
+  if ((status != 0 && gateway_mutated == 1)); then
+    if ((application_ready == 1 && previous_gateway_present == 1)); then
+      install -m 0644 "$previous_gateway" "$gateway_config"
+    else
+      install -m 0644 ops/digitalocean/nginx-maintenance.conf "$gateway_config"
+    fi
     nginx -t >/dev/null && systemctl reload nginx
   fi
+  rm -f "$previous_gateway"
   exit "$status"
 }
 trap rollback_maintenance EXIT
-install -m 0644 ops/digitalocean/nginx-live.conf /etc/nginx/sites-available/iron-house-os
+
+"${compose[@]}" build
+gateway_mutated=1
+install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
 nginx -t
 systemctl reload nginx
-live_enabled=1
+"${compose[@]}" up -d --no-build --wait
+curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+  "http://127.0.0.1:${IHOS_PORT:-8080}/readiness" | python -c '
+import json, os, sys
+payload = json.load(sys.stdin)
+release_id = payload.get("checks", {}).get("release_id")
+expected = os.environ["IHOS_RELEASE_ID"]
+if payload.get("status") != "ready" or release_id != expected:
+    raise SystemExit(
+        "Loopback readiness failed: status={}, release_id={}, expected={}".format(
+            payload.get("status"), release_id, expected
+        )
+    )
+'
+application_ready=1
+
+install -m 0644 ops/digitalocean/nginx-live.conf "$gateway_config"
+nginx -t
+systemctl reload nginx
 python scripts/release_smoke.py \
   --base-url "https://$domain" \
   --email "$BOOTSTRAP_ADMIN_EMAIL" \
@@ -188,7 +211,7 @@ cat >"$acceptance" <<EOF
 - Decision time (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 chmod 0600 "$acceptance"
-live_enabled=0
+rm -f "$previous_gateway"
 trap - EXIT
 echo "Release $release_sha live cutover passed: https://$domain"
 echo "Operator acceptance: $acceptance"

@@ -48,3 +48,28 @@ class EmployeeOnboardingAudit(UUIDPrimaryKeyMixin, Base):
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WorkerOrientation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "worker_orientations"
+
+    onboarding_id: Mapped[UUID] = mapped_column(ForeignKey("employee_onboardings.id"), index=True, nullable=False)
+    project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    site_name: Mapped[str | None] = mapped_column(String(255))
+    trigger: Mapped[str] = mapped_column(String(40), nullable=False)
+    orientation_date: Mapped[date] = mapped_column(Date, nullable=False)
+    instructor_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    instructor_email: Mapped[str | None] = mapped_column(String(255))
+    supervisor_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    supervisor_email: Mapped[str | None] = mapped_column(String(255))
+    document_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    topics: Mapped[list[dict]] = mapped_column(JSON, nullable=False)
+    competency_result: Mapped[str] = mapped_column(String(30), nullable=False)
+    ppe_verified: Mapped[bool] = mapped_column(nullable=False)
+    qualifications_verified: Mapped[bool] = mapped_column(nullable=False)
+    worker_acknowledged: Mapped[bool] = mapped_column(nullable=False)
+    worker_acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supporting_document_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)

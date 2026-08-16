@@ -459,3 +459,35 @@ def test_time_off_request_rejects_reversed_dates() -> None:
         json={"record_type": "time_off_request", "employee_id": employee["id"], "work_date": str(date.today()), "title": "Invalid dates", "details": {"start_date": "2026-08-10", "end_date": "2026-08-09"}},
     )
     assert response.status_code == 422
+
+
+def test_purchase_order_request_is_accepted_and_returned() -> None:
+    project = _project()
+    payload = {
+        "record_type": "purchase_order_request",
+        "project_id": project["id"],
+        "cost_code": "03-310",
+        "work_date": str(date.today()),
+        "title": "PO-12345678-FIELD-OPS-001 — PVC pipe and fittings",
+        "status": "pending_approval",
+        "details": {
+            "po_number": "PO-12345678-FIELD-OPS-001",
+            "job_number": "FIELD-OPS-001",
+            "purpose": "PVC pipe and fittings",
+            "amount_estimate": 1250.5,
+        },
+    }
+
+    response = client.post("/api/v1/field-operations/records", json=payload)
+
+    assert response.status_code == 201
+    assert response.json()["record_type"] == "purchase_order_request"
+    assert response.json()["status"] == "pending_approval"
+    bootstrap = client.get("/api/v1/field-operations/bootstrap")
+    assert bootstrap.status_code == 200
+    stored = next(
+        item
+        for item in bootstrap.json()["records"]
+        if item["id"] == response.json()["id"]
+    )
+    assert stored["details"]["po_number"] == "PO-12345678-FIELD-OPS-001"

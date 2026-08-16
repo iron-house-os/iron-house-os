@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
@@ -142,6 +143,116 @@ class PortalProgressUpdate(BaseModel):
 class PortalSubmission(BaseModel):
     completed_items: list[str]
     acknowledgement: bool
+
+
+OrientationScope = Literal["company", "site"]
+OrientationTrigger = Literal[
+    "new_hire",
+    "new_site",
+    "changed_hazards",
+    "new_task",
+    "unsafe_performance",
+    "worker_request",
+    "qualification_expiry",
+    "refresher",
+]
+CompetencyResult = Literal["passed", "requires_supervision", "not_assessed"]
+
+REQUIRED_ORIENTATION_TOPIC_CODES = (
+    "supervisor_contact",
+    "rights_and_responsibilities",
+    "workplace_safety_rules",
+    "workplace_hazards",
+    "working_alone",
+    "violence_prevention",
+    "personal_protective_equipment",
+    "first_aid",
+    "emergency_procedures",
+    "task_instruction_and_demonstration",
+    "occupational_health_and_safety_program",
+    "whmis",
+    "committee_or_representative",
+)
+
+
+class OrientationTopic(BaseModel):
+    code: Literal[
+        "supervisor_contact",
+        "rights_and_responsibilities",
+        "workplace_safety_rules",
+        "workplace_hazards",
+        "working_alone",
+        "violence_prevention",
+        "personal_protective_equipment",
+        "first_aid",
+        "emergency_procedures",
+        "task_instruction_and_demonstration",
+        "occupational_health_and_safety_program",
+        "whmis",
+        "committee_or_representative",
+    ]
+    applicability: Literal["applicable", "not_applicable"]
+    evidence: str | None = Field(default=None, max_length=2000)
+    not_applicable_basis: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> OrientationTopic:
+        if self.applicability == "applicable" and not (self.evidence or "").strip():
+            raise ValueError("Evidence is required for each applicable orientation topic.")
+        if self.applicability == "not_applicable" and not (self.not_applicable_basis or "").strip():
+            raise ValueError("A basis is required when an orientation topic is not applicable.")
+        return self
+
+
+class WorkerOrientationCreate(BaseModel):
+    project_id: UUID | None = None
+    scope: OrientationScope
+    site_name: str | None = Field(default=None, max_length=255)
+    trigger: OrientationTrigger
+    orientation_date: date
+    instructor_name: str = Field(min_length=1, max_length=200)
+    instructor_email: EmailStr | None = None
+    supervisor_name: str = Field(min_length=1, max_length=200)
+    supervisor_email: EmailStr | None = None
+    document_version: str = Field(min_length=1, max_length=80)
+    topics: list[OrientationTopic]
+    competency_result: CompetencyResult
+    ppe_verified: bool
+    qualifications_verified: bool
+    worker_acknowledged: bool
+    worker_acknowledged_at: datetime | None = None
+    supporting_document_ids: list[UUID] = Field(default_factory=list)
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def validate_record(self) -> WorkerOrientationCreate:
+        if self.scope == "site" and self.project_id is None and not (self.site_name or "").strip():
+            raise ValueError("A project or site name is required for site orientation.")
+        codes = [topic.code for topic in self.topics]
+        if len(codes) != len(set(codes)) or set(codes) != set(REQUIRED_ORIENTATION_TOPIC_CODES):
+            raise ValueError("Each required orientation topic must be recorded exactly once.")
+        if self.worker_acknowledged and self.worker_acknowledged_at is None:
+            raise ValueError("Worker acknowledgement time is required when acknowledged.")
+        if not self.worker_acknowledged and self.worker_acknowledged_at is not None:
+            raise ValueError("Worker acknowledgement time cannot be set before acknowledgement.")
+        return self
+
+
+class WorkerOrientationRead(WorkerOrientationCreate):
+    id: UUID
+    onboarding_id: UUID
+    created_by: EmailStr
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DeploymentStatusRead(BaseModel):
+    status: Literal["Blocked", "Supervised work only", "Ready"]
+    blockers: list[str]
+    latest_company_orientation_id: UUID | None = None
+    latest_site_orientation_id: UUID | None = None
 
 
 class PositionOption(BaseModel):

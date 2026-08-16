@@ -28,6 +28,7 @@ REQUIRED_RUNTIME_TABLES = (
     "takeoffs",
     "tenders",
     "user_accounts",
+    "worker_orientations",
 )
 VALID_TENDER_STATUSES = (
     "new",

@@ -239,7 +239,13 @@ def calculate_estimate(payload: EstimateCreate) -> EstimateSummary:
     indirect_cost = sum(indirect.amount for indirect in payload.indirects)
     risk_cost = sum(_expected_risk_amount(risk.amount, risk.probability) for risk in payload.risks)
 
-    subtotal_before_markup = direct_cost + indirect_cost + risk_cost
+    labour_chargeout_total = _labour_chargeout_total(
+        normalized_items, payload.calculated_labour_chargeout_rate
+    )
+    labour_pricing_active = payload.base_hourly_wage > 0
+    direct_labour_cost = sum(item.labour_cost for item in line_item_costs)
+    markup_direct_cost = direct_cost - direct_labour_cost if labour_pricing_active else direct_cost
+    subtotal_before_markup = markup_direct_cost + indirect_cost + risk_cost
     contingency = subtotal_before_markup * payload.markup.contingency_percent / 100
     bonding = (subtotal_before_markup + contingency) * payload.markup.bonding_percent / 100
     insurance_base = subtotal_before_markup + contingency + bonding
@@ -248,7 +254,7 @@ def calculate_estimate(payload: EstimateCreate) -> EstimateSummary:
     overhead = overhead_base * payload.markup.overhead_percent / 100
     profit_base = overhead_base + overhead
     profit = profit_base * payload.markup.profit_percent / 100
-    final_price = profit_base + profit
+    final_price = profit_base + profit + (labour_chargeout_total if labour_pricing_active else 0)
     gross_margin_percent = ((final_price - direct_cost) / final_price * 100) if final_price else 0
 
     return EstimateSummary(
@@ -269,7 +275,34 @@ def calculate_estimate(payload: EstimateCreate) -> EstimateSummary:
         line_items=line_item_costs,
         assumptions=payload.assumptions,
         exclusions=payload.exclusions,
+        base_hourly_wage=payload.base_hourly_wage,
+        labour_chargeout_multiplier=payload.labour_chargeout_multiplier,
+        target_margin_percent=payload.target_margin_percent,
+        planned_field_shifts=payload.planned_field_shifts,
+        small_job_tier=payload.small_job_tier,
+        small_job_premium_percent=payload.small_job_premium_percent or 0,
+        calculated_labour_chargeout_rate=payload.calculated_labour_chargeout_rate,
+        labour_chargeout_total=_round_money(labour_chargeout_total),
+        override_reason=payload.override_reason,
     )
+
+
+def _labour_chargeout_total(items: list[EstimateLineItem], chargeout_rate: float) -> float:
+    total = 0.0
+    for item in items:
+        hours = _calculate_hours(item)
+        has_all_in_operator = any(
+            resource.rate_input is not None
+            and (resource.rate_input.operator_included or resource.rate_input.operator_hourly_cost > 0)
+            for resource in item.equipment
+        )
+        billable_people = sum(
+            member.quantity
+            for member in item.labour
+            if not (has_all_in_operator and "operator" in member.role.casefold())
+        )
+        total += hours * billable_people * chargeout_rate
+    return total
 
 
 def calculate_line_item(item: EstimateLineItem) -> EstimateLineItemCost:

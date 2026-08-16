@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.equipment_rates import EquipmentRateInput
 
@@ -145,6 +145,13 @@ class EstimateMarkup(BaseModel):
     insurance_percent: float = Field(default=0, ge=0)
 
 
+class SmallJobTier(StrEnum):
+    one_shift = "1_shift"
+    two_to_three_shifts = "2_3_shifts"
+    four_to_five_shifts = "4_5_shifts"
+    standard = "more_than_5_shifts"
+
+
 class EstimateCreate(BaseModel):
     project_name: str = Field(min_length=1)
     project_code: str | None = None
@@ -156,6 +163,49 @@ class EstimateCreate(BaseModel):
     markup: EstimateMarkup = Field(default_factory=EstimateMarkup)
     assumptions: list[str] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
+    base_hourly_wage: float = Field(default=0, ge=0)
+    labour_chargeout_multiplier: float = Field(default=2.1, gt=0)
+    target_margin_percent: float = Field(default=10, ge=0, lt=100)
+    planned_field_shifts: int | None = Field(default=None, ge=1)
+    small_job_tier: SmallJobTier = SmallJobTier.standard
+    small_job_premium_percent: float | None = Field(default=None, ge=0)
+    calculated_labour_chargeout_rate: float = Field(default=0, ge=0)
+    override_reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def apply_labour_pricing_standard(self) -> "EstimateCreate":
+        tier, expected_premium = labour_pricing_tier(self.planned_field_shifts)
+        premium = (
+            expected_premium
+            if self.small_job_premium_percent is None
+            else self.small_job_premium_percent
+        )
+        needs_reason = (
+            self.labour_chargeout_multiplier < 2.1
+            or self.target_margin_percent < 10
+            or premium < expected_premium
+        )
+        if needs_reason and not (self.override_reason or "").strip():
+            raise ValueError("An override reason is required below an approved labour-pricing default.")
+        object.__setattr__(self, "small_job_tier", tier)
+        object.__setattr__(self, "small_job_premium_percent", premium)
+        rate = round(
+            self.base_hourly_wage
+            * self.labour_chargeout_multiplier
+            * (1 + premium / 100)
+        )
+        object.__setattr__(self, "calculated_labour_chargeout_rate", rate)
+        return self
+
+
+def labour_pricing_tier(planned_field_shifts: int | None) -> tuple[SmallJobTier, float]:
+    if planned_field_shifts == 1:
+        return SmallJobTier.one_shift, 25
+    if planned_field_shifts is not None and planned_field_shifts <= 3:
+        return SmallJobTier.two_to_three_shifts, 20
+    if planned_field_shifts is not None and planned_field_shifts <= 5:
+        return SmallJobTier.four_to_five_shifts, 15
+    return SmallJobTier.standard, 0
 
 
 class TakeoffHandoffItem(BaseModel):
@@ -230,6 +280,15 @@ class EstimateSummary(BaseModel):
     line_items: list[EstimateLineItemCost]
     assumptions: list[str]
     exclusions: list[str]
+    base_hourly_wage: float
+    labour_chargeout_multiplier: float
+    target_margin_percent: float
+    planned_field_shifts: int | None
+    small_job_tier: SmallJobTier
+    small_job_premium_percent: float
+    calculated_labour_chargeout_rate: float
+    labour_chargeout_total: float
+    override_reason: str | None
 
 
 class ProductionRate(BaseModel):

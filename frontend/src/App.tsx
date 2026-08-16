@@ -40,6 +40,7 @@ import { SafetyProgramPage } from "./pages/SafetyProgramPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SupplierDatabasePage } from "./pages/SupplierDatabasePage";
 import { TenderIntakePage } from "./pages/TenderIntakePage";
+import { WorkerOrientationsPage } from "./pages/WorkerOrientationsPage";
 import {
   isPerformanceObservabilityEnabled,
   observeCoreRender,
@@ -84,6 +85,7 @@ function AuthenticatedApp() {
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
         <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />
+        <Route path="/worker-orientations" element={<WorkerOrientationsPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/meeting-minutes" element={<MeetingMinutesPage />} />
         <Route path="/google-calendar" element={<GoogleCalendarPage />} />

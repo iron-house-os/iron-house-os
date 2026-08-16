@@ -1,14 +1,14 @@
 """add controlled customer invoices
 
-Revision ID: 20260816_0018
-Revises: 20260806_0017
+Revision ID: 20260816_0019
+Revises: 20260816_0018
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260816_0018"
-down_revision = "20260806_0017"
+revision = "20260816_0019"
+down_revision = "20260816_0018"
 branch_labels = None
 depends_on = None
 
