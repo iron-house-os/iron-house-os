@@ -19,6 +19,7 @@ from app.schemas.field_operations import (
     FieldRecordRead,
     MilestoneDecision,
     SignatureCreate,
+    SafetyRecordUpdate,
     TimeEntryCreate,
     TimeEntryRead,
     TimeOffDecision,
@@ -83,6 +84,16 @@ def sign_field_record(
     user: CurrentUser,
 ) -> FieldRecordRead:
     return field_operations.sign_field_record(db, record_id, payload, user)
+
+
+@router.patch("/records/{record_id}/safety-status", response_model=FieldRecordRead)
+def update_safety_record_status(
+    record_id: UUID,
+    payload: SafetyRecordUpdate,
+    db: DBSession,
+    user: CurrentUser,
+) -> FieldRecordRead:
+    return field_operations.update_safety_record_status(db, record_id, payload, user)
 
 
 @router.patch("/records/{record_id}/flha", response_model=FieldRecordRead)
