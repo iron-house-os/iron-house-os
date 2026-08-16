@@ -1,4 +1,6 @@
+import csv
 from datetime import UTC, date, datetime, timedelta
+from io import StringIO
 import secrets
 from uuid import UUID
 
@@ -347,13 +349,75 @@ def create_employee(db: Session, payload: EmployeeCreate, user: AuthenticatedUse
     return EmployeeRead.model_validate(item).model_copy(update={"portal_access_created": access_created, "temporary_password": temporary_password if access_created else None})
 
 
-def create_certification(db: Session, payload: CertificationCreate) -> CertificationRead:
+def create_certification(
+    db: Session,
+    payload: CertificationCreate,
+    user: AuthenticatedUser,
+) -> CertificationRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError("Management access is required to manage safety credentials.", status_code=403)
     require_exists(db, Employee, payload.employee_id, "Employee")
     item = EmployeeCertification(**payload.model_dump())
     db.add(item)
     commit(db)
     db.refresh(item)
     return certification_schema(item)
+
+
+def export_certifications_csv(db: Session, user: AuthenticatedUser) -> str:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError("Management access is required to export safety credentials.", status_code=403)
+
+    employees = {
+        item.id: item
+        for item in db.scalars(select(Employee).order_by(Employee.last_name, Employee.first_name))
+    }
+    certifications = db.scalars(
+        select(EmployeeCertification).order_by(
+            EmployeeCertification.employee_id,
+            EmployeeCertification.name,
+            EmployeeCertification.expiry_date,
+        )
+    )
+    output = StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "employee",
+        "employee_status",
+        "role",
+        "credential",
+        "issuer",
+        "certificate_number",
+        "issued_date",
+        "expiry_date",
+        "operational_status",
+        "days_until_expiry",
+        "document_id",
+        "notes",
+    ])
+    def safe_cell(value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return f"'{value}" if value.startswith(("=", "+", "-", "@")) else value
+
+    for item in certifications:
+        employee = employees.get(item.employee_id)
+        status = certification_schema(item)
+        writer.writerow([safe_cell(value) for value in [
+            f"{employee.first_name} {employee.last_name}" if employee else "Unknown employee",
+            employee.status if employee else "unknown",
+            employee.role or employee.portal_role if employee else "",
+            item.name,
+            item.issuer or "",
+            item.certificate_number or "",
+            item.issued_date.isoformat() if item.issued_date else "",
+            item.expiry_date.isoformat() if item.expiry_date else "",
+            status.expiry_status,
+            status.days_until_expiry if status.days_until_expiry is not None else "",
+            str(item.document_id) if item.document_id else "",
+            item.notes or "",
+        ]])
+    return output.getvalue()
 
 
 def create_vehicle(db: Session, payload: VehicleCreate) -> VehicleRead:
