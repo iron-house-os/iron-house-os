@@ -21,6 +21,7 @@ from app.schemas.field_operations import (
     FLHAReassessment,
     FLHARelease,
     FLHAUpdate,
+    SafetyRecordUpdate,
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
@@ -460,9 +461,45 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
         }
     if payload.record_type == "daily_hazard_assessment":
         values = prepare_flha_values(values, user, action="created")
+    if payload.record_type in {"safety_permit", "corrective_action", "emergency_action_card"}:
+        if user.role not in {"admin", "operations_manager"} and (profile is None or profile.portal_role not in {"foreman", "management"}):
+            raise AppError("Foreperson or management access is required to create safety-control records.", status_code=403)
+        defaults = {"safety_permit": "blocked", "corrective_action": "open", "emergency_action_card": "ready"}
+        values["status"] = defaults[payload.record_type]
+        values["details"] = {**payload.details, "created_by": user.display_name, "created_at": datetime.now(UTC).isoformat()}
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
+    db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def update_safety_record_status(
+    db: Session,
+    record_id: UUID,
+    payload: SafetyRecordUpdate,
+    user: AuthenticatedUser,
+) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "Safety record")
+    if item.record_type not in {"safety_permit", "corrective_action", "emergency_action_card"}:
+        raise AppError("That record is not a safety-control record.", status_code=400)
+    profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+    if user.role not in {"admin", "operations_manager"} and (profile is None or profile.portal_role not in {"foreman", "management"}):
+        raise AppError("Foreperson or management access is required to verify safety-control records.", status_code=403)
+    allowed = {
+        "safety_permit": {"blocked", "at_risk", "ready"},
+        "corrective_action": {"open", "verification", "closed"},
+        "emergency_action_card": {"ready"},
+    }
+    if payload.status not in allowed[item.record_type]:
+        raise AppError("That status is not valid for this safety record.", status_code=400)
+    history = list((item.details or {}).get("status_history") or [])
+    history.append({"from": item.status, "to": payload.status, "by": user.display_name, "at": datetime.now(UTC).isoformat(), "evidence": payload.evidence})
+    item.status = payload.status
+    item.details = {**(item.details or {}), "verification_evidence": payload.evidence, "status_history": history}
+    item.resolved_at = datetime.now(UTC) if payload.status in {"ready", "closed"} else None
     db.add(item)
     commit(db)
     db.refresh(item)
