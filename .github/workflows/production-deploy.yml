@@ -122,8 +122,10 @@ jobs:
           release_id = payload.get("checks", {}).get("release_id")
           if payload.get("status") != "ready" or release_id != expected:
               raise SystemExit(
-                  f"Production release verification failed: "
-                  f"status={payload.get(\"status\")}, release_id={release_id}, expected={expected}"
+                  "Production release verification failed: "
+                  "status={}, release_id={}, expected={}".format(
+                      payload.get("status"), release_id, expected
+                  )
               )
           '
           echo "Production deployment and exact release verification passed."
