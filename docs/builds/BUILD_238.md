@@ -1,5 +1,7 @@
 # Build 238 — Hands-Free Session Controls
 
+> Retired: the complete voice-control system was removed by owner decision on 2026-08-16 after failed physical-device acceptance. This file remains only as historical build evidence.
+
 ## Objective
 
 Complete the management-only hands-free operating layer with deterministic local

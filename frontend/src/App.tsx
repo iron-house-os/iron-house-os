@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { HandsFreeVoiceProvider } from "./contexts/HandsFreeVoiceContext";
 import { BackupsPage } from "./pages/BackupsPage";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -123,15 +122,13 @@ function AuthenticatedApp() {
 export function App() {
   return (
     <AuthProvider>
-      <HandsFreeVoiceProvider>
-        {isPerformanceObservabilityEnabled() ? (
-          <Profiler id="core-modules" onRender={observeCoreRender}>
-            <AuthenticatedApp />
-          </Profiler>
-        ) : (
+      {isPerformanceObservabilityEnabled() ? (
+        <Profiler id="core-modules" onRender={observeCoreRender}>
           <AuthenticatedApp />
-        )}
-      </HandsFreeVoiceProvider>
+        </Profiler>
+      ) : (
+        <AuthenticatedApp />
+      )}
     </AuthProvider>
   );
 }

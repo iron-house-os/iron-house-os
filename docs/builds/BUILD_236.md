@@ -1,5 +1,7 @@
 # Build 236 — Hands-Free Hey Chat
 
+> Retired: the complete voice-control system was removed by owner decision on 2026-08-16 after physical iPad acceptance produced zero working commands. This file remains only as historical build evidence.
+
 ## Task card
 
 - **Lead function:** System Governance

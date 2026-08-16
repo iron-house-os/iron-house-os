@@ -15,7 +15,7 @@ def test_staging_compose_is_standalone_and_production_isolated() -> None:
     assert "iron-house-os-staging-network" in compose
     assert "SESSION_COOKIE_NAME" in compose
     assert "IHOS_STAGING_RELEASE_ID" in compose
-    assert "VITE_HEY_CHAT_VOICE_ENABLED" in compose
+    assert "VITE_HEY_CHAT_VOICE_ENABLED" not in compose
     assert "VITE_PERFORMANCE_OBSERVABILITY_ENABLED" in compose
     assert "docker-compose.production.yml" not in compose
     assert "os.ironhousecivil.com" not in compose
@@ -29,7 +29,7 @@ def test_staging_example_contains_no_production_targets_or_real_secrets() -> Non
     assert "ihos_staging_session" in example
     assert "staging.invalid" in example
     assert "IRON_HOUSE_CHAT_ENABLED=false" in example
-    assert "VITE_HEY_CHAT_VOICE_ENABLED=false" in example
+    assert "VITE_HEY_CHAT_VOICE_ENABLED" not in example
     assert "VITE_PERFORMANCE_OBSERVABILITY_ENABLED=false" in example
     assert "os.ironhousecivil.com" not in example
     assert "jeremie@" not in example
@@ -67,7 +67,7 @@ def test_live_staging_deploy_is_isolated_and_keeps_secrets_on_host() -> None:
     assert "chmod 0600" in deploy
     assert "IRON_HOUSE_CHAT_ENABLED=false" in deploy
     assert "GOOGLE_CALENDAR_ENABLED=false" in deploy
-    assert "VITE_HEY_CHAT_VOICE_ENABLED=true" in deploy
+    assert "VITE_HEY_CHAT_VOICE_ENABLED" not in deploy
     assert "VITE_PERFORMANCE_OBSERVABILITY_ENABLED=true" in deploy
     assert "certbot certonly --nginx" in deploy
     assert "--agree-tos" not in deploy
@@ -103,3 +103,17 @@ def test_frontend_proxy_exposes_backend_health_without_spa_fallback() -> None:
 
     assert "location = /health {" in nginx
     assert "proxy_pass http://backend:8000/health;" in nginx
+
+
+def test_voice_control_system_is_retired() -> None:
+    app = (ROOT / "frontend/src/App.tsx").read_text()
+    chat = (ROOT / "frontend/src/pages/IronHouseChatPage.tsx").read_text()
+
+    assert "HandsFreeVoice" not in app
+    assert "SpeechRecognition" not in chat
+    assert "speechSynthesis" not in chat
+    assert not (ROOT / "frontend/src/contexts/HandsFreeVoiceContext.tsx").exists()
+    assert not (ROOT / "frontend/src/utils/voiceControls.ts").exists()
+    assert not (ROOT / "frontend/src/utils/voiceNavigation.ts").exists()
+    assert not (ROOT / "frontend/e2e/voice-acceptance.spec.ts").exists()
+    assert (ROOT / "docs/operations/voice-control-retirement.md").is_file()

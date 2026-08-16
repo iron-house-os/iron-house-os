@@ -2,7 +2,7 @@ import { apiFetch } from "./client";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-export type ChatStatus = { enabled: boolean; configured: boolean; model: string; mode: string; voice_supported: boolean; memory_count: number };
+export type ChatStatus = { enabled: boolean; configured: boolean; model: string; mode: string; memory_count: number };
 export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; status: string; created_at: string };
 export type ChatConversation = { id: string; title: string; created_at: string; updated_at: string };
 export type ChatReply = { conversation: ChatConversation; user_message: ChatMessage; assistant_message: ChatMessage };

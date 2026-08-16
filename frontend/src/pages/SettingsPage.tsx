@@ -29,7 +29,7 @@ export function SettingsPage() {
         {user?.role === "admin" || user?.role === "operations_manager" ? (
           <Link to="/iron-house-chat" className="rounded-md border border-brand-gold/40 bg-white p-5 transition hover:bg-brand-gold/10 xl:col-span-2">
             <div className="flex items-center gap-2"><Bot className="h-5 w-5 text-brand-gold" /><h2 className="font-semibold">Iron House Chat</h2></div>
-            <p className="mt-2 text-sm text-iron-500">Open the separate, management-only AI help assistant with read-only controls and “Hey Chat” voice activation.</p>
+            <p className="mt-2 text-sm text-iron-500">Open the separate, management-only typed AI help assistant with read-only controls.</p>
           </Link>
         ) : null}
         <div className="rounded-md border border-iron-100 bg-white p-5">

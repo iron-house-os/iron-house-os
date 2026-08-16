@@ -139,7 +139,6 @@ write_staging_environment() {
     echo "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY="
     echo "IHOS_STAGING_RELEASE_ID=$release_sha"
     echo "IHOS_STAGING_PORT=8081"
-    echo "VITE_HEY_CHAT_VOICE_ENABLED=true"
     echo "VITE_PERFORMANCE_OBSERVABILITY_ENABLED=true"
   } >"$environment_file"
 
