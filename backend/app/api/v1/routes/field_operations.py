@@ -47,8 +47,17 @@ def create_employee(payload: EmployeeCreate, db: DBSession, user: CurrentUser) -
 
 
 @router.post("/certifications", response_model=CertificationRead, status_code=status.HTTP_201_CREATED)
-def create_certification(payload: CertificationCreate, db: DBSession) -> CertificationRead:
-    return field_operations.create_certification(db, payload)
+def create_certification(payload: CertificationCreate, db: DBSession, user: CurrentUser) -> CertificationRead:
+    return field_operations.create_certification(db, payload, user)
+
+
+@router.get("/certifications.csv")
+def export_certifications(db: DBSession, user: CurrentUser) -> Response:
+    return Response(
+        content=field_operations.export_certifications_csv(db, user),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="safety-credential-status.csv"'},
+    )
 
 
 @router.post("/vehicles", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)

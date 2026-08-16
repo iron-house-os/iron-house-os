@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   ClipboardCheck,
+  Download,
   FileWarning,
   GraduationCap,
   HardHat,
@@ -16,7 +17,10 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+import { Certification, Employee, fieldOperationsApi } from "../api/fieldOperations";
+import { useAuth } from "../contexts/AuthContext";
 
 const SAFETY_PROGRAM_URL =
   "https://docs.google.com/document/d/1ApKQs4xIR8axW0lIaeqqATDVaZWs1jvSzaZwYK6wUNw/edit?usp=drivesdk";
@@ -39,8 +43,6 @@ type SafetyRecord = {
   supervisor: string;
   acknowledgedBy: string[];
 };
-type TrainingRecord = { id: string; worker: string; credential: string; expiry: string; status: string };
-
 const procedures = [
   { code: "SWP-001", title: "Excavation and Trenching", category: "Earthworks", status: "Controlled" },
   { code: "SWP-002", title: "Ground Disturbance and Utility Locating", category: "Utilities", status: "Controlled" },
@@ -83,18 +85,43 @@ function StatCard({ label, value, note, icon: Icon }: { label: string; value: st
 }
 
 export function SafetyProgramPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [records, setRecords] = useStoredState<SafetyRecord[]>("ihos-safety-records-v2", []);
-  const [training, setTraining] = useStoredState<TrainingRecord[]>("ihos-safety-training", []);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [training, setTraining] = useState<Certification[]>([]);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [credentialLoading, setCredentialLoading] = useState(true);
+  const [credentialSaving, setCredentialSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [task, setTask] = useState("");
   const [project, setProject] = useState("");
   const [generated, setGenerated] = useState<string[]>([]);
 
+  const canManageCredentials = user?.role === "admin" || user?.role === "operations_manager";
+
+  useEffect(() => {
+    let active = true;
+    fieldOperationsApi.bootstrap()
+      .then((data) => {
+        if (!active) return;
+        setEmployees(data.employees);
+        setTraining(data.certifications);
+        setCredentialError(null);
+      })
+      .catch((current) => {
+        if (active) setCredentialError(current instanceof Error ? current.message : "Unable to load safety credentials.");
+      })
+      .finally(() => {
+        if (active) setCredentialLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
   const filteredProcedures = procedures.filter((item) => `${item.code} ${item.title} ${item.category}`.toLowerCase().includes(search.toLowerCase()));
   const openActions = records.filter((record) => record.status !== "Complete").length;
   const incidents = records.filter((record) => record.type === "Incident / Near Miss").length;
-  const expiring = useMemo(() => training.filter((item) => item.status !== "Current").length, [training]);
+  const expiring = useMemo(() => training.filter((item) => ["expires_soon", "expired"].includes(item.expiry_status)).length, [training]);
   const blocked = records.filter((record) => record.release === "Blocked" && record.status !== "Complete").length;
 
   function addRecord(event: FormEvent<HTMLFormElement>) {
@@ -113,14 +140,30 @@ export function SafetyProgramPage() {
     setRecords(records.map((record) => record.id === id ? { ...record, ...patch } : record));
   }
 
-  function addTraining(event: FormEvent<HTMLFormElement>) {
+  async function addTraining(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const expiry = String(data.get("expiry"));
-    const days = expiry ? Math.ceil((new Date(expiry).getTime() - Date.now()) / 86400000) : 9999;
-    const status = days < 0 ? "Expired" : days <= 60 ? "Expiring" : "Current";
-    setTraining([{ id: crypto.randomUUID(), worker: String(data.get("worker")), credential: String(data.get("credential")), expiry, status }, ...training]);
-    event.currentTarget.reset();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setCredentialSaving(true);
+    setCredentialError(null);
+    try {
+      await fieldOperationsApi.createCertification({
+        employee_id: String(data.get("employee_id")),
+        name: String(data.get("credential")),
+        issuer: String(data.get("issuer")) || null,
+        certificate_number: String(data.get("certificate_number")) || null,
+        issued_date: String(data.get("issued_date")) || null,
+        expiry_date: String(data.get("expiry_date")) || null,
+      });
+      const refreshed = await fieldOperationsApi.bootstrap();
+      setEmployees(refreshed.employees);
+      setTraining(refreshed.certifications);
+      form.reset();
+    } catch (current) {
+      setCredentialError(current instanceof Error ? current.message : "Unable to save the safety credential.");
+    } finally {
+      setCredentialSaving(false);
+    }
   }
 
   function generateHazards() {
@@ -139,7 +182,26 @@ export function SafetyProgramPage() {
 
     {activeTab === "Field Forms" && <section className="grid gap-6 xl:grid-cols-[400px_1fr]"><form onSubmit={addRecord} className="space-y-3 rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><div className="flex items-center gap-2"><Plus className="h-5 w-5 text-brand-gold-dark" /><h2 className="font-semibold">Create safety record</h2></div><select name="type" className="w-full rounded-md border border-iron-200 p-2 text-sm">{formTypes.map((type) => <option key={type}>{type}</option>)}</select><input required name="title" placeholder="Task, event or action" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><input name="project" placeholder="Project / location" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><input required name="owner" placeholder="Responsible person" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><input required name="supervisor" placeholder="Reviewing supervisor" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><label className="block text-xs font-semibold text-iron-500">Due date<input name="dueDate" type="date" className="mt-1 w-full rounded-md border border-iron-200 p-2 text-sm" /></label><select name="risk" className="w-full rounded-md border border-iron-200 p-2 text-sm"><option>Normal</option><option>High</option><option>Critical</option></select><select name="release" className="w-full rounded-md border border-iron-200 p-2 text-sm"><option>Blocked</option><option>At risk</option><option>Ready</option></select><button className="w-full rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black">Save record</button></form><article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><h2 className="font-semibold">Field record register</h2><div className="mt-4 space-y-4">{records.length === 0 ? <p className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">No records yet.</p> : records.map((record) => <div key={record.id} className="rounded-lg border border-iron-100 p-4"><div className="flex flex-wrap justify-between gap-3"><div><div className="text-xs font-semibold text-brand-gold-dark">{record.type} · {record.created}</div><h3 className="mt-1 font-semibold">{record.title}</h3><p className="mt-1 text-sm text-iron-500">{record.project || "Company"} · Owner: {record.owner} · Supervisor: {record.supervisor}</p><p className="mt-1 text-xs text-iron-500">Due: {record.dueDate || "Not set"} · Acknowledgements: {record.acknowledgedBy.length}</p></div><span className={`h-fit rounded-full px-2 py-1 text-xs font-semibold ${record.release === "Ready" ? "bg-emerald-100 text-emerald-800" : record.release === "At risk" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{record.release}</span></div><div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]"><input defaultValue={record.verificationEvidence} onBlur={(e) => updateRecord(record.id, { verificationEvidence: e.target.value, status: e.target.value ? "Pending verification" : "Open" })} placeholder="Verification evidence / reference" className="rounded-md border border-iron-200 p-2 text-sm" /><button onClick={() => { const name = window.prompt("Worker name acknowledging this record"); if (name) updateRecord(record.id, { acknowledgedBy: [...record.acknowledgedBy, name] }); }} className="rounded-md border px-3 py-2 text-xs font-semibold">Acknowledge</button><button disabled={!record.verificationEvidence} onClick={() => updateRecord(record.id, { status: "Complete", release: "Ready" })} className="rounded-md bg-iron-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Verify & close</button></div></div>)}</div></article></section>}
 
-    {activeTab === "People & Compliance" && <section className="grid gap-6 xl:grid-cols-[380px_1fr]"><form onSubmit={addTraining} className="space-y-3 rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><div className="flex items-center gap-2"><Users className="h-5 w-5 text-brand-gold-dark" /><h2 className="font-semibold">Add competency record</h2></div><input required name="worker" placeholder="Worker name" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><input required name="credential" placeholder="Ticket, orientation or competency" className="w-full rounded-md border border-iron-200 p-2 text-sm" /><label className="block text-xs font-semibold text-iron-500">Expiry date<input name="expiry" type="date" className="mt-1 w-full rounded-md border border-iron-200 p-2 text-sm" /></label><button className="w-full rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black">Save competency</button></form><article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><h2 className="font-semibold">Training and competency matrix</h2><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-iron-500"><th className="p-2">Worker</th><th className="p-2">Credential</th><th className="p-2">Expiry</th><th className="p-2">Status</th></tr></thead><tbody>{training.map((item) => <tr key={item.id} className="border-b"><td className="p-2 font-medium">{item.worker}</td><td className="p-2">{item.credential}</td><td className="p-2">{item.expiry || "No expiry"}</td><td className="p-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${item.status === "Current" ? "bg-emerald-100 text-emerald-800" : item.status === "Expiring" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{item.status}</span></td></tr>)}</tbody></table>{training.length === 0 && <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">No competency records entered.</p>}</div></article></section>}
+    {activeTab === "People & Compliance" && <section className="grid gap-6 xl:grid-cols-[380px_1fr]">
+      <div className="space-y-4">
+        {canManageCredentials ? <form onSubmit={(event) => void addTraining(event)} className="space-y-3 rounded-xl border border-iron-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2"><Users className="h-5 w-5 text-brand-gold-dark" /><h2 className="font-semibold">Add credential record</h2></div>
+          <select required name="employee_id" defaultValue="" className="w-full rounded-md border border-iron-200 p-2 text-sm"><option value="" disabled>Select worker</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.first_name} {employee.last_name}</option>)}</select>
+          <input required name="credential" placeholder="Ticket, course or competency" className="w-full rounded-md border border-iron-200 p-2 text-sm" />
+          <input name="issuer" placeholder="Issuer / trainer" className="w-full rounded-md border border-iron-200 p-2 text-sm" />
+          <input name="certificate_number" placeholder="Certificate number" className="w-full rounded-md border border-iron-200 p-2 text-sm" />
+          <label className="block text-xs font-semibold text-iron-500">Issued date<input name="issued_date" type="date" className="mt-1 w-full rounded-md border border-iron-200 p-2 text-sm" /></label>
+          <label className="block text-xs font-semibold text-iron-500">Expiry date<input name="expiry_date" type="date" className="mt-1 w-full rounded-md border border-iron-200 p-2 text-sm" /></label>
+          <button disabled={credentialSaving || !employees.length} className="w-full rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{credentialSaving ? "Saving…" : "Save credential"}</button>
+        </form> : <div className="rounded-xl border border-iron-100 bg-white p-5 text-sm text-iron-600 shadow-sm">Credential changes are restricted to administrators and operations managers.</div>}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900"><b>Operational status only:</b> this register reports stored dates. It does not determine legal compliance, worker competency, or authorization to perform work.</div>
+      </div>
+      <article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Training and credential status</h2><p className="mt-1 text-sm text-iron-500">Live company records with 60-day expiry warnings.</p></div>{canManageCredentials ? <a href={fieldOperationsApi.certificationExportUrl} className="inline-flex items-center gap-2 rounded-md border border-brand-gold px-3 py-2 text-sm font-semibold text-brand-gold-dark"><Download className="h-4 w-4" />Export CSV</a> : null}</div>
+        {credentialError ? <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{credentialError}</div> : null}
+        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-iron-500"><th className="p-2">Worker</th><th className="p-2">Credential</th><th className="p-2">Issuer</th><th className="p-2">Expiry</th><th className="p-2">Status</th></tr></thead><tbody>{training.map((item) => { const employee = employees.find((candidate) => candidate.id === item.employee_id); const current = ["current", "no_expiry"].includes(item.expiry_status); const warning = item.expiry_status === "expires_soon"; return <tr key={item.id} className="border-b"><td className="p-2 font-medium">{employee ? `${employee.first_name} ${employee.last_name}` : "Unknown employee"}</td><td className="p-2">{item.name}</td><td className="p-2">{item.issuer || "Not entered"}</td><td className="p-2">{item.expiry_date || "No expiry"}</td><td className="p-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${current ? "bg-emerald-100 text-emerald-800" : warning ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{item.expiry_status.replaceAll("_", " ")}</span></td></tr>; })}</tbody></table>{credentialLoading ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">Loading credential records…</p> : training.length === 0 ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">No credential records entered.</p> : null}</div>
+      </article>
+    </section>}
 
     {activeTab === "Reporting" && <section className="space-y-5"><div className="grid gap-4 md:grid-cols-4"><StatCard label="Total records" value={records.length} note="All field and management records" icon={BarChart3} /><StatCard label="Incidents" value={incidents} note="Incident and near-miss records" icon={FileWarning} /><StatCard label="Closed records" value={records.filter((r) => r.status === "Complete").length} note="Evidence entered and verified" icon={CheckCircle2} /><StatCard label="Critical records" value={records.filter((r) => r.risk === "Critical").length} note="Immediate management attention" icon={Siren} /></div><article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><h2 className="font-semibold">Safety analytics</h2><div className="mt-5 grid gap-4 md:grid-cols-2">{formTypes.slice(0, 6).map((type) => { const count = records.filter((r) => r.type === type).length; const width = records.length ? Math.max(5, Math.round((count / records.length) * 100)) : 0; return <div key={type}><div className="flex justify-between text-sm"><span>{type}</span><b>{count}</b></div><div className="mt-2 h-2 rounded-full bg-iron-100"><div className="h-2 rounded-full bg-brand-gold" style={{ width: `${width}%` }} /></div></div>; })}</div><p className="mt-5 text-xs text-iron-500">Browser-local analytics remain a staging implementation. Company-wide reporting requires the production database and authentication layer.</p></article><article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><QrCode className="text-brand-gold-dark" /><div><h2 className="font-semibold">Field deployment</h2><p className="text-sm text-iron-500">QR-ready links are staged for equipment and procedure records once permanent URLs and asset IDs are confirmed.</p></div></div></article></section>}
 
