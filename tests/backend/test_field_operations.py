@@ -459,3 +459,29 @@ def test_time_off_request_rejects_reversed_dates() -> None:
         json={"record_type": "time_off_request", "employee_id": employee["id"], "work_date": str(date.today()), "title": "Invalid dates", "details": {"start_date": "2026-08-10", "end_date": "2026-08-09"}},
     )
     assert response.status_code == 422
+
+
+def test_purchase_order_request_is_accepted_and_returned() -> None:
+    project = _project()
+    response = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "purchase_order_request",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "PO-12345678-FIELD-OPS-001 — 20 m of 200 mm PVC",
+            "status": "pending_approval",
+            "details": {
+                "po_number": "PO-12345678-FIELD-OPS-001",
+                "job_number": "FIELD-OPS-001",
+                "purpose": "20 m of 200 mm PVC, fittings and bedding material",
+                "amount_estimate": 850.00,
+                "requester_role": "operator",
+            },
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["record_type"] == "purchase_order_request"
+    assert data["status"] == "pending_approval"
+    assert data["details"]["po_number"] == "PO-12345678-FIELD-OPS-001"

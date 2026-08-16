@@ -134,8 +134,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail ?? "Request failed with " + response.status);
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null;
+    const detail = body?.detail;
+    let message: string;
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (Array.isArray(detail) && detail.length > 0) {
+      message = (detail as Array<{ msg?: string; loc?: unknown[] }>)
+        .map((e) => {
+          const loc = Array.isArray(e.loc) ? e.loc.filter((p) => p !== "body").join(" → ") : null;
+          return loc ? `${loc}: ${e.msg ?? "invalid"}` : (e.msg ?? "invalid");
+        })
+        .join("; ");
+    } else {
+      message = "Request failed with " + response.status;
+    }
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
