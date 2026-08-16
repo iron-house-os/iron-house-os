@@ -212,7 +212,7 @@ def test_safety_credentials_are_management_only_and_export_operational_status() 
     payload = {
         "employee_id": employee["id"],
         "name": "Occupational First Aid",
-        "issuer": "Approved trainer",
+        "issuer": "=Approved trainer",
         "certificate_number": "FA-100",
         "issued_date": str(date.today() - timedelta(days=335)),
         "expiry_date": str(date.today() + timedelta(days=30)),
@@ -237,6 +237,7 @@ def test_safety_credentials_are_management_only_and_export_operational_status() 
     assert "Crew Member" in exported.text
     assert "Occupational First Aid" in exported.text
     assert "expires_soon" in exported.text
+    assert "'=Approved trainer" in exported.text
 
 
 def test_job_workbook_compares_estimated_installed_and_remaining_quantities() -> None:
