@@ -90,6 +90,13 @@ export const modules: AppModule[] = [
     status: "Build 221 active",
   },
   {
+    label: "Worker Orientations",
+    path: "/worker-orientations",
+    icon: ShieldCheck,
+    description: "Controlled company and site orientation evidence with deployment status.",
+    status: "Phase 3 review",
+  },
+  {
     label: "Meeting Minutes",
     path: "/meeting-minutes",
     icon: Mic2,
