@@ -169,8 +169,9 @@ release_id = payload.get("checks", {}).get("release_id")
 expected = os.environ["IHOS_RELEASE_ID"]
 if payload.get("status") != "ready" or release_id != expected:
     raise SystemExit(
-        f"Loopback readiness failed: status={payload.get(\"status\")}, "
-        f"release_id={release_id}, expected={expected}"
+        "Loopback readiness failed: status={}, release_id={}, expected={}".format(
+            payload.get("status"), release_id, expected
+        )
     )
 '
 application_ready=1
