@@ -140,7 +140,7 @@ if [[ -f "$gateway_config" ]]; then
 fi
 gateway_mutated=0
 application_ready=0
-restore_gateway_on_failure() {
+rollback_maintenance() {
   status=$?
   if ((status != 0 && gateway_mutated == 1)); then
     if ((application_ready == 1 && previous_gateway_present == 1)); then
@@ -153,11 +153,11 @@ restore_gateway_on_failure() {
   rm -f "$previous_gateway"
   exit "$status"
 }
-trap restore_gateway_on_failure EXIT
+trap rollback_maintenance EXIT
 
 "${compose[@]}" build
 gateway_mutated=1
-install -m 0644 ops/digitalocean/nginx-maintenance.conf "$gateway_config"
+install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
 nginx -t
 systemctl reload nginx
 "${compose[@]}" up -d --no-build --wait
