@@ -47,6 +47,15 @@ def _build_summary_sheet(workbook: Workbook, summary: EstimateSummary) -> None:
     rows: list[tuple[str, Any, str | None]] = [
         ("Project", summary.project_name, None),
         ("Project Code", summary.project_code or "", None),
+        ("Base Hourly Wage", summary.base_hourly_wage, MONEY_FORMAT),
+        ("Labour Charge-Out Multiplier", summary.labour_chargeout_multiplier, None),
+        ("Target Margin", summary.target_margin_percent / 100, PERCENT_FORMAT),
+        ("Planned Field Shifts", summary.planned_field_shifts or "", None),
+        ("Small-Job Tier", summary.small_job_tier.value, None),
+        ("Small-Job Premium", summary.small_job_premium_percent / 100, PERCENT_FORMAT),
+        ("Calculated Labour Rate", summary.calculated_labour_chargeout_rate, MONEY_FORMAT),
+        ("Labour Charge-Out Total", summary.labour_chargeout_total, MONEY_FORMAT),
+        ("Override Reason", summary.override_reason or "", None),
         ("Direct Cost", summary.direct_cost, MONEY_FORMAT),
         ("Indirect Cost", summary.indirect_cost, MONEY_FORMAT),
         ("Risk Allowance", summary.risk_cost, MONEY_FORMAT),
@@ -70,15 +79,16 @@ def _build_summary_sheet(workbook: Workbook, summary: EstimateSummary) -> None:
             sheet.cell(row=row_index, column=1).font = Font(bold=True)
             value_cell.font = Font(bold=True)
 
-    sheet.cell(row=18, column=1, value="Category")
-    sheet.cell(row=18, column=2, value="Amount")
-    _header_row(sheet, 18, 1, 2)
+    category_header_row = len(rows) + 4
+    sheet.cell(row=category_header_row, column=1, value="Category")
+    sheet.cell(row=category_header_row, column=2, value="Amount")
+    _header_row(sheet, category_header_row, 1, 2)
     categories = summary.category_breakdown.model_dump()
-    for row_index, (category, amount) in enumerate(categories.items(), start=19):
+    for row_index, (category, amount) in enumerate(categories.items(), start=category_header_row + 1):
         sheet.cell(row=row_index, column=1, value=category.replace("_", " ").title())
         sheet.cell(row=row_index, column=2, value=amount).number_format = MONEY_FORMAT
 
-    _apply_borders(sheet, 3, 1, 25, 2)
+    _apply_borders(sheet, 3, 1, category_header_row + len(categories), 2)
     _set_widths(sheet, {"A": 26, "B": 18})
 
 
@@ -232,6 +242,15 @@ def _build_markups_sheet(workbook: Workbook, payload: EstimateCreate, summary: E
     sheet = workbook.create_sheet("Markups")
     _title(sheet, "Markup and Bid Build-Up")
     rows = [
+        ("Base Hourly Wage", payload.base_hourly_wage, MONEY_FORMAT),
+        ("Labour Charge-Out Multiplier", payload.labour_chargeout_multiplier, "0.000x"),
+        ("Target Margin", payload.target_margin_percent / 100, PERCENT_FORMAT),
+        ("Planned Field Shifts", payload.planned_field_shifts or "", None),
+        ("Small-Job Tier", payload.small_job_tier.value, None),
+        ("Small-Job Premium", (payload.small_job_premium_percent or 0) / 100, PERCENT_FORMAT),
+        ("Calculated Labour Rate", payload.calculated_labour_chargeout_rate, MONEY_FORMAT),
+        ("Labour Charge-Out Total", summary.labour_chargeout_total, MONEY_FORMAT),
+        ("Override Reason", payload.override_reason or "", None),
         ("Contingency %", payload.markup.contingency_percent / 100, PERCENT_FORMAT),
         ("Bonding %", payload.markup.bonding_percent / 100, PERCENT_FORMAT),
         ("Insurance %", payload.markup.insurance_percent / 100, PERCENT_FORMAT),
@@ -247,7 +266,9 @@ def _build_markups_sheet(workbook: Workbook, payload: EstimateCreate, summary: E
     ]
     for row_index, (label, value, number_format) in enumerate(rows, start=3):
         sheet.cell(row=row_index, column=1, value=label)
-        sheet.cell(row=row_index, column=2, value=value).number_format = number_format
+        cell = sheet.cell(row=row_index, column=2, value=value)
+        if number_format:
+            cell.number_format = number_format
         if label == "Final Bid Price":
             _fill_row(sheet, row_index, 1, 2, SUBTOTAL_FILL)
             sheet.cell(row=row_index, column=1).font = Font(bold=True)

@@ -29,6 +29,8 @@ def test_workbook_contains_complete_estimator_sheet_contract() -> None:
     payload = EstimateCreate(
         project_name="Marine Drive Parking Lot",
         project_code="WR26-012",
+        base_hourly_wage=40,
+        planned_field_shifts=1,
         line_items=[
             EstimateLineItem(
                 code="PIPE-001",
@@ -79,6 +81,16 @@ def test_workbook_contains_complete_estimator_sheet_contract() -> None:
     assert workbook["Equipment Rates"]["B4"].value == "Excavator"
     assert workbook["Equipment Rates"]["D4"].value == 142
     assert workbook["Equipment Rates"]["F4"].value == "IEOA 2026 Suggested Equipment Rates"
+    summary_values = {
+        workbook["Summary"].cell(row=row, column=1).value: workbook["Summary"].cell(
+            row=row, column=2
+        ).value
+        for row in range(1, workbook["Summary"].max_row + 1)
+    }
+    assert summary_values["Labour Charge-Out Multiplier"] == 2.1
+    assert summary_values["Small-Job Tier"] == "1_shift"
+    assert summary_values["Small-Job Premium"] == 0.25
+    assert summary_values["Calculated Labour Rate"] == 105
 
 
 def test_workbook_records_empty_assumptions_exclusions_and_line_items() -> None:

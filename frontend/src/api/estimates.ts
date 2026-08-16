@@ -111,6 +111,14 @@ export type EstimateCreate = {
   markup: EstimateMarkup;
   assumptions: string[];
   exclusions: string[];
+  base_hourly_wage: number;
+  labour_chargeout_multiplier: number;
+  target_margin_percent: number;
+  planned_field_shifts: number | null;
+  small_job_tier?: "1_shift" | "2_3_shifts" | "4_5_shifts" | "more_than_5_shifts";
+  small_job_premium_percent?: number | null;
+  calculated_labour_chargeout_rate?: number;
+  override_reason?: string | null;
 };
 
 export type TakeoffHandoffItem = {
@@ -185,6 +193,15 @@ export type EstimateSummary = {
   line_items: EstimateLineItemCost[];
   assumptions: string[];
   exclusions: string[];
+  base_hourly_wage: number;
+  labour_chargeout_multiplier: number;
+  target_margin_percent: number;
+  planned_field_shifts: number | null;
+  small_job_tier: "1_shift" | "2_3_shifts" | "4_5_shifts" | "more_than_5_shifts";
+  small_job_premium_percent: number;
+  calculated_labour_chargeout_rate: number;
+  labour_chargeout_total: number;
+  override_reason?: string | null;
 };
 
 export type ProductionRate = {

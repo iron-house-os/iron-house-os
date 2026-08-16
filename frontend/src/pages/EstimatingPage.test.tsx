@@ -44,6 +44,15 @@ const estimateSummary = {
   profit: 1267.88,
   final_price: 13946.63,
   gross_margin_percent: 28.3,
+  base_hourly_wage: 40,
+  labour_chargeout_multiplier: 2.1,
+  target_margin_percent: 10,
+  planned_field_shifts: 1,
+  small_job_tier: "1_shift",
+  small_job_premium_percent: 25,
+  calculated_labour_chargeout_rate: 105,
+  labour_chargeout_total: 4200,
+  override_reason: null,
   category_breakdown: {
     labour: 2500,
     equipment: 3000,
@@ -124,6 +133,11 @@ describe("EstimatingPage", () => {
     await user.type(quantity, "25");
     await user.selectOptions(screen.getByLabelText("Line item 1 production activity"), "excavation");
 
+    await user.clear(screen.getByLabelText("Base hourly wage"));
+    await user.type(screen.getByLabelText("Base hourly wage"), "40");
+    await user.clear(screen.getByLabelText("Planned field shifts"));
+    await user.type(screen.getByLabelText("Planned field shifts"), "1");
+
     await user.type(screen.getByLabelText("Line item 1 quote supplier"), "Qualified Hauling");
     await user.clear(screen.getByLabelText("Line item 1 quoted scope"));
     await user.type(screen.getByLabelText("Line item 1 quoted scope"), "Haul excavated material");
@@ -144,9 +158,19 @@ describe("EstimatingPage", () => {
 
     expect(await screen.findByText("$13,947")).toBeInTheDocument();
     expect(screen.getByText("Selected supplier: Qualified Hauling")).toBeInTheDocument();
+    expect(screen.getByText("$105/hr")).toBeInTheDocument();
+    expect(screen.getByText("1 shift · 25%")).toBeInTheDocument();
 
     await waitFor(() => expect(summaryPayloads).toHaveLength(1));
     const submitted = summaryPayloads[0];
+    expect(submitted).toEqual(
+      expect.objectContaining({
+        base_hourly_wage: 40,
+        labour_chargeout_multiplier: 2.1,
+        target_margin_percent: 10,
+        planned_field_shifts: 1,
+      }),
+    );
     expect(submitted.line_items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
