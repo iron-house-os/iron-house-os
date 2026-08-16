@@ -47,7 +47,7 @@ jobs:
 
   deploy:
     name: Approved production cutover
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
@@ -68,7 +68,15 @@ jobs:
           [[ "$run_result" == "success" ]]
           [[ "$run_name" == "Release readiness" ]]
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout trusted deploy tooling at workflow commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .deploy-tooling
+          persist-credentials: false
+
+      - name: Checkout approved release SHA
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.release_sha }}
           clean: true
@@ -101,7 +109,8 @@ jobs:
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
         run: >-
-          sudo /usr/local/sbin/ihos-production-deploy
+          sudo /bin/bash
+          "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"
           --release "$RELEASE_SHA"
           --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
 

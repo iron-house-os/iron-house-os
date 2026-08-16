@@ -112,7 +112,7 @@ def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
         "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
     )
 
-    assert workflow.count(checkout_pin) == 2
+    assert workflow.count(checkout_pin) == 3
     assert "actions/checkout@v4" not in workflow
     assert "persist-credentials: false" in workflow
     assert "Verify public production endpoints and release identity" in workflow
