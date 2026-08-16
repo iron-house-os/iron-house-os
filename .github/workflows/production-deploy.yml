@@ -32,7 +32,7 @@ jobs:
     name: Production agent policy validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate production agent scripts
         run: |
           bash -n \
@@ -68,11 +68,12 @@ jobs:
           [[ "$run_result" == "success" ]]
           [[ "$run_name" == "Release readiness" ]]
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.release_sha }}
           clean: true
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify approved main release
         env:
@@ -104,9 +105,25 @@ jobs:
           --release "$RELEASE_SHA"
           --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
 
-      - name: Verify public production endpoints
+      - name: Verify public production endpoints and release identity
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
-          curl --fail --silent --show-error https://os.ironhousecivil.com/ >/dev/null
-          curl --fail --silent --show-error https://os.ironhousecivil.com/health >/dev/null
-          curl --fail --silent --show-error https://os.ironhousecivil.com/readiness >/dev/null
-          echo "Production deployment and endpoint verification passed."
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+            https://os.ironhousecivil.com/ >/dev/null
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+            https://os.ironhousecivil.com/health >/dev/null
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+            https://os.ironhousecivil.com/readiness |
+            python -c '
+          import json, os, sys
+          payload = json.load(sys.stdin)
+          expected = os.environ["RELEASE_SHA"]
+          release_id = payload.get("checks", {}).get("release_id")
+          if payload.get("status") != "ready" or release_id != expected:
+              raise SystemExit(
+                  f"Production release verification failed: "
+                  f"status={payload.get(\"status\")}, release_id={release_id}, expected={expected}"
+              )
+          '
+          echo "Production deployment and exact release verification passed."
