@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mode=install
+if (($#)); then
+  if [[ "$1" == "--refresh-wrapper-only" && $# -eq 1 ]]; then
+    mode=refresh-wrapper
+  else
+    echo "Usage: $0 [--refresh-wrapper-only]" >&2
+    exit 2
+  fi
+fi
+
 repository=iron-house-os/iron-house-os
 runner_user=ihos-runner
 runner_root=/opt/iron-house-os-actions-runner
@@ -22,17 +32,22 @@ if [[ ! -f /etc/iron-house-os/production.env || ! -f "$wrapper_source" ]]; then
   echo "Production environment or deployment wrapper is missing." >&2
   exit 1
 fi
-if ! gh auth status --hostname github.com >/dev/null 2>&1; then
-  echo "GitHub CLI must already be authenticated for $repository." >&2
-  exit 1
-fi
-
 install -o root -g root -m 0755 "$wrapper_source" "$wrapper_target"
 printf '%s\n' \
   "$runner_user ALL=(root) NOPASSWD: $wrapper_target *" \
   >"$sudoers_target"
 chmod 0440 "$sudoers_target"
 visudo -cf "$sudoers_target" >/dev/null
+
+if [[ "$mode" == "refresh-wrapper" ]]; then
+  echo "Production deployment wrapper and sudo policy refreshed."
+  exit 0
+fi
+
+if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+  echo "GitHub CLI must already be authenticated for $repository." >&2
+  exit 1
+fi
 
 if ! id "$runner_user" >/dev/null 2>&1; then
   useradd --system --create-home --home-dir "$runner_root" --shell /usr/sbin/nologin "$runner_user"

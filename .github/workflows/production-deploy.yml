@@ -105,12 +105,18 @@ jobs:
             --dir "$RUNNER_TEMP/release-evidence"
           test -f "$RUNNER_TEMP/release-evidence/evidence.json"
 
+      - name: Verify installed production wrapper
+        run: |
+          installed_wrapper=/usr/local/sbin/ihos-production-deploy
+          trusted_wrapper="$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"
+          [[ "$(stat -c '%U:%G:%a' "$installed_wrapper")" == "root:root:755" ]]
+          cmp --silent "$trusted_wrapper" "$installed_wrapper"
+
       - name: Execute restricted production cutover
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
         run: >-
-          sudo /bin/bash
-          "$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"
+          sudo -n /usr/local/sbin/ihos-production-deploy
           --release "$RELEASE_SHA"
           --evidence "$RUNNER_TEMP/release-evidence/evidence.json"
 
