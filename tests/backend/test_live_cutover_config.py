@@ -83,3 +83,39 @@ def test_release_smoke_uses_the_real_project_scoped_drawing_route() -> None:
 
     assert "/api/v1/drawing-intelligence/projects/{project_id}" in smoke
     assert "/api/v1/drawing-intelligence/project/{project_id}" not in smoke
+
+
+def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+
+    trap = "trap rollback_maintenance EXIT"
+    maintenance = (
+        "install -m 0644 ops/digitalocean/nginx-maintenance.conf "
+        "/etc/nginx/sites-available/iron-house-os"
+    )
+    compose_build = '"${compose[@]}" build'
+    compose_up = '"${compose[@]}" up -d --no-build --wait'
+
+    assert "previous_gateway=$(mktemp)" in cutover
+    assert "application_ready=0" in cutover
+    assert cutover.index(trap) < cutover.rindex(maintenance)
+    assert cutover.index(compose_build) < cutover.rindex(maintenance)
+    assert cutover.rindex(maintenance) < cutover.index(compose_up)
+    assert "release_id != expected" in cutover
+    assert "--connect-timeout 5 --max-time 30" in cutover
+
+
+def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
+    workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text()
+
+    checkout_pin = (
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
+    )
+
+    assert workflow.count(checkout_pin) == 3
+    assert "actions/checkout@v4" not in workflow
+    assert "persist-credentials: false" in workflow
+    assert "Verify public production endpoints and release identity" in workflow
+    assert 'release_id = payload.get("checks", {}).get("release_id")' in workflow
+    assert "release_id != expected" in workflow
+    assert workflow.count("--connect-timeout 5 --max-time 30") == 3
