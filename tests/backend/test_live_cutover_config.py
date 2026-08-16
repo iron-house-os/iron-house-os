@@ -88,7 +88,7 @@ def test_release_smoke_uses_the_real_project_scoped_drawing_route() -> None:
 def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None:
     cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
 
-    trap = "trap restore_gateway_on_failure EXIT"
+    trap = "trap rollback_maintenance EXIT"
     maintenance = (
         'install -m 0644 ops/digitalocean/nginx-maintenance.conf "$gateway_config"'
     )
@@ -97,9 +97,9 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
 
     assert "previous_gateway=$(mktemp)" in cutover
     assert "application_ready=0" in cutover
-    assert cutover.index(trap) < cutover.index(maintenance)
-    assert cutover.index(compose_build) < cutover.index(maintenance)
-    assert cutover.index(maintenance) < cutover.index(compose_up)
+    assert cutover.index(trap) < cutover.rindex(maintenance)
+    assert cutover.index(compose_build) < cutover.rindex(maintenance)
+    assert cutover.rindex(maintenance) < cutover.index(compose_up)
     assert "release_id != expected" in cutover
     assert "--connect-timeout 5 --max-time 30" in cutover
 
