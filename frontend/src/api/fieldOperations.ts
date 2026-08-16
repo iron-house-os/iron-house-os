@@ -142,7 +142,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     } else if (Array.isArray(detail) && detail.length > 0) {
       message = (detail as Array<{ msg?: string; loc?: unknown[] }>)
         .map((e) => {
-          const loc = Array.isArray(e.loc) ? e.loc.filter((p) => p !== "body").join(" → ") : null;
+          const loc = Array.isArray(e.loc) ? e.loc.filter((p) => p !== "body").join(" > ") : null;
           return loc ? `${loc}: ${e.msg ?? "invalid"}` : (e.msg ?? "invalid");
         })
         .join("; ");
