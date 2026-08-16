@@ -90,7 +90,8 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
 
     trap = "trap rollback_maintenance EXIT"
     maintenance = (
-        'install -m 0644 ops/digitalocean/nginx-maintenance.conf "$gateway_config"'
+        "install -m 0644 ops/digitalocean/nginx-maintenance.conf "
+        "/etc/nginx/sites-available/iron-house-os"
     )
     compose_build = '"${compose[@]}" build'
     compose_up = '"${compose[@]}" up -d --no-build --wait'
