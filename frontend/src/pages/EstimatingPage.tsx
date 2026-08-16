@@ -70,6 +70,11 @@ export function EstimatingPage() {
   const [contingency, setContingency] = useState(10);
   const [overhead, setOverhead] = useState(5);
   const [profit, setProfit] = useState(10);
+  const [baseHourlyWage, setBaseHourlyWage] = useState(0);
+  const [labourMultiplier, setLabourMultiplier] = useState(2.1);
+  const [targetMargin, setTargetMargin] = useState(10);
+  const [plannedShifts, setPlannedShifts] = useState<number | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
   const [bonding, setBonding] = useState(0);
   const [insurance, setInsurance] = useState(0);
   const [mobilization, setMobilization] = useState(0);
@@ -111,8 +116,13 @@ export function EstimatingPage() {
       },
       assumptions,
       exclusions,
+      base_hourly_wage: baseHourlyWage,
+      labour_chargeout_multiplier: labourMultiplier,
+      target_margin_percent: targetMargin,
+      planned_field_shifts: plannedShifts,
+      override_reason: overrideReason || null,
     }),
-    [assumptions, bonding, contingency, disposal, exclusions, insurance, lineItems, mobilization, overhead, profit, projectCode, projectName, riskAmount, riskProbability],
+    [assumptions, baseHourlyWage, bonding, contingency, disposal, exclusions, insurance, labourMultiplier, lineItems, mobilization, overhead, overrideReason, plannedShifts, profit, projectCode, projectName, riskAmount, riskProbability, targetMargin],
   );
 
   useEffect(() => {
@@ -185,6 +195,11 @@ export function EstimatingPage() {
       setContingency(10);
       setOverhead(5);
       setProfit(10);
+      setBaseHourlyWage(0);
+      setLabourMultiplier(2.1);
+      setTargetMargin(10);
+      setPlannedShifts(null);
+      setOverrideReason("");
       setBonding(0);
       setInsurance(0);
       setMobilization(0);
@@ -210,6 +225,11 @@ export function EstimatingPage() {
       setContingency(estimate.markup.contingency_percent);
       setOverhead(estimate.markup.overhead_percent);
       setProfit(estimate.markup.profit_percent);
+      setBaseHourlyWage(estimate.base_hourly_wage ?? 0);
+      setLabourMultiplier(estimate.labour_chargeout_multiplier ?? 2.1);
+      setTargetMargin(estimate.target_margin_percent ?? 10);
+      setPlannedShifts(estimate.planned_field_shifts ?? null);
+      setOverrideReason(estimate.override_reason ?? "");
       setBonding(estimate.markup.bonding_percent);
       setInsurance(estimate.markup.insurance_percent);
       setMobilization(indirectAmount(estimate, "mobilization"));
@@ -394,6 +414,11 @@ export function EstimatingPage() {
           <div className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-iron-950">Bid Build-Up</h2>
             <div className="mt-4 grid gap-3">
+              <NumberField label="Base hourly wage" value={baseHourlyWage} onChange={setBaseHourlyWage} />
+              <NumberField label="Labour charge-out multiplier" value={labourMultiplier} onChange={setLabourMultiplier} />
+              <NumberField label="Target margin %" value={targetMargin} onChange={setTargetMargin} />
+              <NumberField label="Planned field shifts" value={plannedShifts ?? 0} onChange={(value) => setPlannedShifts(value > 0 ? value : null)} />
+              {(labourMultiplier < 2.1 || targetMargin < 10) ? <Input label="Override reason" value={overrideReason} onChange={setOverrideReason} required /> : null}
               <NumberField label="Mobilization" value={mobilization} onChange={setMobilization} />
               <NumberField label="Disposal" value={disposal} onChange={setDisposal} />
               <NumberField label="Risk allowance" value={riskAmount} onChange={setRiskAmount} />
@@ -548,6 +573,7 @@ function SummaryPanel({ summary, isBusy }: { summary: EstimateSummary | null; is
             <SummaryRow label="Profit" value={summary.profit} />
             <div className="border-t border-iron-100 pt-3"><SummaryRow label="Final Bid" value={summary.final_price} strong /></div>
             <div className="flex justify-between text-iron-500"><dt>Gross margin</dt><dd>{summary.gross_margin_percent.toFixed(2)}%</dd></div>
+            <div className="border-t border-iron-100 pt-3 text-iron-500"><div className="flex justify-between"><dt>Labour rate</dt><dd>{moneyFormatter.format(summary.calculated_labour_chargeout_rate)}/hr</dd></div><div className="mt-2 flex justify-between"><dt>Small-job tier</dt><dd>{summary.small_job_tier.replaceAll("_", " ")} · {summary.small_job_premium_percent}%</dd></div><div className="mt-2"><SummaryRow label="Labour charge-out" value={summary.labour_chargeout_total} /></div></div>
           </dl>
           <div className="mt-5 border-t border-iron-100 pt-4">
             <h3 className="text-sm font-semibold text-iron-950">Category Breakdown</h3>

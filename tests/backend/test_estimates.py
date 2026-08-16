@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.estimate import (
     DefaultProductionActivity,
     DisposalInput,
@@ -14,6 +17,70 @@ from app.schemas.estimate import (
     VendorQuoteInput,
 )
 from app.services.estimates import calculate_estimate, calculate_line_item, get_rate_library
+
+
+@pytest.mark.parametrize(
+    ("shifts", "tier", "premium", "rate"),
+    [
+        (1, "1_shift", 25, 105),
+        (2, "2_3_shifts", 20, 101),
+        (3, "2_3_shifts", 20, 101),
+        (4, "4_5_shifts", 15, 97),
+        (5, "4_5_shifts", 15, 97),
+        (6, "more_than_5_shifts", 0, 84),
+    ],
+)
+def test_labour_pricing_tiers_and_whole_dollar_rounding(
+    shifts: int, tier: str, premium: float, rate: float
+) -> None:
+    estimate = EstimateCreate(
+        project_name="Small job",
+        base_hourly_wage=40,
+        planned_field_shifts=shifts,
+    )
+
+    assert estimate.small_job_tier.value == tier
+    assert estimate.small_job_premium_percent == premium
+    assert estimate.calculated_labour_chargeout_rate == rate
+
+
+def test_small_job_premium_applies_only_to_labour_chargeout() -> None:
+    common = {
+        "project_name": "Small excavation",
+        "base_hourly_wage": 40,
+        "line_items": [
+            EstimateLineItem(
+                description="Excavate",
+                quantity=8,
+                unit=EstimateUnit.hour,
+                production_rate_per_hour=1,
+                labour=[LabourCrewMember(role="Labourer", quantity=1, hourly_rate=40)],
+                equipment=[EquipmentResource(name="Excavator", hourly_rate=100)],
+                materials=[MaterialInput(name="Pipe", quantity=1, unit_cost=100)],
+            )
+        ],
+    }
+    one_shift = calculate_estimate(EstimateCreate(**common, planned_field_shifts=1))
+    standard = calculate_estimate(EstimateCreate(**common, planned_field_shifts=6))
+
+    assert one_shift.category_breakdown.equipment == standard.category_breakdown.equipment == 800
+    assert one_shift.category_breakdown.material == standard.category_breakdown.material == 100
+    assert one_shift.labour_chargeout_total == 840
+    assert standard.labour_chargeout_total == 672
+    assert one_shift.final_price - standard.final_price == 168
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"labour_chargeout_multiplier": 2.0},
+        {"target_margin_percent": 9},
+        {"planned_field_shifts": 1, "small_job_premium_percent": 0},
+    ],
+)
+def test_below_standard_labour_pricing_requires_override_reason(overrides: dict) -> None:
+    with pytest.raises(ValidationError, match="override reason"):
+        EstimateCreate(project_name="Controlled override", **overrides)
 
 
 def test_calculate_line_item_self_perform_costs() -> None:
