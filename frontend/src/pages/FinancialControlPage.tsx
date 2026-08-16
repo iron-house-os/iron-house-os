@@ -5,6 +5,7 @@ import { BackupsIntake, BackupsReviewDestination } from "../api/backups";
 import { mediaApi } from "../api/media";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
+import { CustomerInvoicePanel } from "../components/CustomerInvoicePanel";
 import { financeApi, FinancialSummary, StartupExpenseSummary } from "../api/finance";
 import { projectsApi, Project } from "../api/projects";
 
@@ -34,6 +35,8 @@ export function FinancialControlPage() {
     {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
     <ReceiptCapturePanel reviewer />
+
+    <CustomerInvoicePanel />
 
     <BackupsReviewQueues queues={backupsReview} />
 

@@ -5,7 +5,7 @@ import { BackupsIntake } from "../api/backups";
 import { financeApi } from "../api/finance";
 import { FinancialControlPage } from "./FinancialControlPage";
 
-vi.mock("../api/finance", () => ({ financeApi: { getBackupsReview: vi.fn(), getStartupExpenses: vi.fn(), getProject: vi.fn(), importEstimate: vi.fn(), createEntry: vi.fn(), createStartupExpense: vi.fn(), updateStartupExpense: vi.fn(), startupQuickBooksUrl: vi.fn(() => "#"), quickBooksUrl: vi.fn(() => "#") } }));
+vi.mock("../api/finance", () => ({ financeApi: { getBackupsReview: vi.fn(), getStartupExpenses: vi.fn(), getCustomerInvoices: vi.fn(() => Promise.resolve({ items: [], total: 0 })), getProject: vi.fn(), importEstimate: vi.fn(), createEntry: vi.fn(), createStartupExpense: vi.fn(), updateStartupExpense: vi.fn(), startupQuickBooksUrl: vi.fn(() => "#"), quickBooksUrl: vi.fn(() => "#"), customerInvoicePdfUrl: vi.fn(() => "#") } }));
 vi.mock("../api/projects", () => ({ projectsApi: { list: vi.fn(() => Promise.resolve({ items: [] })) } }));
 vi.mock("../api/media", () => ({ mediaApi: { contentUrl: vi.fn((id: string) => `/private-media/${id}`), upload: vi.fn(), link: vi.fn() } }));
 vi.mock("../components/ReceiptCapturePanel", () => ({ ReceiptCapturePanel: () => <div>Controlled receipt workflow</div> }));
