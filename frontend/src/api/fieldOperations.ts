@@ -56,6 +56,19 @@ export type FieldRecord = {
   alert_recipients: string[];
   submitted_by: string | null;
 };
+export type Certification = {
+  id: string;
+  employee_id: string;
+  name: string;
+  issuer: string | null;
+  certificate_number: string | null;
+  issued_date: string | null;
+  expiry_date: string | null;
+  document_id: string | null;
+  notes: string | null;
+  expiry_status: "current" | "expires_soon" | "expired" | "no_expiry";
+  days_until_expiry: number | null;
+};
 export type FieldOperationsBootstrap = {
   employees: Employee[];
   projects: SelectRecord[];
@@ -107,7 +120,7 @@ export type FieldOperationsBootstrap = {
   vehicle_logs: VehicleLog[];
   time_entries: Array<Record<string, unknown>>;
   records: FieldRecord[];
-  certifications: Array<Record<string, unknown>>;
+  certifications: Certification[];
   alerts: Array<{ type: string; severity: string; title: string; recipients: string[] }>;
   toolbox_talk: {
     week_of: string;
@@ -205,5 +218,6 @@ export const fieldOperationsApi = {
   createEmployee: (payload: Record<string, unknown>) =>
     request("/field-operations/employees", { method: "POST", body: JSON.stringify(payload) }),
   createCertification: (payload: Record<string, unknown>) =>
-    request("/field-operations/certifications", { method: "POST", body: JSON.stringify(payload) }),
+    request<Certification>("/field-operations/certifications", { method: "POST", body: JSON.stringify(payload) }),
+  certificationExportUrl: API_BASE_URL + "/field-operations/certifications.csv",
 };
