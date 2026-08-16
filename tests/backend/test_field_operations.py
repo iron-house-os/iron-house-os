@@ -129,6 +129,53 @@ def test_flagged_inspection_alerts_management_and_accepts_signature() -> None:
     assert signed.json()["signatures"][0]["employee_name"] == "Crew Member"
 
 
+def test_safety_control_records_require_evidence_for_release_and_keep_history() -> None:
+    project = _project()
+    created = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "safety_permit",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Ground disturbance permit",
+            "severity": "high",
+            "details": {"task": "Excavate water service", "supervisor": "Safety Lead"},
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["status"] == "blocked"
+
+    missing_evidence = client.patch(
+        f"/api/v1/field-operations/records/{created.json()['id']}/safety-status",
+        json={"status": "ready"},
+    )
+    assert missing_evidence.status_code == 422
+
+    released = client.patch(
+        f"/api/v1/field-operations/records/{created.json()['id']}/safety-status",
+        json={"status": "ready", "evidence": "Utility locates and daylighting were verified at the work face."},
+    )
+    assert released.status_code == 200
+    assert released.json()["status"] == "ready"
+    assert released.json()["details"]["status_history"][-1]["from"] == "blocked"
+
+
+def test_safety_status_endpoint_rejects_non_safety_records() -> None:
+    created = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "journal",
+            "work_date": str(date.today()),
+            "title": "Daily note",
+        },
+    )
+    response = client.patch(
+        f"/api/v1/field-operations/records/{created.json()['id']}/safety-status",
+        json={"status": "closed", "evidence": "Not applicable."},
+    )
+    assert response.status_code == 400
+
+
 def test_course_ticket_expiry_creates_management_alert() -> None:
     employee = _employee()
     response = client.post(

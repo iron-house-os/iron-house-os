@@ -27,6 +27,9 @@ RecordType = Literal[
     "weather",
     "daily_timesheet",
     "purchase_order_request",
+    "safety_permit",
+    "corrective_action",
+    "emergency_action_card",
 ]
 
 
@@ -260,6 +263,17 @@ class FLHAReassessment(FLHAUpdate):
 
 class FLHARelease(BaseModel):
     verification: str = Field(min_length=10, max_length=1000)
+
+
+class SafetyRecordUpdate(BaseModel):
+    status: Literal["blocked", "at_risk", "ready", "open", "verification", "closed"]
+    evidence: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def require_evidence_for_completion(self) -> "SafetyRecordUpdate":
+        if self.status in {"ready", "verification", "closed"} and not (self.evidence or "").strip():
+            raise ValueError("Verification evidence is required for that status.")
+        return self
 
 
 class MilestoneDecision(BaseModel):
