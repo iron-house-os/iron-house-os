@@ -1,13 +1,18 @@
+import csv
+import io
+import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import AdminUser
+from app.api.dependencies.auth import AdminUser, CurrentUser
 from app.db.session import get_db
 from app.schemas.employee_onboarding import (
     CorrectionRequest,
+    DeploymentStatusRead,
     EmployeeOnboardingCreate,
     EmployeeOnboardingList,
     EmployeeOnboardingRead,
@@ -16,11 +21,19 @@ from app.schemas.employee_onboarding import (
     PortalProgressUpdate,
     PortalSubmission,
     PositionOption,
+    WorkerOrientationCreate,
+    WorkerOrientationRead,
 )
 from app.services import employee_onboarding as service
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
+
+
+def _require_management(user: CurrentUser):
+    if user.role not in {"admin", "operations_manager"}:
+        raise HTTPException(status_code=403, detail="Management access is required.")
+    return user
 
 
 def _record_or_404(db: Session, onboarding_id: UUID):
@@ -36,7 +49,8 @@ def positions(_: AdminUser) -> list[PositionOption]:
 
 
 @router.get("", response_model=EmployeeOnboardingList)
-def list_onboarding(_: AdminUser, db: DBSession) -> EmployeeOnboardingList:
+def list_onboarding(user: CurrentUser, db: DBSession) -> EmployeeOnboardingList:
+    _require_management(user)
     items = service.list_records(db)
     return EmployeeOnboardingList(items=[EmployeeOnboardingRead.model_validate(item) for item in items], total=len(items))
 
@@ -98,6 +112,75 @@ def activate(onboarding_id: UUID, admin: AdminUser, db: DBSession) -> EmployeeOn
         return EmployeeOnboardingRead.model_validate(service.activate(db, _record_or_404(db, onboarding_id), admin.email))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{onboarding_id}/orientations", response_model=list[WorkerOrientationRead])
+def list_orientations(onboarding_id: UUID, user: CurrentUser, db: DBSession) -> list[WorkerOrientationRead]:
+    _require_management(user)
+    _record_or_404(db, onboarding_id)
+    return [WorkerOrientationRead.model_validate(item) for item in service.list_orientations(db, onboarding_id)]
+
+
+@router.post(
+    "/{onboarding_id}/orientations",
+    response_model=WorkerOrientationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_orientation(
+    onboarding_id: UUID,
+    payload: WorkerOrientationCreate,
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkerOrientationRead:
+    _require_management(user)
+    orientation = service.create_orientation(db, _record_or_404(db, onboarding_id), payload, user.email)
+    return WorkerOrientationRead.model_validate(orientation)
+
+
+@router.get("/{onboarding_id}/deployment-status", response_model=DeploymentStatusRead)
+def deployment_status(onboarding_id: UUID, user: CurrentUser, db: DBSession) -> DeploymentStatusRead:
+    _require_management(user)
+    return service.deployment_status(db, _record_or_404(db, onboarding_id))
+
+
+@router.get("/{onboarding_id}/orientations.csv", response_class=Response)
+def export_orientations(onboarding_id: UUID, user: CurrentUser, db: DBSession) -> Response:
+    _require_management(user)
+    record = _record_or_404(db, onboarding_id)
+    output = io.StringIO()
+    fields = [
+        "worker", "worker_email", "site", "scope", "trigger", "orientation_date",
+        "instructor", "supervisor", "document_version", "competency_result", "ppe_verified",
+        "qualifications_verified", "worker_acknowledged_at", "topics", "supporting_document_ids",
+        "created_by", "created_at",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for item in service.list_orientations(db, onboarding_id):
+        writer.writerow({
+            "worker": f"{record.legal_first_name} {record.legal_last_name}",
+            "worker_email": record.personal_email,
+            "site": item.site_name or "",
+            "scope": item.scope,
+            "trigger": item.trigger,
+            "orientation_date": item.orientation_date.isoformat(),
+            "instructor": item.instructor_name,
+            "supervisor": item.supervisor_name,
+            "document_version": item.document_version,
+            "competency_result": item.competency_result,
+            "ppe_verified": item.ppe_verified,
+            "qualifications_verified": item.qualifications_verified,
+            "worker_acknowledged_at": item.worker_acknowledged_at.isoformat() if item.worker_acknowledged_at else "",
+            "topics": json.dumps(item.topics),
+            "supporting_document_ids": json.dumps(item.supporting_document_ids),
+            "created_by": item.created_by,
+            "created_at": item.created_at.isoformat(),
+        })
+    return Response(
+        output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="worker-orientations-{onboarding_id}.csv"'},
+    )
 
 
 @router.get("/portal/{token}", response_model=EmployeeOnboardingRead)
