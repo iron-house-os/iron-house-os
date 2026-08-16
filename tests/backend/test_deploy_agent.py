@@ -48,7 +48,22 @@ def test_production_deploy_uses_trusted_workflow_tooling() -> None:
     assert "ref: ${{ github.workflow_sha }}" in workflow
     assert "path: .deploy-tooling" in workflow
     assert workflow.count("persist-credentials: false") == 2
-    assert (
-        '"$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"'
-        in workflow
+    assert 'cmp --silent "$trusted_wrapper" "$installed_wrapper"' in workflow
+    assert '"root:root:755"' in workflow
+    assert "sudo -n /usr/local/sbin/ihos-production-deploy" in workflow
+    assert "sudo /bin/bash" not in workflow
+
+
+def test_production_runner_has_bounded_wrapper_refresh_mode() -> None:
+    installer = (ROOT / "ops/digitalocean/install-production-runner.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--refresh-wrapper-only" in installer
+    assert 'if [[ "$mode" == "refresh-wrapper" ]]' in installer
+    assert installer.index('install -o root -g root -m 0755') < installer.index(
+        'if [[ "$mode" == "refresh-wrapper" ]]'
+    )
+    assert installer.index('if [[ "$mode" == "refresh-wrapper" ]]') < installer.index(
+        "gh auth status"
     )
