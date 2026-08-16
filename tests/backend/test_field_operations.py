@@ -12,6 +12,21 @@ from app.services.auth import AuthenticatedUser
 client = TestClient(app)
 
 
+def _authenticate_as(role: str) -> None:
+    def override(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000070"),
+            email=f"{role}@ironhousecontracting.com",
+            display_name=f"Test {role.replace('_', ' ').title()}",
+            role=role,
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = override
+
+
 def _employee() -> dict:
     response = client.post(
         "/api/v1/field-operations/employees",
@@ -190,6 +205,38 @@ def test_course_ticket_expiry_creates_management_alert() -> None:
     assert response.json()["expiry_status"] == "expires_soon"
     alerts = client.get("/api/v1/field-operations/bootstrap").json()["alerts"]
     assert any(alert["type"] == "ticket_expiry" for alert in alerts)
+
+
+def test_safety_credentials_are_management_only_and_export_operational_status() -> None:
+    employee = _employee()
+    payload = {
+        "employee_id": employee["id"],
+        "name": "Occupational First Aid",
+        "issuer": "Approved trainer",
+        "certificate_number": "FA-100",
+        "issued_date": str(date.today() - timedelta(days=335)),
+        "expiry_date": str(date.today() + timedelta(days=30)),
+        "notes": "Renewal booking is an operational follow-up, not a compliance conclusion.",
+    }
+
+    _authenticate_as("viewer")
+    denied_create = client.post("/api/v1/field-operations/certifications", json=payload)
+    assert denied_create.status_code == 403
+    denied_export = client.get("/api/v1/field-operations/certifications.csv")
+    assert denied_export.status_code == 403
+
+    _authenticate_as("operations_manager")
+    created = client.post("/api/v1/field-operations/certifications", json=payload)
+    assert created.status_code == 201
+    assert created.json()["expiry_status"] == "expires_soon"
+
+    exported = client.get("/api/v1/field-operations/certifications.csv")
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("text/csv")
+    assert "safety-credential-status.csv" in exported.headers["content-disposition"]
+    assert "Crew Member" in exported.text
+    assert "Occupational First Aid" in exported.text
+    assert "expires_soon" in exported.text
 
 
 def test_job_workbook_compares_estimated_installed_and_remaining_quantities() -> None:
