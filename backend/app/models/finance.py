@@ -145,3 +145,29 @@ class ReceiptAuditEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     to_status: Mapped[str | None] = mapped_column(String(40))
     reason: Mapped[str | None] = mapped_column(Text)
     changes_json: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
+
+
+class CustomerInvoice(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "customer_invoices"
+    __table_args__ = (UniqueConstraint("invoice_number"),)
+
+    invoice_number: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    project_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    site_address: Mapped[str | None] = mapped_column(String(500))
+    customer_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    customer_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    customer_phone: Mapped[str | None] = mapped_column(String(40))
+    invoice_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    terms: Mapped[str] = mapped_column(String(80), default="Net 30", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+    line_items_json: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
+    subtotal: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    gst_rate: Mapped[float] = mapped_column(Numeric(7, 4), default=5, nullable=False)
+    gst: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    development_seed_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    issued_by: Mapped[str | None] = mapped_column(String(255))
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

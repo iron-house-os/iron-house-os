@@ -14,6 +14,10 @@ from app.schemas.receipt import (
     ReceiptList, ReceiptRead, ReceiptUpdate,
 )
 from app.schemas.finance import (
+    CustomerInvoiceCreate,
+    CustomerInvoiceList,
+    CustomerInvoiceRead,
+    CustomerInvoiceStatusUpdate,
     EstimateBudgetImportRequest,
     FinancialEntryCreate,
     FinancialEntryRead,
@@ -23,10 +27,37 @@ from app.schemas.finance import (
     StartupExpenseSummary,
     StartupExpenseUpdate,
 )
-from app.services import backups, finance, receipt_extraction, receipts
+from app.services import backups, customer_invoices, finance, receipt_extraction, receipts
+from app.services.customer_invoice_pdf import render_customer_invoice_pdf
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
+
+
+@router.post("/customer-invoices", response_model=CustomerInvoiceRead, status_code=status.HTTP_201_CREATED)
+def create_customer_invoice(payload: CustomerInvoiceCreate, db: DBSession, user: CurrentUser) -> CustomerInvoiceRead:
+    return customer_invoices.create_invoice(db, payload, user)
+
+
+@router.get("/customer-invoices", response_model=CustomerInvoiceList)
+def list_customer_invoices(db: DBSession, user: CurrentUser) -> CustomerInvoiceList:
+    return customer_invoices.list_invoices(db, user)
+
+
+@router.get("/customer-invoices/{invoice_id}", response_model=CustomerInvoiceRead)
+def get_customer_invoice(invoice_id: UUID, db: DBSession, user: CurrentUser) -> CustomerInvoiceRead:
+    return customer_invoices.get_invoice(db, invoice_id, user)
+
+
+@router.patch("/customer-invoices/{invoice_id}/status", response_model=CustomerInvoiceRead)
+def update_customer_invoice_status(invoice_id: UUID, payload: CustomerInvoiceStatusUpdate, db: DBSession, user: CurrentUser) -> CustomerInvoiceRead:
+    return customer_invoices.update_status(db, invoice_id, payload, user)
+
+
+@router.get("/customer-invoices/{invoice_id}/pdf")
+def customer_invoice_pdf(invoice_id: UUID, db: DBSession, user: CurrentUser) -> Response:
+    invoice = customer_invoices.get_invoice(db, invoice_id, user)
+    return Response(content=render_customer_invoice_pdf(invoice), media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{invoice.invoice_number}.pdf"'})
 
 
 @router.get("/backups-review", response_model=BackupsIntakeList)

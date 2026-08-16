@@ -9,6 +9,7 @@ from app.models.equipment import Equipment
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
 from app.models.finance import (
     CompanyCard,
+    CustomerInvoice,
     FinancialEntry,
     Receipt,
     ReceiptAlias,
@@ -52,6 +53,7 @@ __all__ = [
     "FieldRecord",
     "FinancialEntry",
     "CompanyCard",
+    "CustomerInvoice",
     "Receipt",
     "ReceiptAlias",
     "ReceiptAuditEvent",

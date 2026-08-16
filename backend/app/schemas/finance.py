@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 FinancialEntryType = Literal["budget", "commitment", "actual", "revenue", "forecast_adjustment"]
@@ -98,3 +98,69 @@ class ProjectFinancialSummary(BaseModel):
 
 class EstimateBudgetImportRequest(BaseModel):
     workspace_id: UUID | None = None
+
+
+InvoiceStatus = Literal["draft", "approved", "issued", "paid", "void"]
+
+
+class CustomerInvoiceLine(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    quantity: str = Field(default="1", min_length=1, max_length=30)
+    unit_price: str = Field(min_length=1, max_length=30)
+
+
+class CustomerInvoiceCreate(BaseModel):
+    invoice_number: str = Field(min_length=1, max_length=80)
+    project_id: UUID | None = None
+    project_name: str = Field(min_length=1, max_length=255)
+    site_address: str | None = Field(default=None, max_length=500)
+    customer_name: str = Field(min_length=1, max_length=255)
+    customer_address: str = Field(min_length=1, max_length=500)
+    customer_phone: str | None = Field(default=None, max_length=40)
+    invoice_date: date
+    due_date: date
+    terms: str = Field(default="Net 30", min_length=1, max_length=80)
+    gst_rate: str = Field(default="5.00", min_length=1, max_length=20)
+    line_items: list[CustomerInvoiceLine] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "CustomerInvoiceCreate":
+        if self.due_date < self.invoice_date:
+            raise ValueError("Due date cannot precede invoice date.")
+        return self
+
+
+class CustomerInvoiceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    invoice_number: str
+    project_id: UUID | None
+    project_name: str
+    site_address: str | None
+    customer_name: str
+    customer_address: str
+    customer_phone: str | None
+    invoice_date: date
+    due_date: date
+    terms: str
+    status: InvoiceStatus
+    line_items: list[dict]
+    subtotal: str
+    gst_rate: str
+    gst: str
+    total: str
+    development_seed_key: str | None
+    created_by: str
+    issued_by: str | None
+    issued_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CustomerInvoiceList(BaseModel):
+    items: list[CustomerInvoiceRead]
+    total: int
+
+
+class CustomerInvoiceStatusUpdate(BaseModel):
+    status: InvoiceStatus
