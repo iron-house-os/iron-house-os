@@ -117,7 +117,6 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Build disposable acceptance frontend
         env:
-          VITE_HEY_CHAT_VOICE_ENABLED: "true"
           VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
         run: npm run build
       - name: Run browser release gate
@@ -139,7 +138,6 @@ jobs:
       SESSION_COOKIE_SECURE: "false"
       IHOS_STAGING_RELEASE_ID: ${{ github.sha }}
       IHOS_STAGING_PORT: "8081"
-      VITE_HEY_CHAT_VOICE_ENABLED: "true"
       VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
       IHOS_STAGING_ENV_FILE: .env.staging.example
     steps:

@@ -105,5 +105,4 @@ The example credentials are for configuration and disposable testing only. They 
 
 - No staging host or domain has been approved.
 - No staging-only secrets or OAuth client have been supplied.
-- Physical iPad Safari acceptance is not complete.
-- Sprint 1A remains a draft PR and must be integrated before its voice flag can be enabled in a staging image.
+- Browser voice control was retired by owner decision after failed physical-device acceptance and must not be restored.

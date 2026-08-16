@@ -1,5 +1,7 @@
 # Build 237 — Deterministic Hands-Free Navigation
 
+> Retired: the complete voice-control system was removed by owner decision on 2026-08-16 after failed physical-device acceptance. This file remains only as historical build evidence.
+
 ## Objective
 
 Extend the management-only “Hey Chat” layer with safe, deterministic navigation

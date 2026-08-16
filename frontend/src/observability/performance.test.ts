@@ -6,13 +6,7 @@ import {
   isPerformanceObservabilityEnabled,
   observeApiRequest,
   observeCoreRender,
-  observeVoiceCommand,
-  observeVoiceFailure,
-  observeVoiceRecognizerStart,
-  observeVoiceRecognizerStop,
-  observeVoiceRestartScheduled,
   resetPerformanceObservabilityForTests,
-  setVoiceResource,
 } from "./performance";
 
 describe("performance observability", () => {
@@ -28,18 +22,11 @@ describe("performance observability", () => {
     expect(isPerformanceObservabilityEnabled(undefined, true)).toBe(true);
   });
 
-  it("records only aggregate API, render, and voice lifecycle data", () => {
+  it("records only aggregate API and render lifecycle data", () => {
     observeApiRequest(100, "success");
     observeApiRequest(300, "failure");
     observeApiRequest(50, "aborted");
     observeCoreRender("core-modules", "mount", 60, 70, 1, 2);
-    observeVoiceRecognizerStart();
-    observeVoiceRecognizerStop();
-    observeVoiceRestartScheduled();
-    observeVoiceCommand(125);
-    observeVoiceFailure();
-    setVoiceResource("active_requests", true);
-    setVoiceResource("active_requests", false);
 
     const snapshot = getPerformanceSnapshot();
     expect(snapshot.api).toEqual({
@@ -51,19 +38,6 @@ describe("performance observability", () => {
     expect(snapshot.renders["core-modules"]).toMatchObject({
       commits: 1,
       slow_commits: 1,
-    });
-    expect(snapshot.voice).toMatchObject({
-      recognizer_starts: 1,
-      restarts_scheduled: 1,
-      commands: 1,
-      failures: 1,
-      maximum_active_recognition_sessions: 1,
-      resources: {
-        active_recognition_sessions: 0,
-        active_restart_timers: 0,
-        active_speech_watchdogs: 0,
-        active_requests: 0,
-      },
     });
     expect(JSON.stringify(snapshot)).not.toContain("transcript");
     expect(JSON.stringify(snapshot)).not.toContain("credential");
@@ -78,14 +52,4 @@ describe("performance observability", () => {
     expect(Object.isFrozen(window.__IHOS_PERFORMANCE__)).toBe(true);
   });
 
-  it("bounds duration samples and reports a stable p95", () => {
-    for (let index = 1; index <= 150; index += 1) {
-      observeVoiceCommand(index);
-    }
-
-    const latency = getPerformanceSnapshot().voice.command_latency;
-    expect(latency.count).toBe(100);
-    expect(latency.max_ms).toBe(150);
-    expect(latency.p95_ms).toBe(145);
-  });
 });

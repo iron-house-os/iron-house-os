@@ -32,7 +32,6 @@ def test_management_can_see_separate_assistant_status() -> None:
         "configured": bool(get_settings().openai_api_key),
         "model": "gpt-5.6-sol",
         "mode": "read-only",
-        "voice_supported": True,
         "memory_count": 7,
     }
 

@@ -38,7 +38,6 @@ class AssistantStatus(BaseModel):
     configured: bool
     model: str
     mode: str
-    voice_supported: bool = True
     memory_count: int = 0
 
 

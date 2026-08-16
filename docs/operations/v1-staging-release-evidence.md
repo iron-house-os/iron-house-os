@@ -58,8 +58,8 @@ recorded:
 - approved isolated staging host and DNS name;
 - staging-only secrets and OAuth configuration;
 - live HTTPS smoke against that host;
-- completed physical iPad Safari record in
-  `docs/operations/v1-staging-ipad-acceptance.md`;
+- confirmation that the owner-directed voice-control retirement is present in
+  the release candidate and no voice UI, runtime, configuration, or gate remains;
 - explicit human approval for the dependency PR order, integration merge, and
   any later production cutover.
 

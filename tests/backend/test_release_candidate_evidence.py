@@ -63,14 +63,14 @@ def test_staging_manifest_records_images_migration_rollback_and_baseline() -> No
         migrations={"alembic": "build_237"},
         rollback="passed",
         production_baseline="55afaa689603263c1ad415436e90cce6679808c3",
-        known_limitations=("Physical iPad acceptance remains pending.",),
+        known_limitations=("Operator acceptance remains pending.",),
     )
 
     assert evidence["images"]["backend"].startswith("sha256:")
     assert evidence["migrations"] == {"alembic": "build_237"}
     assert evidence["rollback"] == {"outcome": "passed", "scope": "staging_only"}
     assert evidence["production_baseline"]["comparison"] == "read_only"
-    assert "Physical iPad acceptance remains pending." in evidence["limitations"]
+    assert "Operator acceptance remains pending." in evidence["limitations"]
     assert parse_assignments(["backend=sha256:abc"], label="image") == {
         "backend": "sha256:abc"
     }

@@ -74,7 +74,6 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Build disposable acceptance frontend
         env:
-          VITE_HEY_CHAT_VOICE_ENABLED: "true"
           VITE_PERFORMANCE_OBSERVABILITY_ENABLED: "true"
         run: npm run build
       - name: Run browser release gate
