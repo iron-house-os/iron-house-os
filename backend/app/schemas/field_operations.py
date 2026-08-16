@@ -26,6 +26,7 @@ RecordType = Literal[
     "rental_equipment",
     "weather",
     "daily_timesheet",
+    "purchase_order_request",
 ]
 
 

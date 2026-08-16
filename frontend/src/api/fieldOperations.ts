@@ -128,14 +128,51 @@ export type FieldOperationsBootstrap = {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+type ValidationIssue = {
+  loc?: unknown;
+  msg?: unknown;
+};
+
+export function formatApiErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string") {
+    return detail.trim() || null;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (!item || typeof item !== "object") return "";
+        const issue = item as ValidationIssue;
+        const message = typeof issue.msg === "string" ? issue.msg.trim() : "";
+        const location = Array.isArray(issue.loc)
+          ? issue.loc.filter((part) => part !== "body").map(String).join(".")
+          : "";
+        return message ? (location ? `${location}: ${message}` : message) : "";
+      })
+      .filter(Boolean);
+    return messages.length ? messages.join("; ") : null;
+  }
+  if (detail && typeof detail === "object") {
+    const payload = detail as Record<string, unknown>;
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    const blockers = Array.isArray(payload.blockers)
+      ? payload.blockers.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      : [];
+    if (message || blockers.length) {
+      return [message, ...blockers].filter(Boolean).join(" ");
+    }
+  }
+  return null;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await apiFetch(API_BASE_URL + path, {
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail ?? "Request failed with " + response.status);
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null;
+    throw new Error(formatApiErrorDetail(body?.detail) ?? "Request failed with " + response.status);
   }
   return response.json() as Promise<T>;
 }
