@@ -11,3 +11,5 @@ High-risk permit readiness, corrective actions, and emergency action cards are a
 - Emergency cards are operational information only. The responsible supervisor must confirm the site details with the crew whenever conditions change.
 
 These workflows preserve the approved Iron House interface and do not publish new safety policy or regulatory conclusions.
+
+Incident, near-miss, and privacy-scoped first-aid occurrence controls are documented separately in [incident-and-first-aid-occurrence-records.md](incident-and-first-aid-occurrence-records.md).
