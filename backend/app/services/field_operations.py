@@ -44,6 +44,8 @@ from app.services.cost_codes import get_cost_code_library
 
 
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
+MANAGEMENT_ROLES = {"admin", "operations_manager"}
+SENSITIVE_OCCURRENCE_TYPES = {"incident", "first_aid_record"}
 FLHA_SCREENING_ITEMS = [
     "first_aid_equipment",
     "overhead_hazards",
@@ -155,6 +157,17 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     material_movement_summary = build_material_movement_summary(db)
     milestone_recognitions = build_milestone_recognitions(db)
     paperwork_recognitions = build_paperwork_recognitions(db, employees)
+    if user.role == "estimator":
+        records = [item for item in records if item.record_type not in SENSITIVE_OCCURRENCE_TYPES]
+    elif user.role == "viewer" and field_role in {"foreman", "management"}:
+        records = [item for item in records if item.record_type != "first_aid_record"]
+    elif user.role == "viewer" and profile is None:
+        employees = []
+        time_entries = []
+        records = []
+        certifications = []
+        milestone_recognitions = []
+        paperwork_recognitions = []
     if user.role == "viewer" and field_role in {"employee", "operator"}:
         employee_id = profile.id if profile else None
         employees = [profile] if profile else []
@@ -533,6 +546,31 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
         defaults = {"safety_permit": "blocked", "corrective_action": "open", "emergency_action_card": "ready"}
         values["status"] = defaults[payload.record_type]
         values["details"] = {**payload.details, "created_by": user.display_name, "created_at": datetime.now(UTC).isoformat()}
+    if payload.record_type == "incident":
+        if user.role not in MANAGEMENT_ROLES and (
+            profile is None or profile.portal_role not in {"foreman", "management"}
+        ):
+            raise AppError("Foreperson or management access is required to report an incident or near miss.", status_code=403)
+        if user.role == "estimator":
+            raise AppError("Management access is required to report an incident or near miss.", status_code=403)
+        values["status"] = "reported"
+        alerts = MANAGEMENT_ALERT_RECIPIENTS
+        values["details"] = {
+            **payload.details,
+            "reported_by": user.display_name,
+            "reported_at": datetime.now(UTC).isoformat(),
+            "status_history": [],
+        }
+    if payload.record_type == "first_aid_record":
+        if user.role not in MANAGEMENT_ROLES:
+            raise AppError("Management access is required to create a first-aid occurrence record.", status_code=403)
+        values["status"] = "recorded"
+        alerts = []
+        values["details"] = {
+            **payload.details,
+            "recorded_by": user.display_name,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
@@ -549,8 +587,10 @@ def update_safety_record_status(
     user: AuthenticatedUser,
 ) -> FieldRecordRead:
     item = require_exists(db, FieldRecord, record_id, "Safety record")
-    if item.record_type not in {"safety_permit", "corrective_action", "emergency_action_card"}:
+    if item.record_type not in {"safety_permit", "corrective_action", "emergency_action_card", "incident"}:
         raise AppError("That record is not a safety-control record.", status_code=400)
+    if item.record_type == "incident" and user.role not in MANAGEMENT_ROLES:
+        raise AppError("Management access is required to review an incident or near miss.", status_code=403)
     profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
     if user.role not in {"admin", "operations_manager"} and (profile is None or profile.portal_role not in {"foreman", "management"}):
         raise AppError("Foreperson or management access is required to verify safety-control records.", status_code=403)
@@ -558,9 +598,18 @@ def update_safety_record_status(
         "safety_permit": {"blocked", "at_risk", "ready"},
         "corrective_action": {"open", "verification", "closed"},
         "emergency_action_card": {"ready"},
+        "incident": {"reported", "under_review", "closed"},
     }
     if payload.status not in allowed[item.record_type]:
         raise AppError("That status is not valid for this safety record.", status_code=400)
+    if item.record_type == "incident":
+        transitions = {
+            "reported": {"under_review"},
+            "under_review": {"closed"},
+            "closed": set(),
+        }
+        if payload.status not in transitions.get(item.status, set()):
+            raise AppError(f"Incident status cannot move from {item.status} to {payload.status}.", status_code=409)
     history = list((item.details or {}).get("status_history") or [])
     history.append({"from": item.status, "to": payload.status, "by": user.display_name, "at": datetime.now(UTC).isoformat(), "evidence": payload.evidence})
     item.status = payload.status
