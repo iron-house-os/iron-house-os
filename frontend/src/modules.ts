@@ -86,7 +86,7 @@ export const modules: AppModule[] = [
     label: "Safety Operations",
     path: "/safety-operations",
     icon: Siren,
-    description: "High-risk permits, corrective actions, emergency cards and field release controls.",
+    description: "High-risk permits, corrective actions, emergency cards, incident review and privacy-scoped first-aid records.",
     status: "Build 221 active",
   },
   {
