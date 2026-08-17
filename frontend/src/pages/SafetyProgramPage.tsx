@@ -99,6 +99,10 @@ export function SafetyProgramPage() {
   const [generated, setGenerated] = useState<string[]>([]);
 
   const canManageCredentials = user?.role === "admin" || user?.role === "operations_manager";
+  const employeesById = useMemo(
+    () => new Map(employees.map((employee) => [employee.id, employee])),
+    [employees],
+  );
 
   useEffect(() => {
     let active = true;
@@ -147,7 +151,7 @@ export function SafetyProgramPage() {
     setCredentialSaving(true);
     setCredentialError(null);
     try {
-      await fieldOperationsApi.createCertification({
+      const created = await fieldOperationsApi.createCertification({
         employee_id: String(data.get("employee_id")),
         name: String(data.get("credential")),
         issuer: String(data.get("issuer")) || null,
@@ -155,9 +159,7 @@ export function SafetyProgramPage() {
         issued_date: String(data.get("issued_date")) || null,
         expiry_date: String(data.get("expiry_date")) || null,
       });
-      const refreshed = await fieldOperationsApi.bootstrap();
-      setEmployees(refreshed.employees);
-      setTraining(refreshed.certifications);
+      setTraining((current) => [...current, created]);
       form.reset();
     } catch (current) {
       setCredentialError(current instanceof Error ? current.message : "Unable to save the safety credential.");
@@ -199,7 +201,7 @@ export function SafetyProgramPage() {
       <article className="rounded-xl border border-iron-100 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Training and credential status</h2><p className="mt-1 text-sm text-iron-500">Live company records with 60-day expiry warnings.</p></div>{canManageCredentials ? <a href={fieldOperationsApi.certificationExportUrl} className="inline-flex items-center gap-2 rounded-md border border-brand-gold px-3 py-2 text-sm font-semibold text-brand-gold-dark"><Download className="h-4 w-4" />Export CSV</a> : null}</div>
         {credentialError ? <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{credentialError}</div> : null}
-        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-iron-500"><th className="p-2">Worker</th><th className="p-2">Credential</th><th className="p-2">Issuer</th><th className="p-2">Expiry</th><th className="p-2">Status</th></tr></thead><tbody>{training.map((item) => { const employee = employees.find((candidate) => candidate.id === item.employee_id); const current = ["current", "no_expiry"].includes(item.expiry_status); const warning = item.expiry_status === "expires_soon"; return <tr key={item.id} className="border-b"><td className="p-2 font-medium">{employee ? `${employee.first_name} ${employee.last_name}` : "Unknown employee"}</td><td className="p-2">{item.name}</td><td className="p-2">{item.issuer || "Not entered"}</td><td className="p-2">{item.expiry_date || "No expiry"}</td><td className="p-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${current ? "bg-emerald-100 text-emerald-800" : warning ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{item.expiry_status.replaceAll("_", " ")}</span></td></tr>; })}</tbody></table>{credentialLoading ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">Loading credential records…</p> : training.length === 0 ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">No credential records entered.</p> : null}</div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-iron-500"><th className="p-2">Worker</th><th className="p-2">Credential</th><th className="p-2">Issuer</th><th className="p-2">Expiry</th><th className="p-2">Status</th></tr></thead><tbody>{training.map((item) => { const employee = employeesById.get(item.employee_id); const current = ["current", "no_expiry"].includes(item.expiry_status); const warning = item.expiry_status === "expires_soon"; return <tr key={item.id} className="border-b"><td className="p-2 font-medium">{employee ? `${employee.first_name} ${employee.last_name}` : "Unknown employee"}</td><td className="p-2">{item.name}</td><td className="p-2">{item.issuer || "Not entered"}</td><td className="p-2">{item.expiry_date || "No expiry"}</td><td className="p-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${current ? "bg-emerald-100 text-emerald-800" : warning ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{item.expiry_status.replaceAll("_", " ")}</span></td></tr>; })}</tbody></table>{credentialLoading ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">Loading credential records…</p> : training.length === 0 ? <p className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-500">No credential records entered.</p> : null}</div>
       </article>
     </section>}
 
