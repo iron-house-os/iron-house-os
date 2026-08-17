@@ -310,6 +310,9 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
                 "general_nature": "Minor hand contact",
                 "aid_provided": "Area was cleaned and covered.",
                 "outcome": "returned_to_work",
+                "follow_up": "Supervisor check-in before the next shift.",
+                "diagnosis": "Must not be stored.",
+                "medical_history": "Must not be stored.",
             },
         },
     )
@@ -317,6 +320,9 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
     record = created.json()
     assert record["status"] == "recorded"
     assert record["alert_recipients"] == []
+    assert record["details"]["follow_up"] == "Supervisor check-in before the next shift."
+    assert "diagnosis" not in record["details"]
+    assert "medical_history" not in record["details"]
 
     _authenticate_as("estimator")
     estimator_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]

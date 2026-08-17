@@ -46,6 +46,15 @@ from app.services.cost_codes import get_cost_code_library
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
 MANAGEMENT_ROLES = {"admin", "operations_manager"}
 SENSITIVE_OCCURRENCE_TYPES = {"incident", "first_aid_record"}
+FIRST_AID_DETAIL_FIELDS = {
+    "occurred_at",
+    "location",
+    "first_aid_attendant",
+    "general_nature",
+    "aid_provided",
+    "outcome",
+    "follow_up",
+}
 FLHA_SCREENING_ITEMS = [
     "first_aid_equipment",
     "overhead_hazards",
@@ -567,7 +576,11 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
         values["status"] = "recorded"
         alerts = []
         values["details"] = {
-            **payload.details,
+            **{
+                key: value
+                for key, value in payload.details.items()
+                if key in FIRST_AID_DETAIL_FIELDS
+            },
             "recorded_by": user.display_name,
             "recorded_at": datetime.now(UTC).isoformat(),
         }
