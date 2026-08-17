@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { Certification, Employee, fieldOperationsApi } from "../api/fieldOperations";
+import { Certification, Employee, FieldRecord, fieldOperationsApi } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
 
 const SAFETY_PROGRAM_URL =
@@ -54,7 +54,7 @@ const procedures = [
   { code: "SWP-008", title: "Lifting, Rigging and Suspended Loads", category: "Equipment", status: "Controlled" },
 ];
 
-const formTypes = ["FLHA", "Toolbox Talk", "Equipment Inspection", "Incident / Near Miss", "Corrective Action", "Ground Disturbance Permit", "Confined Space Permit", "First Aid Record"];
+const formTypes = ["FLHA", "Toolbox Talk", "Equipment Inspection", "Corrective Action", "Ground Disturbance Permit", "Confined Space Permit"];
 const hazardLibrary: Record<string, string[]> = {
   excavation: ["Underground utilities", "Cave-in or ground collapse", "Mobile equipment interaction", "Access and egress", "Water accumulation"],
   trenching: ["Cave-in or ground collapse", "Spoil pile surcharge", "Atmospheric hazard", "Falling material", "Restricted access"],
@@ -90,6 +90,7 @@ export function SafetyProgramPage() {
   const [records, setRecords] = useStoredState<SafetyRecord[]>("ihos-safety-records-v2", []);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [training, setTraining] = useState<Certification[]>([]);
+  const [operationalRecords, setOperationalRecords] = useState<FieldRecord[]>([]);
   const [credentialError, setCredentialError] = useState<string | null>(null);
   const [credentialLoading, setCredentialLoading] = useState(true);
   const [credentialSaving, setCredentialSaving] = useState(false);
@@ -111,6 +112,7 @@ export function SafetyProgramPage() {
         if (!active) return;
         setEmployees(data.employees);
         setTraining(data.certifications);
+        setOperationalRecords(data.records);
         setCredentialError(null);
       })
       .catch((current) => {
@@ -124,7 +126,7 @@ export function SafetyProgramPage() {
 
   const filteredProcedures = procedures.filter((item) => `${item.code} ${item.title} ${item.category}`.toLowerCase().includes(search.toLowerCase()));
   const openActions = records.filter((record) => record.status !== "Complete").length;
-  const incidents = records.filter((record) => record.type === "Incident / Near Miss").length;
+  const incidents = operationalRecords.filter((record) => record.record_type === "incident").length;
   const expiring = useMemo(() => training.filter((item) => ["expires_soon", "expired"].includes(item.expiry_status)).length, [training]);
   const blocked = records.filter((record) => record.release === "Blocked" && record.status !== "Complete").length;
 

@@ -559,6 +559,10 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
   const [severity, setSeverity] = useState("none");
   const [quantity, setQuantity] = useState("");
   const [weather, setWeather] = useState("");
+  const [occurrenceKind, setOccurrenceKind] = useState("near_miss");
+  const [occurredAt, setOccurredAt] = useState("");
+  const [occurrenceLocation, setOccurrenceLocation] = useState("");
+  const [immediateControls, setImmediateControls] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [attendees, setAttendees] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -572,11 +576,21 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
         record_type: recordType, project_id: projectId || null, employee_id: employeeId || null,
         equipment_id: equipmentId || null, supplier_id: supplierId || null, cost_code: costCode || null,
         work_date: today(), title, severity,
-        details: { notes, quantity: quantity || null, weather: weather || null, attendees },
+        details: recordType === "incident"
+          ? {
+              occurrence_kind: occurrenceKind,
+              occurred_at: occurredAt,
+              location: occurrenceLocation,
+              description: notes,
+              immediate_controls: immediateControls,
+              attendees,
+            }
+          : { notes, quantity: quantity || null, weather: weather || null, attendees },
         document_ids: documentIds,
       });
       await linkPhotos(documentIds, "field_record", record.id);
       setTitle(""); setNotes(""); setQuantity(""); setWeather(""); setFiles([]); setAttendees([]); setSeverity("none");
+      setOccurrenceKind("near_miss"); setOccurredAt(""); setOccurrenceLocation(""); setImmediateControls("");
       await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save field record."); }
     finally { setSaving(false); }
@@ -595,13 +609,19 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
         <Select label="Issue severity" value={severity} onChange={setSeverity} options={[["none", "No issue"], ["low", "Low"], ["medium", "Medium — alert"], ["high", "High — alert"], ["critical", "Critical — alert"]]} />
         <Input label="Quantity / hours / amount" value={quantity} onChange={setQuantity} />
         <Input label="Weather / temperature" value={weather} onChange={setWeather} />
-        <Input label="Journal, hazards and controls" value={notes} onChange={setNotes} />
+        <Input label={recordType === "incident" ? "What happened" : "Journal, hazards and controls"} value={notes} onChange={setNotes} />
+        {recordType === "incident" ? <>
+          <Select label="Occurrence type" value={occurrenceKind} onChange={setOccurrenceKind} options={[["near_miss", "Near miss"], ["incident", "Incident"]]} />
+          <Input label="Occurred at" value={occurredAt} onChange={setOccurredAt} type="datetime-local" />
+          <Input label="Location" value={occurrenceLocation} onChange={setOccurrenceLocation} />
+          <Input label="Immediate controls taken" value={immediateControls} onChange={setImmediateControls} />
+        </> : null}
         <FilePicker files={files} onChange={setFiles} />
       </div>
       {["daily_hazard_assessment", "toolbox_talk"].includes(recordType) ? (
         <EmployeeChecklist employees={data.employees} selected={attendees} onChange={setAttendees} />
       ) : null}
-      <PrimaryButton disabled={saving || !title}>{saving ? "Saving and uploading…" : "Submit field record"}</PrimaryButton>
+      <PrimaryButton disabled={saving || !title || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>{saving ? "Saving and uploading…" : "Submit field record"}</PrimaryButton>
     </form>
   );
 }
