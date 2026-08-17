@@ -4,7 +4,7 @@ from io import StringIO
 import secrets
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -610,12 +610,23 @@ def update_safety_record_status(
         }
         if payload.status not in transitions.get(item.status, set()):
             raise AppError(f"Incident status cannot move from {item.status} to {payload.status}.", status_code=409)
+    previous_status = item.status
     history = list((item.details or {}).get("status_history") or [])
-    history.append({"from": item.status, "to": payload.status, "by": user.display_name, "at": datetime.now(UTC).isoformat(), "evidence": payload.evidence})
-    item.status = payload.status
-    item.details = {**(item.details or {}), "verification_evidence": payload.evidence, "status_history": history}
-    item.resolved_at = datetime.now(UTC) if payload.status in {"ready", "closed"} else None
-    db.add(item)
+    history.append({"from": previous_status, "to": payload.status, "by": user.display_name, "at": datetime.now(UTC).isoformat(), "evidence": payload.evidence})
+    next_details = {**(item.details or {}), "verification_evidence": payload.evidence, "status_history": history}
+    next_resolved_at = datetime.now(UTC) if payload.status in {"ready", "closed"} else None
+    result = db.execute(
+        update(FieldRecord)
+        .where(FieldRecord.id == record_id, FieldRecord.status == previous_status)
+        .values(status=payload.status, details=next_details, resolved_at=next_resolved_at)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise AppError(
+            "Safety record changed while it was being updated. Reload and try again.",
+            status_code=409,
+        )
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)

@@ -1,10 +1,15 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from fastapi import Request
 from uuid import UUID
 
 from app.main import app
+from app.core.errors import AppError
+from app.schemas.field_operations import SafetyRecordUpdate
+from app.services import field_operations
 from app.api.dependencies.auth import require_authenticated_user
 from app.services.auth import AuthenticatedUser
 
@@ -243,6 +248,51 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
     assert closed.json()["status"] == "closed"
     assert [event["to"] for event in closed.json()["details"]["status_history"]] == ["under_review", "closed"]
 
+
+
+def test_incident_status_update_rejects_stale_concurrent_transition(monkeypatch: pytest.MonkeyPatch) -> None:
+    item = SimpleNamespace(
+        record_type="incident",
+        status="reported",
+        details={"status_history": []},
+    )
+
+    class ConflictSession:
+        rolled_back = False
+
+        def scalar(self, _statement: object) -> None:
+            return None
+
+        def execute(self, _statement: object) -> SimpleNamespace:
+            return SimpleNamespace(rowcount=0)
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+    db = ConflictSession()
+    monkeypatch.setattr(field_operations, "require_exists", lambda *_args, **_kwargs: item)
+    payload = SafetyRecordUpdate(
+        status="under_review",
+        evidence="Assigned to the operations manager.",
+    )
+    user = AuthenticatedUser(
+        id=UUID("00000000-0000-0000-0000-000000000071"),
+        email="admin@ironhousecontracting.com",
+        display_name="Test Administrator",
+        role="admin",
+        session_version=1,
+    )
+
+    with pytest.raises(AppError) as raised:
+        field_operations.update_safety_record_status(
+            db,  # type: ignore[arg-type]
+            UUID("00000000-0000-0000-0000-000000000072"),
+            payload,
+            user,
+        )
+
+    assert raised.value.status_code == 409
+    assert db.rolled_back is True
 
 def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> None:
     worker = _employee()
