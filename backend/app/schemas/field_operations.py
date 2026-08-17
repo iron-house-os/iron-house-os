@@ -30,6 +30,8 @@ RecordType = Literal[
     "safety_permit",
     "corrective_action",
     "emergency_action_card",
+    "incident",
+    "first_aid_record",
 ]
 
 
@@ -226,6 +228,37 @@ class FieldRecordCreate(BaseModel):
                 raise ValueError("Time-off requests require valid start and end dates.") from exc
             if end < start:
                 raise ValueError("Time-off end date cannot be before the start date.")
+        if self.record_type == "incident":
+            if self.details.get("occurrence_kind") not in {"incident", "near_miss"}:
+                raise ValueError("Select incident or near miss.")
+            required = {
+                "occurred_at": "Enter when the occurrence happened.",
+                "location": "Enter the occurrence location.",
+                "description": "Describe what happened.",
+                "immediate_controls": "Record the immediate controls taken.",
+            }
+            for key, message in required.items():
+                if not str(self.details.get(key) or "").strip():
+                    raise ValueError(message)
+        if self.record_type == "first_aid_record":
+            if not self.employee_id:
+                raise ValueError("Select the worker for the first-aid occurrence.")
+            required = {
+                "occurred_at": "Enter when the occurrence happened.",
+                "location": "Enter the occurrence location.",
+                "first_aid_attendant": "Enter the first-aid attendant.",
+                "general_nature": "Enter the general nature of the occurrence.",
+                "aid_provided": "Record the aid provided.",
+            }
+            for key, message in required.items():
+                if not str(self.details.get(key) or "").strip():
+                    raise ValueError(message)
+            if self.details.get("outcome") not in {
+                "returned_to_work",
+                "referred_for_further_assessment",
+                "transported_for_further_assessment",
+            }:
+                raise ValueError("Select the recorded outcome.")
         return self
 
 
@@ -266,12 +299,21 @@ class FLHARelease(BaseModel):
 
 
 class SafetyRecordUpdate(BaseModel):
-    status: Literal["blocked", "at_risk", "ready", "open", "verification", "closed"]
+    status: Literal[
+        "blocked",
+        "at_risk",
+        "ready",
+        "open",
+        "verification",
+        "reported",
+        "under_review",
+        "closed",
+    ]
     evidence: str | None = Field(default=None, max_length=4000)
 
     @model_validator(mode="after")
     def require_evidence_for_completion(self) -> "SafetyRecordUpdate":
-        if self.status in {"ready", "verification", "closed"} and not (self.evidence or "").strip():
+        if self.status in {"ready", "verification", "under_review", "closed"} and not (self.evidence or "").strip():
             raise ValueError("Verification evidence is required for that status.")
         return self
 
