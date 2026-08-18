@@ -462,6 +462,54 @@ def test_foreperson_can_submit_incident_but_not_first_aid_record() -> None:
     assert first_aid.status_code == 403
 
 
+def test_sensitive_occurrences_are_filtered_before_the_bootstrap_limit() -> None:
+    worker = _employee()
+    foreperson = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Field",
+            "last_name": "Foreperson",
+            "email": "limit.foreperson@ironhousecontracting.com",
+            "portal_role": "foreman",
+        },
+    ).json()
+    journal = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "journal",
+            "employee_id": worker["id"],
+            "work_date": "2026-08-10",
+            "title": "Older safe journal",
+        },
+    ).json()
+    for index in range(201):
+        response = client.post(
+            "/api/v1/field-operations/records",
+            json={
+                "record_type": "incident",
+                "employee_id": worker["id"],
+                "work_date": "2026-08-11",
+                "title": f"Sensitive incident {index}",
+                "details": {
+                    "occurrence_kind": "near_miss",
+                    "occurred_at": "2026-08-11T09:30",
+                    "location": "Field Operations Test",
+                    "description": "A test occurrence used to exercise the bootstrap limit.",
+                    "immediate_controls": "Test controls recorded.",
+                },
+            },
+        )
+        assert response.status_code == 201
+
+    _authenticate_as("estimator")
+    estimator_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    assert journal["id"] in {item["id"] for item in estimator_records}
+
+    _authenticate_as("viewer", foreperson["email"])
+    foreperson_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    assert journal["id"] in {item["id"] for item in foreperson_records}
+
+
 def test_course_ticket_expiry_creates_management_alert() -> None:
     employee = _employee()
     response = client.post(

@@ -160,17 +160,22 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     vehicles = list(db.scalars(select(Vehicle).order_by(Vehicle.unit_number)))
     vehicle_logs = list(db.scalars(select(VehicleLog).order_by(VehicleLog.entry_date.desc()).limit(100)))
     time_entries = list(db.scalars(select(TimeEntry).order_by(TimeEntry.work_date.desc()).limit(200)))
-    records = list(db.scalars(select(FieldRecord).order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc()).limit(200)))
+    records_query = select(FieldRecord)
+    if user.role == "estimator" or (
+        user.role == "viewer" and field_role in {"foreman", "management"}
+    ):
+        records_query = records_query.where(
+            FieldRecord.record_type.not_in(SENSITIVE_OCCURRENCE_TYPES)
+        )
+    records = list(db.scalars(
+        records_query.order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc()).limit(200)
+    ))
     certifications = list(db.scalars(select(EmployeeCertification).order_by(EmployeeCertification.expiry_date)))
     workbooks, production_items = build_job_workbooks(db)
     material_movement_summary = build_material_movement_summary(db)
     milestone_recognitions = build_milestone_recognitions(db)
     paperwork_recognitions = build_paperwork_recognitions(db, employees)
-    if user.role == "estimator":
-        records = [item for item in records if item.record_type not in SENSITIVE_OCCURRENCE_TYPES]
-    elif user.role == "viewer" and field_role in {"foreman", "management"}:
-        records = [item for item in records if item.record_type not in SENSITIVE_OCCURRENCE_TYPES]
-    elif user.role == "viewer" and profile is None:
+    if user.role == "viewer" and profile is None:
         employees = []
         time_entries = []
         records = []
