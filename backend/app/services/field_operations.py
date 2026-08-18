@@ -543,7 +543,6 @@ def export_safety_audit_csv(db: Session, user: AuthenticatedUser) -> str:
         "record_type",
         "work_date",
         "project_number",
-        "title",
         "status",
         "severity",
         "document_count",
@@ -558,7 +557,6 @@ def export_safety_audit_csv(db: Session, user: AuthenticatedUser) -> str:
             item.record_type,
             item.work_date.isoformat(),
             project.project_number if project else "",
-            item.title,
             item.status,
             item.severity,
             len(item.document_ids or []),
@@ -993,22 +991,6 @@ def get_flha_for_user(db: Session, record_id: UUID, user: AuthenticatedUser) -> 
     crew_ids = {str(member.get("id")) for member in (item.details or {}).get("crew") or [] if member.get("id")}
     if not profile or (str(profile.id) not in crew_ids and profile.portal_role not in {"foreman", "management"}):
         raise AppError("You do not have permission to view this FLHA.", status_code=403)
-    return item
-
-
-def get_emergency_action_card_for_user(
-    db: Session,
-    record_id: UUID,
-    user: AuthenticatedUser,
-) -> FieldRecord:
-    item = require_exists(db, FieldRecord, record_id, "Emergency action card")
-    if item.record_type != "emergency_action_card":
-        raise AppError("That record is not an emergency action card.", status_code=400)
-    if user.role != "viewer":
-        return item
-    profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
-    if profile is None or profile.portal_role not in {"foreman", "management"}:
-        raise AppError("You do not have permission to view this emergency action card.", status_code=403)
     return item
 
 
