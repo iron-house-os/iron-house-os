@@ -228,6 +228,7 @@ export const fieldOperationsApi = {
   releaseFlha: (id: string, verification: string) =>
     request<FieldRecord>("/field-operations/records/" + id + "/flha/release", { method: "POST", body: JSON.stringify({ verification }) }),
   flhaPdfUrl: (id: string) => API_BASE_URL + "/field-operations/records/" + id + "/flha.pdf",
+  emergencyActionCardPdfUrl: (id: string) => API_BASE_URL + "/field-operations/records/" + id + "/emergency-action-card.pdf",
   decideMilestone: (id: string, payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records/" + id + "/milestone-decision", { method: "POST", body: JSON.stringify(payload) }),
   decideTimeOff: (id: string, payload: Record<string, unknown>) =>

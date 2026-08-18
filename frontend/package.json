@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "lucide-react": "latest",
+    "qrcode": "1.5.4",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "latest"
@@ -26,6 +27,7 @@
     "@testing-library/react": "latest",
     "@testing-library/user-event": "latest",
     "@types/node": "latest",
+    "@types/qrcode": "1.5.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",

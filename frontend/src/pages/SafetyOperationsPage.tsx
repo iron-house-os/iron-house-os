@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ClipboardList, Download, FileWarning, HeartPulse, Radio, ShieldAlert, Siren } from "lucide-react";
+import { AlertTriangle, ClipboardList, Copy, Download, FileWarning, HeartPulse, QrCode, Radio, ShieldAlert, Siren } from "lucide-react";
 
 import { Employee, FieldRecord, SafetyAnalytics, fieldOperationsApi } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
@@ -12,7 +12,9 @@ export function SafetyOperationsPage() {
   const [records, setRecords] = useState<FieldRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [analytics, setAnalytics] = useState<SafetyAnalytics | null>(null);
-  const [view, setView] = useState<View>("permits");
+  const fieldLink = useMemo(() => new URLSearchParams(window.location.search), []);
+  const linkedRecordId = fieldLink.get("record");
+  const [view, setView] = useState<View>(fieldLink.get("view") === "emergency" ? "emergency" : "permits");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canManageOccurrences = user?.role === "admin" || user?.role === "operations_manager";
@@ -33,6 +35,11 @@ export function SafetyOperationsPage() {
   }
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!loading && view === "emergency" && linkedRecordId) {
+      document.getElementById(`emergency-card-${linkedRecordId}`)?.scrollIntoView({ block: "start" });
+    }
+  }, [linkedRecordId, loading, view]);
 
   const permits = records.filter((record) => record.record_type === "safety_permit");
   const actions = records.filter((record) => record.record_type === "corrective_action");
@@ -142,7 +149,46 @@ function ActionView({ records, create, transition }: { records: FieldRecord[]; c
 }
 
 function EmergencyView({ records, create }: { records: FieldRecord[]; create: Create }) {
-  return <Grid><form onSubmit={(event) => void create(event, "emergency_action_card", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create emergency action card</h2>{[["project", "Project"], ["address", "Site address / access point"], ["muster", "Muster point"], ["firstAid", "First aid location and attendant"], ["emergencyLead", "Emergency lead and contact"], ["rescue", "Rescue / evacuation method"]].map(([name, placeholder]) => <Input key={name} name={name} placeholder={placeholder} />)}<Save>Save emergency card</Save></form><Register empty="No emergency cards." items={records.map((record) => <article key={record.id} className="rounded-lg border border-red-200 bg-red-50 p-5"><div className="flex items-center gap-2"><Radio className="text-red-700" /><h3 className="font-semibold text-red-950">{detail(record, "project")}</h3></div><dl className="mt-4 grid gap-2 text-sm"><div><b>Address/access:</b> {detail(record, "address")}</div><div><b>Muster point:</b> {detail(record, "muster")}</div><div><b>First aid:</b> {detail(record, "firstAid")}</div><div><b>Emergency lead:</b> {detail(record, "emergencyLead")}</div><div><b>Rescue/evacuation:</b> {detail(record, "rescue")}</div></dl><p className="mt-3 text-xs text-red-800">Created {record.work_date}. Confirm with the crew and replace when conditions change.</p></article>)} /></Grid>;
+  return <Grid><form onSubmit={(event) => void create(event, "emergency_action_card", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create emergency action card</h2>{[["project", "Project"], ["address", "Site address / access point"], ["muster", "Muster point"], ["firstAid", "First aid location and attendant"], ["emergencyLead", "Emergency lead and contact"], ["rescue", "Rescue / evacuation method"]].map(([name, placeholder]) => <Input key={name} name={name} placeholder={placeholder} />)}<Save>Save emergency card</Save></form><Register empty="No emergency cards." items={records.map((record) => <article id={`emergency-card-${record.id}`} key={record.id} className="scroll-mt-6 rounded-lg border border-red-200 bg-red-50 p-5"><div className="flex items-center gap-2"><Radio className="text-red-700" /><h3 className="font-semibold text-red-950">{detail(record, "project")}</h3></div><dl className="mt-4 grid gap-2 text-sm"><div><b>Address/access:</b> {detail(record, "address")}</div><div><b>Muster point:</b> {detail(record, "muster")}</div><div><b>First aid:</b> {detail(record, "firstAid")}</div><div><b>Emergency lead:</b> {detail(record, "emergencyLead")}</div><div><b>Rescue/evacuation:</b> {detail(record, "rescue")}</div></dl><p className="mt-3 text-xs text-red-800">Created {record.work_date}. Confirm with the crew and replace when conditions change.</p><EmergencyFieldAccess record={record} /></article>)} /></Grid>;
+}
+
+function EmergencyFieldAccess({ record }: { record: FieldRecord }) {
+  const [qrSvg, setQrSvg] = useState("");
+  const [qrError, setQrError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
+  const fieldUrl = `${window.location.origin}/safety-operations?view=emergency&record=${record.id}`;
+
+  useEffect(() => {
+    let active = true;
+    void import("qrcode")
+      .then(({ default: QRCode }) => QRCode.toString(fieldUrl, { type: "svg", errorCorrectionLevel: "M", margin: 1, width: 192, color: { dark: "#0b0d11", light: "#ffffff" } }))
+      .then((value) => { if (active) setQrSvg(value); })
+      .catch(() => { if (active) setQrError("QR code unavailable. Use Copy field link instead."); });
+    return () => { active = false; };
+  }, [fieldUrl]);
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(fieldUrl);
+      setCopyStatus("Field link copied.");
+    } catch {
+      setCopyStatus("Copy unavailable. Open the field link and copy it from Safari.");
+    }
+  }
+
+  const qrDataUrl = qrSvg ? `data:image/svg+xml,${encodeURIComponent(qrSvg)}` : "";
+  return <div className="mt-4 rounded-lg border border-red-200 bg-white p-4 text-iron-900">
+    <div className="flex flex-wrap gap-2">
+      <a href={fieldOperationsApi.emergencyActionCardPdfUrl(record.id)} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-iron-950 px-3 text-sm font-semibold text-white"><Download className="h-4 w-4" />PDF / save offline</a>
+      <button type="button" onClick={() => void copyLink()} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-iron-200 px-3 text-sm font-semibold"><Copy className="h-4 w-4" />Copy field link</button>
+    </div>
+    {copyStatus ? <p role="status" className="mt-2 text-xs text-iron-600">{copyStatus}</p> : null}
+    <details className="mt-3">
+      <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold"><QrCode className="h-4 w-4" />Show QR field link</summary>
+      <div className="mt-2 flex flex-wrap items-center gap-4">{qrDataUrl ? <><img src={qrDataUrl} alt={`QR field link for ${detail(record, "project") || record.title}`} className="h-48 w-48 border bg-white p-2" /><a href={qrDataUrl} download={`emergency-action-card-${record.id}.svg`} className="min-h-11 rounded-md border border-brand-gold px-3 py-3 text-sm font-semibold text-brand-gold-dark">Download QR SVG</a></> : <p role={qrError ? "alert" : undefined} className="text-sm text-iron-500">{qrError || "Preparing QR code…"}</p>}</div>
+      <p className="mt-2 text-xs leading-5 text-iron-600">The QR contains only this authenticated IHOS link—no password or access token. Sign-in is still required.</p>
+    </details>
+  </div>;
 }
 
 function IncidentView({ records, employees, canCreate, create, transition }: { records: FieldRecord[]; employees: Employee[]; canCreate: boolean; create: Create; transition: Transition }) {
