@@ -1,7 +1,7 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ClipboardList, FileWarning, HeartPulse, Radio, ShieldAlert, Siren } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileWarning, HeartPulse, Radio, ShieldAlert, Siren } from "lucide-react";
 
-import { Employee, FieldRecord, fieldOperationsApi } from "../api/fieldOperations";
+import { Employee, FieldRecord, SafetyAnalytics, fieldOperationsApi } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
 
 type View = "permits" | "actions" | "emergency" | "incidents" | "first-aid";
@@ -11,6 +11,7 @@ export function SafetyOperationsPage() {
   const { user } = useAuth();
   const [records, setRecords] = useState<FieldRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [analytics, setAnalytics] = useState<SafetyAnalytics | null>(null);
   const [view, setView] = useState<View>("permits");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,8 +20,10 @@ export function SafetyOperationsPage() {
   async function refresh() {
     try {
       const data = await fieldOperationsApi.bootstrap();
+      const safetyAnalytics = canManageOccurrences ? await fieldOperationsApi.safetyAnalytics() : null;
       setEmployees(data.employees);
       setRecords(data.records.filter((record) => TYPES.includes(record.record_type)));
+      setAnalytics(safetyAnalytics);
       setError(null);
     } catch (failure) {
       setError(message(failure));
@@ -95,12 +98,26 @@ export function SafetyOperationsPage() {
     </header>
     {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div> : null}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-      <Metric label="Blocked permits" value={permits.filter((permit) => permit.status === "blocked").length} icon={<ShieldAlert />} />
-      <Metric label="Overdue actions" value={overdue} icon={<AlertTriangle />} />
-      <Metric label="Emergency cards" value={cards.length} icon={<Siren />} />
-      <Metric label="Open incidents" value={incidents.filter((record) => record.status !== "closed").length} icon={<FileWarning />} />
+      <Metric label="Blocked permits" value={analytics?.blocked_permits ?? permits.filter((permit) => permit.status === "blocked").length} icon={<ShieldAlert />} />
+      <Metric label="Overdue actions" value={analytics?.overdue_corrective_actions ?? overdue} icon={<AlertTriangle />} />
+      <Metric label="Emergency cards" value={analytics?.active_emergency_cards ?? cards.length} icon={<Siren />} />
+      <Metric label="Open incidents" value={analytics?.open_incidents ?? incidents.filter((record) => record.status !== "closed").length} icon={<FileWarning />} />
       {canManageOccurrences ? <Metric label="First-aid records" value={firstAid.length} icon={<HeartPulse />} /> : null}
     </div>
+    {canManageOccurrences && analytics ? <section className="rounded-xl border border-iron-100 bg-white p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><h2 className="font-semibold text-iron-950">Management safety analytics</h2><p className="mt-1 max-w-3xl text-sm text-iron-500">Operational indicators as of {analytics.as_of}. These are workflow signals, not legal or regulatory compliance conclusions.</p></div>
+        <a href={fieldOperationsApi.safetyAuditExportUrl} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold px-3 text-sm font-semibold text-brand-gold-dark"><Download className="h-4 w-4" />Export audit CSV</a>
+      </div>
+      <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <AnalyticsFact label="FLHAs · 30 days" value={analytics.flha_last_30_days} />
+        <AnalyticsFact label="Toolbox talks · 30 days" value={analytics.toolbox_talks_last_30_days} />
+        <AnalyticsFact label="Credentials expiring · 60 days" value={analytics.credentials_expiring_60_days} />
+        <AnalyticsFact label="Expired credentials" value={analytics.credentials_expired} />
+        <AnalyticsFact label="Exportable control records" value={analytics.audit_export_records} />
+      </dl>
+      <p className="mt-4 rounded-md bg-iron-50 p-3 text-xs leading-5 text-iron-600">The audit export contains control metadata only. Incident and first-aid occurrence records, narrative details, worker identifiers and submitter identities are excluded.</p>
+    </section> : null}
     <nav aria-label="Safety operations sections" className="flex gap-2 overflow-x-auto rounded-xl border border-iron-100 bg-white p-2">
       {navigation.map(([key, label]) => <button key={key} type="button" onClick={() => setView(key)} className={`min-h-11 shrink-0 rounded-md px-4 py-2 text-sm font-semibold ${view === key ? "bg-brand-gold text-brand-black" : "text-iron-600"}`}>{label}</button>)}
     </nav>
@@ -179,6 +196,7 @@ function Area(props: { name: string; placeholder: string }) { return <textarea r
 function Save({ children }: { children: ReactNode }) { return <button className="w-full rounded-md bg-brand-gold p-2 text-sm font-semibold">{children}</button>; }
 function Small({ children, dark = false, onClick }: { children: ReactNode; dark?: boolean; onClick: () => void }) { return <button type="button" onClick={onClick} className={`min-h-11 rounded-md px-3 text-xs font-semibold ${dark ? "bg-iron-950 text-white" : "border"}`}>{children}</button>; }
 function Metric({ label, value, icon }: { label: string; value: number; icon: ReactNode }) { return <article className="rounded-xl border bg-white p-5"><div className="flex items-center justify-between text-sm font-medium text-iron-500"><span>{label}</span>{icon}</div><div className="mt-2 text-3xl font-semibold">{value}</div></article>; }
+function AnalyticsFact({ label, value }: { label: string; value: number }) { return <div className="rounded-lg bg-iron-50 p-4"><dt className="text-xs font-semibold uppercase tracking-wide text-iron-500">{label}</dt><dd className="mt-1 text-2xl font-semibold text-iron-950">{value}</dd></div>; }
 function RestrictedNotice({ children }: { children: ReactNode }) { return <div className="h-fit rounded-xl border border-iron-100 bg-white p-5 text-sm text-iron-600">{children}</div>; }
 function Status({ value }: { value: string }) { return <span className={`h-fit rounded-full px-2 py-1 text-xs font-semibold ${value === "ready" || value === "closed" || value === "recorded" ? "bg-emerald-100 text-emerald-800" : value === "at_risk" || value === "verification" || value === "under_review" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>{value.replaceAll("_", " ")}</span>; }
 function Register({ items, empty }: { items: ReactNode[]; empty: string }) { return <section className="rounded-xl border bg-white p-6"><div className="flex items-center gap-2"><ClipboardList className="text-brand-gold-dark" /><h2 className="font-semibold">Register</h2></div><div className="mt-4 space-y-3">{items.length ? items : <p className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">{empty}</p>}</div></section>; }

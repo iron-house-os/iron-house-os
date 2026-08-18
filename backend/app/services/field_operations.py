@@ -24,6 +24,7 @@ from app.schemas.field_operations import (
     FLHARelease,
     FLHAUpdate,
     SafetyRecordUpdate,
+    SafetyAnalytics,
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
@@ -46,6 +47,15 @@ from app.services.cost_codes import get_cost_code_library
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
 MANAGEMENT_ROLES = {"admin", "operations_manager"}
 SENSITIVE_OCCURRENCE_TYPES = {"incident", "first_aid_record"}
+SAFETY_AUDIT_EXPORT_TYPES = {
+    "corrective_action",
+    "daily_hazard_assessment",
+    "emergency_action_card",
+    "equipment_inspection",
+    "safety_permit",
+    "small_equipment_inspection",
+    "toolbox_talk",
+}
 FIRST_AID_DETAIL_FIELDS = {
     "occurred_at",
     "location",
@@ -447,6 +457,128 @@ def export_certifications_csv(db: Session, user: AuthenticatedUser) -> str:
         ]
         writer.writerow([safe_cell(value) for value in row])
     return output.getvalue()
+
+
+def get_safety_analytics(db: Session, user: AuthenticatedUser) -> SafetyAnalytics:
+    _require_safety_reporting_access(user)
+    as_of = date.today()
+    reporting_window = as_of - timedelta(days=29)
+    records = list(db.scalars(select(FieldRecord)))
+    certifications = list(db.scalars(select(EmployeeCertification)))
+    export_records = [item for item in records if item.record_type in SAFETY_AUDIT_EXPORT_TYPES]
+
+    def due_date(item: FieldRecord) -> date | None:
+        value = str((item.details or {}).get("due") or "").strip()
+        try:
+            return date.fromisoformat(value[:10]) if value else None
+        except ValueError:
+            return None
+
+    open_actions = [
+        item for item in records
+        if item.record_type == "corrective_action" and item.status != "closed"
+    ]
+    expiring = 0
+    expired = 0
+    for item in certifications:
+        if item.expiry_date is None:
+            continue
+        days = (item.expiry_date - as_of).days
+        if days < 0:
+            expired += 1
+        elif days <= 60:
+            expiring += 1
+
+    return SafetyAnalytics(
+        as_of=as_of,
+        safety_controls_total=len(export_records),
+        blocked_permits=sum(
+            item.record_type == "safety_permit" and item.status == "blocked"
+            for item in records
+        ),
+        at_risk_permits=sum(
+            item.record_type == "safety_permit" and item.status == "at_risk"
+            for item in records
+        ),
+        open_corrective_actions=len(open_actions),
+        overdue_corrective_actions=sum(
+            (due := due_date(item)) is not None and due < as_of
+            for item in open_actions
+        ),
+        active_emergency_cards=sum(
+            item.record_type == "emergency_action_card" and item.status == "ready"
+            for item in records
+        ),
+        flha_last_30_days=sum(
+            item.record_type == "daily_hazard_assessment" and item.work_date >= reporting_window
+            for item in records
+        ),
+        toolbox_talks_last_30_days=sum(
+            item.record_type == "toolbox_talk" and item.work_date >= reporting_window
+            for item in records
+        ),
+        open_incidents=sum(
+            item.record_type == "incident" and item.status != "closed"
+            for item in records
+        ),
+        credentials_expiring_60_days=expiring,
+        credentials_expired=expired,
+        audit_export_records=len(export_records),
+        confidential_record_types_excluded=sorted(SENSITIVE_OCCURRENCE_TYPES),
+    )
+
+
+def export_safety_audit_csv(db: Session, user: AuthenticatedUser) -> str:
+    _require_safety_reporting_access(user)
+    projects = {item.id: item for item in db.scalars(select(Project))}
+    records = db.scalars(
+        select(FieldRecord)
+        .where(FieldRecord.record_type.in_(SAFETY_AUDIT_EXPORT_TYPES))
+        .order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc())
+    )
+    output = StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([
+        "record_id",
+        "record_type",
+        "work_date",
+        "project_number",
+        "title",
+        "status",
+        "severity",
+        "document_count",
+        "acknowledgement_count",
+        "created_at",
+        "updated_at",
+    ])
+    for item in records:
+        project = projects.get(item.project_id)
+        row = [
+            str(item.id),
+            item.record_type,
+            item.work_date.isoformat(),
+            project.project_number if project else "",
+            item.title,
+            item.status,
+            item.severity,
+            len(item.document_ids or []),
+            len(item.signatures or []),
+            item.created_at.isoformat(),
+            item.updated_at.isoformat(),
+        ]
+        writer.writerow([_safe_csv_cell(value) for value in row])
+    return output.getvalue()
+
+
+def _require_safety_reporting_access(user: AuthenticatedUser) -> None:
+    if user.role not in MANAGEMENT_ROLES:
+        raise AppError("Management access is required for safety analytics and audit exports.", status_code=403)
+
+
+def _safe_csv_cell(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    return f"'{value}" if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
 
 def create_vehicle(db: Session, payload: VehicleCreate) -> VehicleRead:

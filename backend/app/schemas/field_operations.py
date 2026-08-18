@@ -345,6 +345,23 @@ class ToolboxTalk(BaseModel):
     source_url: str
 
 
+class SafetyAnalytics(BaseModel):
+    as_of: date
+    safety_controls_total: int
+    blocked_permits: int
+    at_risk_permits: int
+    open_corrective_actions: int
+    overdue_corrective_actions: int
+    active_emergency_cards: int
+    flha_last_30_days: int
+    toolbox_talks_last_30_days: int
+    open_incidents: int
+    credentials_expiring_60_days: int
+    credentials_expired: int
+    audit_export_records: int
+    confidential_record_types_excluded: list[str]
+
+
 class FieldOperationsBootstrap(BaseModel):
     employees: list[EmployeeRead]
     projects: list[dict]

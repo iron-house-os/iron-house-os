@@ -16,6 +16,7 @@ vi.mock("../api/fieldOperations", async (importOriginal) => {
     fieldOperationsApi: {
       ...actual.fieldOperationsApi,
       bootstrap: vi.fn(),
+      safetyAnalytics: vi.fn(),
       createRecord: vi.fn(),
       updateSafetyStatus: vi.fn(),
     },
@@ -24,6 +25,22 @@ vi.mock("../api/fieldOperations", async (importOriginal) => {
 
 describe("SafetyOperationsPage", () => {
   beforeEach(() => {
+    vi.mocked(fieldOperationsApi.safetyAnalytics).mockResolvedValue({
+      as_of: "2026-08-18",
+      safety_controls_total: 12,
+      blocked_permits: 2,
+      at_risk_permits: 1,
+      open_corrective_actions: 3,
+      overdue_corrective_actions: 1,
+      active_emergency_cards: 2,
+      flha_last_30_days: 8,
+      toolbox_talks_last_30_days: 4,
+      open_incidents: 1,
+      credentials_expiring_60_days: 2,
+      credentials_expired: 1,
+      audit_export_records: 12,
+      confidential_record_types_excluded: ["first_aid_record", "incident"],
+    });
     vi.mocked(fieldOperationsApi.bootstrap).mockResolvedValue({
       employees: [{ id: "worker-1", first_name: "Crew", last_name: "Member", email: "crew@example.com" }],
       records: [{
@@ -57,6 +74,9 @@ describe("SafetyOperationsPage", () => {
     render(<SafetyOperationsPage />);
 
     expect(await screen.findByText("Open incidents")).toBeInTheDocument();
+    expect(screen.getByText("Management safety analytics")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Export audit CSV" })).toHaveAttribute("href", expect.stringContaining("/field-operations/safety/audit.csv"));
+    expect(screen.getByText(/Incident and first-aid occurrence records/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Incidents / near misses" }));
     expect(screen.getByText("Excavator swing near miss")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start review" })).toBeInTheDocument();
