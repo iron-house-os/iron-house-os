@@ -123,7 +123,7 @@ export function EquipmentPage() {
                 {equipmentStatuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
               </select>
               <div className="md:col-span-3">
-                <div className="flex flex-wrap items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-brand-gold-dark" /><b>Assigned controlled procedures:</b>{item.safety_procedure_codes.length ? item.safety_procedure_codes.map((code) => <span key={code} className="rounded-full bg-iron-100 px-2 py-1 text-xs font-semibold">{code}</span>) : <span className="text-amber-800">None assigned</span>}</div>
+                <div className="flex flex-wrap items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-brand-gold-dark" /><b>Assigned controlled procedures:</b>{item.safety_procedure_codes?.length ? item.safety_procedure_codes.map((code) => <span key={code} className="rounded-full bg-iron-100 px-2 py-1 text-xs font-semibold">{code}</span>) : <span className="text-amber-800">None assigned</span>}</div>
                 {canManageSafetyAssignments ? <EquipmentSafetyAssignments item={item} onSave={updateSafetyProcedures} /> : null}
                 <EquipmentFieldAccess item={item} />
               </div>
@@ -177,9 +177,9 @@ function Input({ label, value, onChange, type = "text", required = false }: { la
 }
 
 function EquipmentSafetyAssignments({ item, onSave }: { item: Equipment; onSave: (item: Equipment, codes: string[]) => Promise<void> }) {
-  const [codes, setCodes] = useState(item.safety_procedure_codes);
+  const [codes, setCodes] = useState(item.safety_procedure_codes ?? []);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { setCodes(item.safety_procedure_codes); }, [item.safety_procedure_codes]);
+  useEffect(() => { setCodes(item.safety_procedure_codes ?? []); }, [item.safety_procedure_codes]);
 
   async function save() {
     setSaving(true);

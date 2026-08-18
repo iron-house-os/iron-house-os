@@ -21,7 +21,10 @@ const item = {
 
 describe("EquipmentPage safety field access", () => {
   beforeEach(() => {
-    vi.mocked(equipmentApi.list).mockResolvedValue({ items: [item], total: 1 });
+    vi.mocked(equipmentApi.list).mockResolvedValue({
+      items: [{ ...item, safety_procedure_codes: undefined as unknown as string[] }],
+      total: 1,
+    });
     vi.mocked(equipmentApi.update).mockResolvedValue({ ...item, safety_procedure_codes: ["SWP-003"] });
   });
 

@@ -19,7 +19,7 @@ export function EquipmentFieldPage() {
   }, [equipmentId]);
 
   const assigned = useMemo(
-    () => safetyProcedures.filter((procedure) => item?.safety_procedure_codes.includes(procedure.code)),
+    () => safetyProcedures.filter((procedure) => (item?.safety_procedure_codes ?? []).includes(procedure.code)),
     [item],
   );
 
