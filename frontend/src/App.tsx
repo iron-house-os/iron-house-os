@@ -16,6 +16,7 @@ import {
   VehicleTrackingPage,
 } from "./pages/EmployeePortalPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
+import { EquipmentFieldPage } from "./pages/EquipmentFieldPage";
 import { FinancialControlPage } from "./pages/FinancialControlPage";
 import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
@@ -65,7 +66,7 @@ function AuthenticatedApp() {
     const root = `/${portalRole ?? "employee"}-portal`;
     const sections = portalRole === "foreman" ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "backups", "receipts", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} /><Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -110,6 +111,7 @@ function AuthenticatedApp() {
         <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />
         <Route path="/municipality-intelligence" element={<MunicipalityIntelligencePage />} />
         <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />
         <Route path="/finance" element={<FinancialControlPage />} />
         <Route path="/reporting" element={<ReportingPage />} />
         <Route path="/settings" element={<SettingsPage />} />

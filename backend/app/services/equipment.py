@@ -16,6 +16,13 @@ def list_equipment(db: Session, status: str | None = None) -> list[EquipmentRead
     return [_to_schema(item) for item in db.scalars(statement).all()]
 
 
+def get_equipment(db: Session, equipment_id: UUID) -> EquipmentRead:
+    item = db.get(Equipment, equipment_id)
+    if item is None:
+        raise AppError("Equipment not found", status_code=404)
+    return _to_schema(item)
+
+
 def create_equipment(db: Session, payload: EquipmentCreate) -> EquipmentRead:
     item = Equipment(**payload.model_dump())
     db.add(item)
@@ -58,6 +65,7 @@ def _to_schema(item: Equipment) -> EquipmentRead:
         identifier=item.identifier,
         status=normalized_status,
         hourly_rate=float(item.hourly_rate) if item.hourly_rate is not None else None,
+        safety_procedure_codes=item.safety_procedure_codes or [],
         created_at=item.created_at,
         updated_at=item.updated_at,
     )

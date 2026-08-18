@@ -1,4 +1,4 @@
-from sqlalchemy import Numeric, String
+from sqlalchemy import JSON, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -13,3 +13,4 @@ class Equipment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     identifier: Mapped[str | None] = mapped_column(String(120), unique=True)
     status: Mapped[str] = mapped_column(String(80), default="available")
     hourly_rate: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    safety_procedure_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
