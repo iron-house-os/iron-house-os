@@ -41,6 +41,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # The shared backend dotenv also contains provider-specific settings
+        # consumed directly by services such as file storage and the AWS SDK.
+        extra="ignore",
     )
 
 
