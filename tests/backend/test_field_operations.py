@@ -670,7 +670,8 @@ def test_management_safety_analytics_and_audit_export_preserve_privacy() -> None
     exported = client.get("/api/v1/field-operations/safety/audit.csv")
     assert exported.status_code == 200
     assert "safety-control-audit.csv" in exported.headers["content-disposition"]
-    assert "'=Inspection control" in exported.text
+    assert "=Inspection control" not in exported.text
+    assert "title" not in exported.text.splitlines()[0]
     assert "Worker details must not export." not in exported.text
     assert incident_title not in exported.text
     assert first_aid_title not in exported.text
