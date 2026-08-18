@@ -198,6 +198,7 @@ def test_safety_status_endpoint_rejects_non_safety_records() -> None:
 
 def test_incident_records_are_durable_alert_management_and_require_ordered_review() -> None:
     employee = _employee()
+    occurrence_date = date(2026, 8, 11)
     created = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -208,7 +209,7 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
             "severity": "high",
             "details": {
                 "occurrence_kind": "near_miss",
-                "occurred_at": f"{date.today()}T09:30",
+                "occurred_at": f"{occurrence_date}T09:30",
                 "location": "Field Operations Test",
                 "description": "A worker entered the swing-radius boundary.",
                 "immediate_controls": "Work stopped and the exclusion zone was re-established.",
@@ -218,6 +219,7 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
     assert created.status_code == 201
     record = created.json()
     assert record["status"] == "reported"
+    assert record["work_date"] == str(occurrence_date)
     assert record["alert_recipients"] == ["Jeremie Peters", "Mac Warren"]
     assert record["details"]["reported_by"] == "Test Administrator"
 
@@ -247,6 +249,24 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
     assert [event["to"] for event in closed.json()["details"]["status_history"]] == ["under_review", "closed"]
+
+    invalid_occurrence_time = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "incident",
+            "employee_id": employee["id"],
+            "work_date": str(date.today()),
+            "title": "Invalid occurrence time",
+            "details": {
+                "occurrence_kind": "incident",
+                "occurred_at": "not-a-date",
+                "location": "Field Operations Test",
+                "description": "Invalid timestamps must not reach the register.",
+                "immediate_controls": "Submission blocked.",
+            },
+        },
+    )
+    assert invalid_occurrence_time.status_code == 422
 
 
 
@@ -296,6 +316,24 @@ def test_incident_status_update_rejects_stale_concurrent_transition(monkeypatch:
 
 def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> None:
     worker = _employee()
+    incident_response = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "incident",
+            "employee_id": worker["id"],
+            "work_date": str(date.today()),
+            "title": "Worker incident",
+            "details": {
+                "occurrence_kind": "incident",
+                "occurred_at": f"{date.today()}T09:45",
+                "location": "Field Operations Test",
+                "description": "An occurrence requiring management review.",
+                "immediate_controls": "Work stopped and the area was secured.",
+            },
+        },
+    )
+    assert incident_response.status_code == 201
+    incident = incident_response.json()
     created = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -326,7 +364,9 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
 
     _authenticate_as("estimator")
     estimator_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] not in {item["id"] for item in estimator_records}
+    estimator_record_ids = {item["id"] for item in estimator_records}
+    assert record["id"] not in estimator_record_ids
+    assert incident["id"] not in estimator_record_ids
     denied = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -353,11 +393,21 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
 
     _authenticate_as("viewer", "foreperson@ironhousecontracting.com")
     foreperson_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] not in {item["id"] for item in foreperson_records}
+    foreperson_record_ids = {item["id"] for item in foreperson_records}
+    assert record["id"] not in foreperson_record_ids
+    assert incident["id"] not in foreperson_record_ids
 
     _authenticate_as("viewer", worker["email"])
     worker_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] in {item["id"] for item in worker_records}
+    worker_record_ids = {item["id"] for item in worker_records}
+    assert record["id"] in worker_record_ids
+    assert incident["id"] in worker_record_ids
+
+    _authenticate_as("operations_manager")
+    management_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    management_record_ids = {item["id"] for item in management_records}
+    assert record["id"] in management_record_ids
+    assert incident["id"] in management_record_ids
 
 
 def test_foreperson_can_submit_incident_but_not_first_aid_record() -> None:
@@ -410,6 +460,54 @@ def test_foreperson_can_submit_incident_but_not_first_aid_record() -> None:
         },
     )
     assert first_aid.status_code == 403
+
+
+def test_sensitive_occurrences_are_filtered_before_the_bootstrap_limit() -> None:
+    worker = _employee()
+    foreperson = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Field",
+            "last_name": "Foreperson",
+            "email": "limit.foreperson@ironhousecontracting.com",
+            "portal_role": "foreman",
+        },
+    ).json()
+    journal = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "journal",
+            "employee_id": worker["id"],
+            "work_date": "2026-08-10",
+            "title": "Older safe journal",
+        },
+    ).json()
+    for index in range(201):
+        response = client.post(
+            "/api/v1/field-operations/records",
+            json={
+                "record_type": "incident",
+                "employee_id": worker["id"],
+                "work_date": "2026-08-11",
+                "title": f"Sensitive incident {index}",
+                "details": {
+                    "occurrence_kind": "near_miss",
+                    "occurred_at": "2026-08-11T09:30",
+                    "location": "Field Operations Test",
+                    "description": "A test occurrence used to exercise the bootstrap limit.",
+                    "immediate_controls": "Test controls recorded.",
+                },
+            },
+        )
+        assert response.status_code == 201
+
+    _authenticate_as("estimator")
+    estimator_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    assert journal["id"] in {item["id"] for item in estimator_records}
+
+    _authenticate_as("viewer", foreperson["email"])
+    foreperson_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    assert journal["id"] in {item["id"] for item in foreperson_records}
 
 
 def test_course_ticket_expiry_creates_management_alert() -> None:

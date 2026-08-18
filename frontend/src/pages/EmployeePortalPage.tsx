@@ -39,6 +39,15 @@ const SAFETY_PROGRAM_URL =
 const today = () => new Date().toISOString().slice(0, 10);
 const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 
+export function incidentWorkDate(occurredAt: string, fallback = today()) {
+  const datePart = occurredAt.match(/^(\d{4}-\d{2}-\d{2})T/)?.[1];
+  if (!datePart) return fallback;
+  const parsed = new Date(`${datePart}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === datePart
+    ? datePart
+    : fallback;
+}
+
 function useFieldOperations() {
   const [data, setData] = useState<FieldOperationsBootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -575,7 +584,7 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
       const record = await fieldOperationsApi.createRecord({
         record_type: recordType, project_id: projectId || null, employee_id: employeeId || null,
         equipment_id: equipmentId || null, supplier_id: supplierId || null, cost_code: costCode || null,
-        work_date: today(), title, severity,
+        work_date: recordType === "incident" ? incidentWorkDate(occurredAt) : today(), title, severity,
         details: recordType === "incident"
           ? {
               occurrence_kind: occurrenceKind,
