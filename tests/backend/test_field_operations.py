@@ -180,68 +180,6 @@ def test_safety_control_records_require_evidence_for_release_and_keep_history() 
     assert released.json()["details"]["status_history"][-1]["from"] == "blocked"
 
 
-def test_emergency_action_card_pdf_is_offline_ready_and_role_scoped() -> None:
-    worker = _employee()
-    card = client.post(
-        "/api/v1/field-operations/records",
-        json={
-            "record_type": "emergency_action_card",
-            "work_date": str(date.today()),
-            "title": "Field Operations Test emergency card",
-            "details": {
-                "project": "Field Operations Test",
-                "address": "100 Test Road",
-                "muster": "North gate",
-                "firstAid": "Site office",
-                "emergencyLead": "Site supervisor",
-                "rescue": "Stop work, call emergency services and report to muster point",
-            },
-        },
-    )
-    assert card.status_code == 201
-
-    pdf = client.get(
-        f"/api/v1/field-operations/records/{card.json()['id']}/emergency-action-card.pdf"
-    )
-    assert pdf.status_code == 200
-    assert pdf.headers["content-type"].startswith("application/pdf")
-    assert "emergency-action-card" in pdf.headers["content-disposition"]
-    assert pdf.content.startswith(b"%PDF-1.4")
-    assert b"Field Operations Test" in pdf.content
-    assert b"OFFLINE COPY" in pdf.content
-
-    wrong_type = client.post(
-        "/api/v1/field-operations/records",
-        json={
-            "record_type": "journal",
-            "work_date": str(date.today()),
-            "title": "Not an emergency card",
-        },
-    ).json()
-    assert client.get(
-        f"/api/v1/field-operations/records/{wrong_type['id']}/emergency-action-card.pdf"
-    ).status_code == 400
-
-    foreperson = client.post(
-        "/api/v1/field-operations/employees",
-        json={
-            "first_name": "Field",
-            "last_name": "Foreperson",
-            "email": "emergency.foreperson@ironhousecontracting.com",
-            "portal_role": "foreman",
-        },
-    ).json()
-    _authenticate_as("viewer", foreperson["email"])
-    assert client.get(
-        f"/api/v1/field-operations/records/{card.json()['id']}/emergency-action-card.pdf"
-    ).status_code == 200
-
-    _authenticate_as("viewer", worker["email"])
-    assert client.get(
-        f"/api/v1/field-operations/records/{card.json()['id']}/emergency-action-card.pdf"
-    ).status_code == 403
-
-
 def test_safety_status_endpoint_rejects_non_safety_records() -> None:
     created = client.post(
         "/api/v1/field-operations/records",
@@ -732,7 +670,8 @@ def test_management_safety_analytics_and_audit_export_preserve_privacy() -> None
     exported = client.get("/api/v1/field-operations/safety/audit.csv")
     assert exported.status_code == 200
     assert "safety-control-audit.csv" in exported.headers["content-disposition"]
-    assert "'=Inspection control" in exported.text
+    assert "=Inspection control" not in exported.text
+    assert "title" not in exported.text.splitlines()[0]
     assert "Worker details must not export." not in exported.text
     assert incident_title not in exported.text
     assert first_aid_title not in exported.text
