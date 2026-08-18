@@ -24,6 +24,11 @@ Open:
 - Backend docs: `http://localhost:8000/docs`
 - Readiness: `http://localhost:8000/readiness`
 
+The development frontend uses a same-origin `/api` path. Vite proxies API requests to
+`http://localhost:8000` for frontend-only work and to the `backend` service when launched
+with Docker Compose. This also allows private GitHub Codespaces ports to work without
+cross-origin configuration.
+
 ## Frontend-only launch
 
 ```bash
