@@ -240,6 +240,11 @@ class FieldRecordCreate(BaseModel):
             for key, message in required.items():
                 if not str(self.details.get(key) or "").strip():
                     raise ValueError(message)
+            try:
+                occurred_at = datetime.fromisoformat(str(self.details["occurred_at"]).replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("Enter a valid occurrence date and time.") from exc
+            self.work_date = occurred_at.date()
         if self.record_type == "first_aid_record":
             if not self.employee_id:
                 raise ValueError("Select the worker for the first-aid occurrence.")

@@ -198,6 +198,7 @@ def test_safety_status_endpoint_rejects_non_safety_records() -> None:
 
 def test_incident_records_are_durable_alert_management_and_require_ordered_review() -> None:
     employee = _employee()
+    occurrence_date = date(2026, 8, 11)
     created = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -208,7 +209,7 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
             "severity": "high",
             "details": {
                 "occurrence_kind": "near_miss",
-                "occurred_at": f"{date.today()}T09:30",
+                "occurred_at": f"{occurrence_date}T09:30",
                 "location": "Field Operations Test",
                 "description": "A worker entered the swing-radius boundary.",
                 "immediate_controls": "Work stopped and the exclusion zone was re-established.",
@@ -218,6 +219,7 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
     assert created.status_code == 201
     record = created.json()
     assert record["status"] == "reported"
+    assert record["work_date"] == str(occurrence_date)
     assert record["alert_recipients"] == ["Jeremie Peters", "Mac Warren"]
     assert record["details"]["reported_by"] == "Test Administrator"
 
@@ -247,6 +249,24 @@ def test_incident_records_are_durable_alert_management_and_require_ordered_revie
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
     assert [event["to"] for event in closed.json()["details"]["status_history"]] == ["under_review", "closed"]
+
+    invalid_occurrence_time = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "incident",
+            "employee_id": employee["id"],
+            "work_date": str(date.today()),
+            "title": "Invalid occurrence time",
+            "details": {
+                "occurrence_kind": "incident",
+                "occurred_at": "not-a-date",
+                "location": "Field Operations Test",
+                "description": "Invalid timestamps must not reach the register.",
+                "immediate_controls": "Submission blocked.",
+            },
+        },
+    )
+    assert invalid_occurrence_time.status_code == 422
 
 
 
