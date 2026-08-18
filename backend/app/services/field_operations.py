@@ -169,7 +169,7 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     if user.role == "estimator":
         records = [item for item in records if item.record_type not in SENSITIVE_OCCURRENCE_TYPES]
     elif user.role == "viewer" and field_role in {"foreman", "management"}:
-        records = [item for item in records if item.record_type != "first_aid_record"]
+        records = [item for item in records if item.record_type not in SENSITIVE_OCCURRENCE_TYPES]
     elif user.role == "viewer" and profile is None:
         employees = []
         time_entries = []

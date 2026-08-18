@@ -296,6 +296,24 @@ def test_incident_status_update_rejects_stale_concurrent_transition(monkeypatch:
 
 def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> None:
     worker = _employee()
+    incident_response = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "incident",
+            "employee_id": worker["id"],
+            "work_date": str(date.today()),
+            "title": "Worker incident",
+            "details": {
+                "occurrence_kind": "incident",
+                "occurred_at": f"{date.today()}T09:45",
+                "location": "Field Operations Test",
+                "description": "An occurrence requiring management review.",
+                "immediate_controls": "Work stopped and the area was secured.",
+            },
+        },
+    )
+    assert incident_response.status_code == 201
+    incident = incident_response.json()
     created = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -326,7 +344,9 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
 
     _authenticate_as("estimator")
     estimator_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] not in {item["id"] for item in estimator_records}
+    estimator_record_ids = {item["id"] for item in estimator_records}
+    assert record["id"] not in estimator_record_ids
+    assert incident["id"] not in estimator_record_ids
     denied = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -353,11 +373,21 @@ def test_first_aid_occurrences_are_management_created_and_privacy_scoped() -> No
 
     _authenticate_as("viewer", "foreperson@ironhousecontracting.com")
     foreperson_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] not in {item["id"] for item in foreperson_records}
+    foreperson_record_ids = {item["id"] for item in foreperson_records}
+    assert record["id"] not in foreperson_record_ids
+    assert incident["id"] not in foreperson_record_ids
 
     _authenticate_as("viewer", worker["email"])
     worker_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
-    assert record["id"] in {item["id"] for item in worker_records}
+    worker_record_ids = {item["id"] for item in worker_records}
+    assert record["id"] in worker_record_ids
+    assert incident["id"] in worker_record_ids
+
+    _authenticate_as("operations_manager")
+    management_records = client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    management_record_ids = {item["id"] for item in management_records}
+    assert record["id"] in management_record_ids
+    assert incident["id"] in management_record_ids
 
 
 def test_foreperson_can_submit_incident_but_not_first_aid_record() -> None:
