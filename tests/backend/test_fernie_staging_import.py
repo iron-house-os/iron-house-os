@@ -123,6 +123,7 @@ def test_apply_is_idempotent_and_links_all_controlled_objects() -> None:
         tender = db.scalar(select(Tender))
         bid = db.scalar(select(Bid))
         documents = list(db.scalars(select(Document)).all())
+        rfq_documents = list(db.scalars(select(RFQPackageDocument)).all())
         assert project.status == "opportunity"
         assert project.contract_value == 169500
         assert tender.status == "reviewing"
@@ -132,6 +133,7 @@ def test_apply_is_idempotent_and_links_all_controlled_objects() -> None:
         assert bid.total_amount == 169500
         assert all(document.tender_id == tender.id for document in documents)
         assert all(document.rfq_package_id is not None for document in documents)
+        assert all(document.status == "attached" for document in rfq_documents)
 
 
 def test_apply_requires_expired_intake_confirmation() -> None:
