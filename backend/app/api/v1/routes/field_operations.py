@@ -31,6 +31,7 @@ from app.schemas.field_operations import (
     VehicleUpdate,
 )
 from app.services import field_operations
+from app.services.emergency_action_card_pdf import render_emergency_action_card_pdf
 from app.services.flha_pdf import render_flha_pdf
 
 router = APIRouter()
@@ -156,6 +157,18 @@ def flha_pdf(record_id: UUID, db: DBSession, user: CurrentUser) -> Response:
         content=render_flha_pdf(item),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/records/{record_id}/emergency-action-card.pdf")
+def emergency_action_card_pdf(record_id: UUID, db: DBSession, user: CurrentUser) -> Response:
+    item = field_operations.get_emergency_action_card_for_user(db, record_id, user)
+    return Response(
+        content=render_emergency_action_card_pdf(item),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="emergency-action-card-{item.work_date}.pdf"'
+        },
     )
 
 
