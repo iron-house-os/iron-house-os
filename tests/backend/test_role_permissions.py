@@ -55,6 +55,36 @@ def test_role_matrix_separates_administration_and_mutation() -> None:
     assert can_access_module("viewer", "daily-timesheets", ModulePermission.WRITE)
 
 
+def test_employee_onboarding_permissions_are_management_only() -> None:
+    for role in ("admin", "operations_manager"):
+        assert can_access_module(role, "employee-onboarding", ModulePermission.READ)
+        assert can_access_module(role, "employee-onboarding", ModulePermission.WRITE)
+
+    for role in ("estimator", "viewer", "unknown"):
+        assert not can_access_module(role, "employee-onboarding", ModulePermission.READ)
+        assert not can_access_module(role, "employee-onboarding", ModulePermission.WRITE)
+
+
+@pytest.mark.parametrize("role", ["admin", "operations_manager"])
+def test_management_roles_can_load_worker_orientations(role: str) -> None:
+    _authenticate_as(role)
+
+    response = client.get("/api/v1/employee-onboarding")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0}
+
+
+@pytest.mark.parametrize("role", ["estimator", "viewer"])
+def test_non_management_roles_cannot_load_worker_orientations(role: str) -> None:
+    _authenticate_as(role)
+
+    response = client.get("/api/v1/employee-onboarding")
+
+    assert response.status_code == 403
+    assert "read" in response.json()["detail"]
+
+
 def test_viewer_is_read_only_and_denial_is_audited() -> None:
     clear_recent_document_audit_events()
     _authenticate_as("viewer")
