@@ -26,6 +26,11 @@ def create_equipment(payload: EquipmentCreate, db: DBSession) -> EquipmentRead:
     return equipment.create_equipment(db, payload)
 
 
+@router.get("/{equipment_id}", response_model=EquipmentRead)
+def get_equipment(equipment_id: UUID, db: DBSession) -> EquipmentRead:
+    return equipment.get_equipment(db, equipment_id)
+
+
 @router.patch("/{equipment_id}", response_model=EquipmentRead)
 def update_equipment(
     equipment_id: UUID,

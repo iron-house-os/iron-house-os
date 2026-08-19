@@ -12,6 +12,11 @@ const employee = {
   emergency_contact_phone: null, emergency_contact_relationship: null, hire_date: null,
   portal_role: "foreman", notes: null, status: "active", created_at: "2026-08-02T00:00:00Z", updated_at: "2026-08-02T00:00:00Z",
 };
+const equipment = {
+  id: "40000000-0000-0000-0000-000000000113", name: "20 t excavator", equipment_type: "Excavator",
+  identifier: "EX-20", status: "available", hourly_rate: 195, safety_procedure_codes: ["SWP-003", "SWP-008"],
+  created_at: "2026-08-18T00:00:00Z", updated_at: "2026-08-18T00:00:00Z",
+};
 const emergencyCard = {
   id: "30000000-0000-0000-0000-000000000113", record_type: "emergency_action_card",
   project_id: null, employee_id: null, equipment_id: null, supplier_id: null, cost_code: null,
@@ -20,10 +25,11 @@ const emergencyCard = {
   document_ids: [], signatures: [], alert_recipients: [], submitted_by: user.email,
 };
 
-async function mockFlhaApi(page: Page) {
+async function mockFlhaApi(page: Page, currentUser = user) {
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/auth/me")) return route.fulfill({ status: 200, json: { authentication: "authenticated", user } });
+    if (path.endsWith("/auth/me")) return route.fulfill({ status: 200, json: { authentication: "authenticated", user: currentUser } });
+    if (path.endsWith(`/equipment/${equipment.id}`)) return route.fulfill({ status: 200, json: equipment });
     if (path.endsWith("/field-operations/bootstrap")) return route.fulfill({ status: 200, json: {
       employees: [employee], projects: [{ id: "20000000-0000-0000-0000-000000000113", name: "River Road", project_number: "113", status: "active" }],
       suppliers: [], equipment: [], cost_codes: [], job_workbooks: [], production_items: [], material_types: [], material_movement_summary: [],
@@ -67,6 +73,18 @@ test("emergency card deep link is QR-ready, offline-downloadable, and mobile-saf
   await page.getByText("Show QR field link").click();
   await expect(page.getByRole("img", { name: "QR field link for River Road" })).toHaveAttribute("src", /^data:image\/svg\+xml/);
   await expect(page.getByText(/no password or access token/i)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+  const serious = (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze()).violations.filter((item) => item.impact === "critical" || item.impact === "serious");
+  expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
+});
+
+test("equipment QR field record is authenticated, procedure-scoped, and iPad-safe", async ({ page }) => {
+  await mockFlhaApi(page, { ...user, role: "viewer" });
+  await page.goto(`/equipment/field/${equipment.id}`);
+  await expect(page.getByRole("heading", { name: "20 t excavator" })).toBeVisible();
+  await expect(page.getByText(/SWP-003 · Mobile Equipment and Spotters/)).toBeVisible();
+  await expect(page.getByText(/SWP-008 · Lifting, Rigging and Suspended Loads/)).toBeVisible();
+  await expect(page.getByText(/do not replace the supervisor/i)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
   const serious = (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze()).violations.filter((item) => item.impact === "critical" || item.impact === "serious");
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);

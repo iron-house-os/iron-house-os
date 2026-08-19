@@ -9,6 +9,7 @@ export type Equipment = {
   identifier: string | null;
   status: EquipmentStatus;
   hourly_rate: number | null;
+  safety_procedure_codes: string[];
   created_at: string;
   updated_at: string;
 };
@@ -19,6 +20,7 @@ export type EquipmentCreate = {
   identifier?: string;
   status?: EquipmentStatus;
   hourly_rate?: number | null;
+  safety_procedure_codes?: string[];
 };
 
 export const equipmentStatuses: EquipmentStatus[] = [
@@ -48,6 +50,7 @@ export const equipmentApi = {
     request<{ items: Equipment[]; total: number }>(`/equipment${status ? `?status=${status}` : ""}`),
   create: (payload: EquipmentCreate) =>
     request<Equipment>("/equipment", { method: "POST", body: JSON.stringify(payload) }),
+  get: (id: string) => request<Equipment>(`/equipment/${id}`),
   update: (id: string, payload: Partial<EquipmentCreate>) =>
     request<Equipment>(`/equipment/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 };
