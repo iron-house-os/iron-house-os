@@ -1,0 +1,20 @@
+{
+  "approval_date": "2026-08-19",
+  "approved_by": "Iron House owner",
+  "purpose": "One-time staging-only tender metadata and estimate imports",
+  "issues": [129, 132, 134, 204],
+  "required_order": [
+    "drive_tender_import",
+    "fernie_staging_import",
+    "fuel_estimate_staging_import"
+  ],
+  "controls": {
+    "environment": "staging",
+    "dry_run_before_apply": true,
+    "idempotency_apply": true,
+    "fernie_submission_status": "unverified",
+    "fuel_estimates_submission_ready": false,
+    "production_changes": false
+  },
+  "source_main_release": "31db24e8a88dc49fe19f289bd7d6b1524ee3350d"
+}

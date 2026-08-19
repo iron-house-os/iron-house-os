@@ -1,0 +1,52 @@
+name: Approved staging tender imports
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ops/staging-imports/2026-08-19-issues-129-132-134.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-approved-staging-imports
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Dry-run, apply, and verify approved staging imports
+    runs-on: [self-hosted, linux, ihos-staging]
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact approved release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify main ancestry and approval marker
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          test -f ops/staging-imports/2026-08-19-issues-129-132-134.json
+          python3 -m json.tool ops/staging-imports/2026-08-19-issues-129-132-134.json >/dev/null
+
+      - name: Execute owner-approved staging-only imports
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          EVIDENCE_DIR: ${{ runner.temp }}/approved-staging-import-evidence
+          IHOS_IMPORT_OPERATOR: Iron House OS GitHub staging automation (owner-approved 2026-08-19)
+        run: bash ops/staging-imports/run-approved-tender-imports.sh
+
+      - name: Upload immutable staging import evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-staging-imports-${{ github.run_id }}
+          path: ${{ runner.temp }}/approved-staging-import-evidence
+          if-no-files-found: error
+          retention-days: 90
