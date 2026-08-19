@@ -104,7 +104,7 @@ class RFQPackageDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     document_type: Mapped[str] = mapped_column(String(120), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     required: Mapped[bool] = mapped_column(default=True)
-    status: Mapped[str] = mapped_column(String(80), default="registered")
+    status: Mapped[str] = mapped_column(String(80), default="pending")
     storage_uri: Mapped[str | None] = mapped_column(String(500))
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
 
