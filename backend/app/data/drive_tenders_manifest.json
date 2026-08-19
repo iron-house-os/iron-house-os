@@ -1,0 +1,1070 @@
+{
+  "source": "google_drive",
+  "source_folder_id": "1IA8M5FkHvNE9XDeoyWU5lNQfqkB3OkpW",
+  "source_url": "https://drive.google.com/drive/folders/1IA8M5FkHvNE9XDeoyWU5lNQfqkB3OkpW",
+  "generated_at": "2026-08-19T00:57:57.406Z",
+  "generated_by": "ChatGPT Work connected Google Drive metadata scan",
+  "refresh_note": "Non-secret metadata snapshot. Refresh from connected Drive before a staging apply when source contents change.",
+  "folders": [
+    {
+      "drive_folder_id": "1s-cOa0Arng7FB1sa7Bf0Ducw4hqrAwzS",
+      "name": "Lytton FN culverts",
+      "url": "https://drive.google.com/drive/folders/1s-cOa0Arng7FB1sa7Bf0Ducw4hqrAwzS",
+      "created_time": "2026-08-07T11:31:23.767Z",
+      "modified_time": "2026-08-07T11:31:23.767Z",
+      "files": [
+        {
+          "drive_file_id": "17wehlpmcNrKN0b03dhPZ-VxtTDj9SAiE",
+          "name": "Lytton First Nation- Atmospheric River Culvert Replacement - Addendum 2.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/17wehlpmcNrKN0b03dhPZ-VxtTDj9SAiE/view?usp=drivesdk",
+          "created_time": "2026-08-07T11:32:09.819Z",
+          "modified_time": "2026-08-07T11:32:09.819Z",
+          "source_path": "Lytton FN culverts/Lytton First Nation- Atmospheric River Culvert Replacement - Addendum 2.pdf"
+        },
+        {
+          "drive_file_id": "1FiJi2hgBg9Xxbwf2D7miVvUEUuu_eo55",
+          "name": "Lytton First Nation- Atmospheric River Culvert Replacement - Addendum 2.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1FiJi2hgBg9Xxbwf2D7miVvUEUuu_eo55/view?usp=drivesdk",
+          "created_time": "2026-08-07T11:31:27.422Z",
+          "modified_time": "2026-08-07T11:31:27.422Z",
+          "source_path": "Lytton FN culverts/Lytton First Nation- Atmospheric River Culvert Replacement - Addendum 2.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "13e_CHHMMJXE_XN-9JhS-xG_EssxzopN-",
+      "name": "26-204 - Township of Langley - Drainage Culverts Condition Assessment - Due 2026-08-26",
+      "url": "https://drive.google.com/drive/folders/13e_CHHMMJXE_XN-9JhS-xG_EssxzopN-",
+      "created_time": "2026-08-07T10:15:08.177Z",
+      "modified_time": "2026-08-07T10:38:39.946Z",
+      "files": [
+        {
+          "drive_file_id": "1AfEyVVAVW6GFFc2f0JeRxaW83OLQO7Vx",
+          "name": "26-204 - Drainage Culverts Condition Assessment.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1AfEyVVAVW6GFFc2f0JeRxaW83OLQO7Vx/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:15:12.802Z",
+          "modified_time": "2026-08-07T10:15:12.802Z",
+          "source_path": "26-204 - Township of Langley - Drainage Culverts Condition Assessment - Due 2026-08-26/01 Tender Docs/26-204 - Drainage Culverts Condition Assessment.pdf"
+        },
+        {
+          "drive_file_id": "1B0Nk0B3zrKj48bkj8jsDm3YCl5KJZ7Mz",
+          "name": "26-204 - Culvert Inspection Map 2026.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1B0Nk0B3zrKj48bkj8jsDm3YCl5KJZ7Mz/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:16:14.424Z",
+          "modified_time": "2026-08-07T10:39:30.731Z",
+          "source_path": "26-204 - Township of Langley - Drainage Culverts Condition Assessment - Due 2026-08-26/02 Drawings/26-204 - Culvert Inspection Map 2026.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1kpPZSTPwxwGaxdk7BMF3vvRezw0EpLu0",
+      "name": "Yorkson Park",
+      "url": "https://drive.google.com/drive/folders/1kpPZSTPwxwGaxdk7BMF3vvRezw0EpLu0",
+      "created_time": "2026-08-07T10:17:06.777Z",
+      "modified_time": "2026-08-07T10:17:06.777Z",
+      "files": [
+        {
+          "drive_file_id": "1yRKkZD4uTF4Gw7Bk2WoAd5TnYaCU10Y_",
+          "name": "Addl Info - YCP South Geo Tech report 2023.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1yRKkZD4uTF4Gw7Bk2WoAd5TnYaCU10Y_/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:20:53.887Z",
+          "modified_time": "2026-08-07T10:20:53.887Z",
+          "source_path": "Yorkson Park/Addl Info - YCP South Geo Tech report 2023.pdf"
+        },
+        {
+          "drive_file_id": "1jdYWXXP289UhU9dzMSE8XknCJV0WpHb_",
+          "name": "Addl Info - YCP South Fields Irrigation As built.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1jdYWXXP289UhU9dzMSE8XknCJV0WpHb_/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:20:21.742Z",
+          "modified_time": "2026-08-07T10:20:21.742Z",
+          "source_path": "Yorkson Park/Addl Info - YCP South Fields Irrigation As built.pdf"
+        },
+        {
+          "drive_file_id": "1gE_jgfzD8io-CwGMbT6yeL-WBp4Ib8G9",
+          "name": "Addl Info - YCP South Environmental Constraints Assessment.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1gE_jgfzD8io-CwGMbT6yeL-WBp4Ib8G9/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:19:58.373Z",
+          "modified_time": "2026-08-07T10:19:58.373Z",
+          "source_path": "Yorkson Park/Addl Info - YCP South Environmental Constraints Assessment.pdf"
+        },
+        {
+          "drive_file_id": "16NmQcksfE4tUDnyYxijo25vg_EQENcYx",
+          "name": "Addl Info - YCP Geo Tech Report 2014.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/16NmQcksfE4tUDnyYxijo25vg_EQENcYx/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:19:31.329Z",
+          "modified_time": "2026-08-07T10:19:31.329Z",
+          "source_path": "Yorkson Park/Addl Info - YCP Geo Tech Report 2014.pdf"
+        },
+        {
+          "drive_file_id": "1D4HAe38mpuY5zuGA69ozNr0lan07E4jh",
+          "name": "Addl Info - YCP Geo Tech Preload Test report 2015.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1D4HAe38mpuY5zuGA69ozNr0lan07E4jh/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:19:07.720Z",
+          "modified_time": "2026-08-07T10:19:07.720Z",
+          "source_path": "Yorkson Park/Addl Info - YCP Geo Tech Preload Test report 2015.pdf"
+        },
+        {
+          "drive_file_id": "15voBMqPrT40BkfSe5WeC9CWAWvlSysBo",
+          "name": "Addl Info - YCP South Detention Tank Record Drawings.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/15voBMqPrT40BkfSe5WeC9CWAWvlSysBo/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:18:43.004Z",
+          "modified_time": "2026-08-07T10:18:43.004Z",
+          "source_path": "Yorkson Park/Addl Info - YCP South Detention Tank Record Drawings.pdf"
+        },
+        {
+          "drive_file_id": "1bNt8m2frrRhRYsSNC31GDdzfKN0X3sx7",
+          "name": "26-207 Yorkson Community Park South Lane and Utilities Portfolio.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1bNt8m2frrRhRYsSNC31GDdzfKN0X3sx7/view?usp=drivesdk",
+          "created_time": "2026-08-07T10:17:28.700Z",
+          "modified_time": "2026-08-07T10:17:28.700Z",
+          "source_path": "Yorkson Park/26-207 Yorkson Community Park South Lane and Utilities Portfolio.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1xF8DFji3oQfDxzhbNZjB4coKbXICDkxU",
+      "name": "Hope GC erosion control",
+      "url": "https://drive.google.com/drive/folders/1xF8DFji3oQfDxzhbNZjB4coKbXICDkxU",
+      "created_time": "2026-08-05T17:14:43.234Z",
+      "modified_time": "2026-08-05T17:14:43.234Z",
+      "files": [
+        {
+          "drive_file_id": "1yZvL3nQyg504nmzHwq-4MSx3tXQPbzNO",
+          "name": "IHOS_Hope_GC_Erosion_Protection_Bid.xlsx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "url": "https://docs.google.com/spreadsheets/d/1yZvL3nQyg504nmzHwq-4MSx3tXQPbzNO/edit?usp=drivesdk&ouid=107231313353501423718&rtpof=true&sd=true",
+          "created_time": "2026-08-05T17:21:07.577Z",
+          "modified_time": "2026-08-05T17:21:07.577Z",
+          "source_path": "Hope GC erosion control/IHOS_Hope_GC_Erosion_Protection_Bid.xlsx"
+        },
+        {
+          "drive_file_id": "1_tcjwb6v6Z3t4_tKjAlixMu_BG_GDpQG",
+          "name": "LCI_2026-LCI-02.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1_tcjwb6v6Z3t4_tKjAlixMu_BG_GDpQG/view?usp=drivesdk",
+          "created_time": "2026-08-05T17:14:49.633Z",
+          "modified_time": "2026-08-05T17:14:49.633Z",
+          "source_path": "Hope GC erosion control/LCI_2026-LCI-02.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1x8jdyiBthezgTOHUrluRJXy8AHff9vaT",
+      "name": "City of Fernie - 2026 Sanitary Manhole Infiltration Repair",
+      "url": "https://drive.google.com/drive/folders/1x8jdyiBthezgTOHUrluRJXy8AHff9vaT",
+      "created_time": "2026-08-01T01:25:05.856Z",
+      "modified_time": "2026-08-01T01:25:05.856Z",
+      "files": [
+        {
+          "drive_file_id": "1En-woddcXcOEySHB7F1Ps7hoqwm9ynnDIgnI7jwfVEc",
+          "name": "City of Fernie - 2026 Manhole Infiltration Repair - Estimate",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1En-woddcXcOEySHB7F1Ps7hoqwm9ynnDIgnI7jwfVEc/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:25:12.929Z",
+          "modified_time": "2026-08-02T16:26:18.550Z",
+          "source_path": "City of Fernie - 2026 Sanitary Manhole Infiltration Repair/City of Fernie - 2026 Manhole Infiltration Repair - Estimate"
+        },
+        {
+          "drive_file_id": "1bKp0GweJp4fSpFPCL3qfguJRqOvxWjUoi9XJLNqpt5w",
+          "name": "City of Fernie - 2026 Manhole Infiltration Repair - Proposal",
+          "mime_type": "application/vnd.google-apps.document",
+          "url": "https://docs.google.com/document/d/1bKp0GweJp4fSpFPCL3qfguJRqOvxWjUoi9XJLNqpt5w/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:25:22.930Z",
+          "modified_time": "2026-08-02T16:12:02.583Z",
+          "source_path": "City of Fernie - 2026 Sanitary Manhole Infiltration Repair/City of Fernie - 2026 Manhole Infiltration Repair - Proposal"
+        },
+        {
+          "drive_file_id": "1OVQvFtntl_XhcLGjRJanMJXeNGgAJyHY",
+          "name": "City of Fernie - 2026 Manhole Infiltration Repair - Proposal.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1OVQvFtntl_XhcLGjRJanMJXeNGgAJyHY/view?usp=drivesdk",
+          "created_time": "2026-08-01T01:25:32.019Z",
+          "modified_time": "2026-08-01T01:25:32.019Z",
+          "source_path": "City of Fernie - 2026 Sanitary Manhole Infiltration Repair/City of Fernie - 2026 Manhole Infiltration Repair - Proposal.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "15tpur5YZr-UzF7I_zlNemhTGEWhOwsyg",
+      "name": "Village of Cumberland - 2026 Sewer Separation - ITT-2602",
+      "url": "https://drive.google.com/drive/folders/15tpur5YZr-UzF7I_zlNemhTGEWhOwsyg",
+      "created_time": "2026-08-01T01:04:27.079Z",
+      "modified_time": "2026-08-01T01:04:27.079Z",
+      "files": [
+        {
+          "drive_file_id": "1efwwTWRatBtACJo8uEaXDUQ5pc6ansPr",
+          "name": "ITT-2602 Cumberland Sewer Separation - Tender Draft.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1efwwTWRatBtACJo8uEaXDUQ5pc6ansPr/view?usp=drivesdk",
+          "created_time": "2026-08-01T01:04:54.838Z",
+          "modified_time": "2026-08-01T01:04:54.838Z",
+          "source_path": "Village of Cumberland - 2026 Sewer Separation - ITT-2602/ITT-2602 Cumberland Sewer Separation - Tender Draft.pdf"
+        },
+        {
+          "drive_file_id": "1LuCXt9GdQgwlEf2KBzV3dWTL5UrVYSayobtLuItoU-c",
+          "name": "ITT-2602 Cumberland Sewer Separation - Tender Draft",
+          "mime_type": "application/vnd.google-apps.document",
+          "url": "https://docs.google.com/document/d/1LuCXt9GdQgwlEf2KBzV3dWTL5UrVYSayobtLuItoU-c/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:04:45.443Z",
+          "modified_time": "2026-08-01T01:04:47.711Z",
+          "source_path": "Village of Cumberland - 2026 Sewer Separation - ITT-2602/ITT-2602 Cumberland Sewer Separation - Tender Draft"
+        },
+        {
+          "drive_file_id": "1d6sRDMNPmHI6Cwaup6Zrlv4OuaD0oMhvqKEqXeRuF8Q",
+          "name": "ITT-2602 Cumberland Sewer Separation - Estimate",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1d6sRDMNPmHI6Cwaup6Zrlv4OuaD0oMhvqKEqXeRuF8Q/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:04:38.947Z",
+          "modified_time": "2026-08-01T01:04:39.961Z",
+          "source_path": "Village of Cumberland - 2026 Sewer Separation - ITT-2602/ITT-2602 Cumberland Sewer Separation - Estimate"
+        },
+        {
+          "drive_file_id": "1lD-lRPLJQF4IDBieSHAlP2VJEjcdLTOb",
+          "name": "ITT-2026_VoC_Sewer_Separation_Drawings.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1lD-lRPLJQF4IDBieSHAlP2VJEjcdLTOb/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:56:47.345Z",
+          "modified_time": "2026-08-01T00:56:47.345Z",
+          "source_path": "Village of Cumberland - 2026 Sewer Separation - ITT-2602/ITT-2026_VoC_Sewer_Separation_Drawings.pdf"
+        },
+        {
+          "drive_file_id": "1g4C5YlvUvePOUJOsLrIRBGOgr-dG0imq",
+          "name": "ITT-2602_VoC_Sewer_Separation.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1g4C5YlvUvePOUJOsLrIRBGOgr-dG0imq/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:55:52.375Z",
+          "modified_time": "2026-08-01T00:55:52.375Z",
+          "source_path": "Village of Cumberland - 2026 Sewer Separation - ITT-2602/ITT-2602_VoC_Sewer_Separation.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1OTshIHFPyj4UR_NyjH957-_HJ2FjhBo4",
+      "name": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00",
+      "url": "https://drive.google.com/drive/folders/1OTshIHFPyj4UR_NyjH957-_HJ2FjhBo4",
+      "created_time": "2026-08-01T01:01:11.985Z",
+      "modified_time": "2026-08-01T01:01:11.985Z",
+      "files": [
+        {
+          "drive_file_id": "1e0gSzlfyRvDQ4lmmobHb0VmlJyK4GMXt",
+          "name": "Hillcrest Avenue Storm Rehabilitation - Tender Draft.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1e0gSzlfyRvDQ4lmmobHb0VmlJyK4GMXt/view?usp=drivesdk",
+          "created_time": "2026-08-01T01:02:37.522Z",
+          "modified_time": "2026-08-01T01:02:37.522Z",
+          "source_path": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00/Hillcrest Avenue Storm Rehabilitation - Tender Draft.pdf"
+        },
+        {
+          "drive_file_id": "1pDrUv-FLtYGZA2vAMdGrJ2q076HZDILTY9hrkatXsFU",
+          "name": "Hillcrest Avenue Storm Rehabilitation - Tender Draft",
+          "mime_type": "application/vnd.google-apps.document",
+          "url": "https://docs.google.com/document/d/1pDrUv-FLtYGZA2vAMdGrJ2q076HZDILTY9hrkatXsFU/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:01:30.429Z",
+          "modified_time": "2026-08-01T01:01:32.408Z",
+          "source_path": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00/Hillcrest Avenue Storm Rehabilitation - Tender Draft"
+        },
+        {
+          "drive_file_id": "1iDicCh09dw-_UAPaV4QYb0Zbwxv1-jhqq0rEaxuFtko",
+          "name": "Hillcrest Avenue Storm Rehabilitation - Estimate",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1iDicCh09dw-_UAPaV4QYb0Zbwxv1-jhqq0rEaxuFtko/edit?usp=drivesdk",
+          "created_time": "2026-08-01T01:01:22.612Z",
+          "modified_time": "2026-08-01T01:01:23.802Z",
+          "source_path": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00/Hillcrest Avenue Storm Rehabilitation - Estimate"
+        },
+        {
+          "drive_file_id": "1G7qrSqrd5tqcTTQYgsVoL6hRjmRD_jCX",
+          "name": "District_of_Port_Edward_Hillcrest_Storm_Tender_Package.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1G7qrSqrd5tqcTTQYgsVoL6hRjmRD_jCX/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:51:31.994Z",
+          "modified_time": "2026-08-01T00:51:31.994Z",
+          "source_path": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00/District_of_Port_Edward_Hillcrest_Storm_Tender_Package.pdf"
+        },
+        {
+          "drive_file_id": "13PaSN-Ka_NadtgYg_pK9VZpWXpe4st6C",
+          "name": "10482-C_SERIES_IFT_Rev1_sealed.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/13PaSN-Ka_NadtgYg_pK9VZpWXpe4st6C/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:50:51.864Z",
+          "modified_time": "2026-08-01T00:50:51.864Z",
+          "source_path": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00/10482-C_SERIES_IFT_Rev1_sealed.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1o8lg-hZ9klNFfEVGmnogfvasH8NoAaS0",
+      "name": "Cumberland sewer separation",
+      "url": "https://drive.google.com/drive/folders/1o8lg-hZ9klNFfEVGmnogfvasH8NoAaS0",
+      "created_time": "2026-08-01T00:55:43.106Z",
+      "modified_time": "2026-08-01T00:55:43.106Z",
+      "files": []
+    },
+    {
+      "drive_folder_id": "1XJck5GY1eT18ZWTdNqRHi2xwQzMBKPkF",
+      "name": "Edward sewer",
+      "url": "https://drive.google.com/drive/folders/1XJck5GY1eT18ZWTdNqRHi2xwQzMBKPkF",
+      "created_time": "2026-08-01T00:50:44.840Z",
+      "modified_time": "2026-08-01T00:50:44.840Z",
+      "files": [
+        {
+          "drive_file_id": "1rYPIQFGbP5Mz2KKzmzFljUA-rrw5xHXY",
+          "name": "District_of_Port_Edward_Hillcrest_Storm_Tender_Package.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1rYPIQFGbP5Mz2KKzmzFljUA-rrw5xHXY/view?usp=drivesdk",
+          "created_time": "2026-08-01T01:10:17.459Z",
+          "modified_time": "2026-08-01T01:10:17.459Z",
+          "source_path": " Edward sewer/District_of_Port_Edward_Hillcrest_Storm_Tender_Package.pdf"
+        },
+        {
+          "drive_file_id": "1fOgYDpC2mLlgGHWhq2eNheoItc9nMv7L",
+          "name": "10482-C_SERIES_IFT_Rev1_sealed.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1fOgYDpC2mLlgGHWhq2eNheoItc9nMv7L/view?usp=drivesdk",
+          "created_time": "2026-08-01T01:09:35.655Z",
+          "modified_time": "2026-08-01T01:09:35.655Z",
+          "source_path": " Edward sewer/10482-C_SERIES_IFT_Rev1_sealed.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "14gJumcOdON6NZH6AyrYw3rEjLtTZjXQl",
+      "name": "Q26 335 - Firehall 3 Concrete Driveway",
+      "url": "https://drive.google.com/drive/folders/14gJumcOdON6NZH6AyrYw3rEjLtTZjXQl",
+      "created_time": "2026-08-01T00:50:26.157Z",
+      "modified_time": "2026-08-01T00:50:26.157Z",
+      "files": [
+        {
+          "drive_file_id": "1MbYGfY-viJIuIWbRHTqcUHrp-REiOWdTdDlg4jCkprg",
+          "name": "Q26 335 - Firehall 3 Concrete Driveway Quotation",
+          "mime_type": "application/vnd.google-apps.document",
+          "url": "https://docs.google.com/document/d/1MbYGfY-viJIuIWbRHTqcUHrp-REiOWdTdDlg4jCkprg/edit?usp=drivesdk",
+          "created_time": "2026-08-01T00:50:43.627Z",
+          "modified_time": "2026-08-01T00:50:44.769Z",
+          "source_path": "Q26 335 - Firehall 3 Concrete Driveway/Q26 335 - Firehall 3 Concrete Driveway Quotation"
+        },
+        {
+          "drive_file_id": "1Tfoy5F53o_UzOQSggXJknjhIxfHoFDDePGOoDxXXXcc",
+          "name": "Q26 335 - Firehall 3 Concrete Driveway Estimate",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1Tfoy5F53o_UzOQSggXJknjhIxfHoFDDePGOoDxXXXcc/edit?usp=drivesdk",
+          "created_time": "2026-08-01T00:50:35.244Z",
+          "modified_time": "2026-08-01T00:50:36.427Z",
+          "source_path": "Q26 335 - Firehall 3 Concrete Driveway/Q26 335 - Firehall 3 Concrete Driveway Estimate"
+        },
+        {
+          "drive_file_id": "1Dc11hj5aeAMNevk1I2sPhnnJ6B6E9lQ3",
+          "name": "Q26_335_Firehall__3_Concrete_Driveway.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1Dc11hj5aeAMNevk1I2sPhnnJ6B6E9lQ3/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:28:12.624Z",
+          "modified_time": "2026-08-01T00:28:12.624Z",
+          "source_path": "Q26 335 - Firehall 3 Concrete Driveway/Q26_335_Firehall__3_Concrete_Driveway.pdf"
+        },
+        {
+          "drive_file_id": "1NWoJaEcCcLpDH8f2Voyxvvu9VWLrPeRa",
+          "name": "Q26_335_Appendix_A.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1NWoJaEcCcLpDH8f2Voyxvvu9VWLrPeRa/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:27:40.363Z",
+          "modified_time": "2026-08-01T00:27:40.363Z",
+          "source_path": "Q26 335 - Firehall 3 Concrete Driveway/Q26_335_Appendix_A.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1dA9BCow-rTCqivIR0lZ-GcS4lTciN8MT",
+      "name": "Sani manhole repair Fernie",
+      "url": "https://drive.google.com/drive/folders/1dA9BCow-rTCqivIR0lZ-GcS4lTciN8MT",
+      "created_time": "2026-08-01T00:32:37.341Z",
+      "modified_time": "2026-08-01T00:32:37.341Z",
+      "files": [
+        {
+          "drive_file_id": "1HonTJWNVl370Q28zBwNx-Cc4Nu-2HLeF",
+          "name": "ID__1117.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1HonTJWNVl370Q28zBwNx-Cc4Nu-2HLeF/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:47:03.646Z",
+          "modified_time": "2026-08-01T00:47:03.646Z",
+          "source_path": "Sani manhole repair Fernie /ID__1117.MOV"
+        },
+        {
+          "drive_file_id": "1oR8ni5zhlthWO2GpQF_0Le4eHCjDBKXL",
+          "name": "ID__784.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1oR8ni5zhlthWO2GpQF_0Le4eHCjDBKXL/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:46:03.785Z",
+          "modified_time": "2026-08-01T00:46:03.785Z",
+          "source_path": "Sani manhole repair Fernie /ID__784.MOV"
+        },
+        {
+          "drive_file_id": "1yECiP6lbWWRfJsGj8LbOzuvIlFzh9nhV",
+          "name": "ID__623.MP4",
+          "mime_type": "video/mp4",
+          "url": "https://drive.google.com/file/d/1yECiP6lbWWRfJsGj8LbOzuvIlFzh9nhV/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:45:04.416Z",
+          "modified_time": "2026-08-01T00:45:04.416Z",
+          "source_path": "Sani manhole repair Fernie /ID__623.MP4"
+        },
+        {
+          "drive_file_id": "1X0--t5xfAQUrcYeM0b_VQIeVSovklGYP",
+          "name": "ID__575.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1X0--t5xfAQUrcYeM0b_VQIeVSovklGYP/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:43:47.081Z",
+          "modified_time": "2026-08-01T00:43:47.081Z",
+          "source_path": "Sani manhole repair Fernie /ID__575.MOV"
+        },
+        {
+          "drive_file_id": "1heWH3TIey8U23Ga4OwNYAKNfp5ChvbwG",
+          "name": "ID__407.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1heWH3TIey8U23Ga4OwNYAKNfp5ChvbwG/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:42:53.132Z",
+          "modified_time": "2026-08-01T00:42:53.132Z",
+          "source_path": "Sani manhole repair Fernie /ID__407.MOV"
+        },
+        {
+          "drive_file_id": "17Hyi8DmfQRkBxWd9dEuOqTHzLVMYkTN5",
+          "name": "ID__401.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/17Hyi8DmfQRkBxWd9dEuOqTHzLVMYkTN5/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:41:59.137Z",
+          "modified_time": "2026-08-01T00:41:59.137Z",
+          "source_path": "Sani manhole repair Fernie /ID__401.MOV"
+        },
+        {
+          "drive_file_id": "1H3FWz7BwspoBP2nye3Sadr6RCaO0y8qe",
+          "name": "ID__272__2_.mp4",
+          "mime_type": "video/mp4",
+          "url": "https://drive.google.com/file/d/1H3FWz7BwspoBP2nye3Sadr6RCaO0y8qe/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:40:54.569Z",
+          "modified_time": "2026-08-01T00:40:54.569Z",
+          "source_path": "Sani manhole repair Fernie /ID__272__2_.mp4"
+        },
+        {
+          "drive_file_id": "1MeE9M116HdqxDl_0Tvmuxe_c7GSzrqhc",
+          "name": "ID__272.MP4",
+          "mime_type": "video/mp4",
+          "url": "https://drive.google.com/file/d/1MeE9M116HdqxDl_0Tvmuxe_c7GSzrqhc/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:39:56.159Z",
+          "modified_time": "2026-08-01T00:39:56.159Z",
+          "source_path": "Sani manhole repair Fernie /ID__272.MP4"
+        },
+        {
+          "drive_file_id": "1SOhB-iG-GTTNTJ7tLVJkUk0UZe1HzN2L",
+          "name": "ID__269.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1SOhB-iG-GTTNTJ7tLVJkUk0UZe1HzN2L/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:39:13.989Z",
+          "modified_time": "2026-08-01T00:39:13.989Z",
+          "source_path": "Sani manhole repair Fernie /ID__269.MOV"
+        },
+        {
+          "drive_file_id": "1ovQgYBAedZS1Z-IIJb4e7IfhV2OVvX5K",
+          "name": "ID__238.mp4",
+          "mime_type": "video/mp4",
+          "url": "https://drive.google.com/file/d/1ovQgYBAedZS1Z-IIJb4e7IfhV2OVvX5K/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:37:49.779Z",
+          "modified_time": "2026-08-01T00:37:49.779Z",
+          "source_path": "Sani manhole repair Fernie /ID__238.mp4"
+        },
+        {
+          "drive_file_id": "1-C-CHBwPJHLBwYqkW_Ww3-sRXt0e2-Wn",
+          "name": "ID__237__2_.mp4",
+          "mime_type": "video/mp4",
+          "url": "https://drive.google.com/file/d/1-C-CHBwPJHLBwYqkW_Ww3-sRXt0e2-Wn/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:36:38.918Z",
+          "modified_time": "2026-08-01T00:36:38.918Z",
+          "source_path": "Sani manhole repair Fernie /ID__237__2_.mp4"
+        },
+        {
+          "drive_file_id": "1OV-D_DueW2aa-9BERf4Nwn44lqKojYMT",
+          "name": "ID__237.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1OV-D_DueW2aa-9BERf4Nwn44lqKojYMT/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:35:15.952Z",
+          "modified_time": "2026-08-01T00:35:15.952Z",
+          "source_path": "Sani manhole repair Fernie /ID__237.MOV"
+        },
+        {
+          "drive_file_id": "1bWhxL3v8NcQjsLRF_WowI3Z4mIfkjDE-",
+          "name": "ID__218.MOV",
+          "mime_type": "video/quicktime",
+          "url": "https://drive.google.com/file/d/1bWhxL3v8NcQjsLRF_WowI3Z4mIfkjDE-/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:34:01.170Z",
+          "modified_time": "2026-08-01T00:34:01.170Z",
+          "source_path": "Sani manhole repair Fernie /ID__218.MOV"
+        },
+        {
+          "drive_file_id": "1L6SBz65W8PfC_2Aq5PWRa8T_Pi1WSRcK",
+          "name": "2026_Manhole_Infiltration_Repair_Program_RFP.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1L6SBz65W8PfC_2Aq5PWRa8T_Pi1WSRcK/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:32:42.777Z",
+          "modified_time": "2026-08-01T00:32:42.777Z",
+          "source_path": "Sani manhole repair Fernie /2026_Manhole_Infiltration_Repair_Program_RFP.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1B8ZcMgd5-cEU28TrTlefxcOlRbCqOKX6",
+      "name": "We fireball",
+      "url": "https://drive.google.com/drive/folders/1B8ZcMgd5-cEU28TrTlefxcOlRbCqOKX6",
+      "created_time": "2026-08-01T00:27:35.492Z",
+      "modified_time": "2026-08-01T00:27:35.492Z",
+      "files": []
+    },
+    {
+      "drive_folder_id": "1c8bVsnECh-fgKLdc_sAx-fyEWpl2QGkC",
+      "name": "Parksville",
+      "url": "https://drive.google.com/drive/folders/1c8bVsnECh-fgKLdc_sAx-fyEWpl2QGkC",
+      "created_time": "2026-08-01T00:20:38.841Z",
+      "modified_time": "2026-08-01T00:20:38.841Z",
+      "files": [
+        {
+          "drive_file_id": "1DpLb9TN_14glv_oK62oqlcNIKQO7As8d",
+          "name": "5330-20-STANFORD-ELECTRICAL_IFT.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1DpLb9TN_14glv_oK62oqlcNIKQO7As8d/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:22:44.643Z",
+          "modified_time": "2026-08-01T00:22:44.643Z",
+          "source_path": "Parksville /5330-20-STANFORD-ELECTRICAL_IFT.pdf"
+        },
+        {
+          "drive_file_id": "170g48dOqmf8XOipYHBmBZfxtIUAQwuqz",
+          "name": "5330-20-STANFORD-LANDSCAPE_IFT.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/170g48dOqmf8XOipYHBmBZfxtIUAQwuqz/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:21:56.964Z",
+          "modified_time": "2026-08-01T00:21:56.964Z",
+          "source_path": "Parksville /5330-20-STANFORD-LANDSCAPE_IFT.pdf"
+        },
+        {
+          "drive_file_id": "10mZrtJX3notqpu1p7_sr1o63OAgLYbRK",
+          "name": "5330-20-STANFORD-CIVIL_IFT.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/10mZrtJX3notqpu1p7_sr1o63OAgLYbRK/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:21:19.749Z",
+          "modified_time": "2026-08-01T00:21:19.749Z",
+          "source_path": "Parksville /5330-20-STANFORD-CIVIL_IFT.pdf"
+        },
+        {
+          "drive_file_id": "1BvLO5L_oiHRHRyvRjRaeMJn9JL-Sx_Jo",
+          "name": "5330-20-STANFORD_TenderDocuments.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1BvLO5L_oiHRHRyvRjRaeMJn9JL-Sx_Jo/view?usp=drivesdk",
+          "created_time": "2026-08-01T00:20:46.884Z",
+          "modified_time": "2026-08-01T00:20:46.884Z",
+          "source_path": "Parksville /5330-20-STANFORD_TenderDocuments.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1E9HmYXU39jghxu0xNorCqsEegV7cui3N",
+      "name": "Braidwood",
+      "url": "https://drive.google.com/drive/folders/1E9HmYXU39jghxu0xNorCqsEegV7cui3N",
+      "created_time": "2026-07-27T13:20:43.286Z",
+      "modified_time": "2026-07-27T13:20:50.069Z",
+      "files": [
+        {
+          "drive_file_id": "1zC0CKUizVFKEGutIKGv3mW-PyZspzlVz",
+          "name": "IH-Estimate-BraidwoodRoad-C26-085-2026-07-27-v1.xlsx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "url": "https://docs.google.com/spreadsheets/d/1zC0CKUizVFKEGutIKGv3mW-PyZspzlVz/edit?usp=drivesdk&ouid=107231313353501423718&rtpof=true&sd=true",
+          "created_time": "2026-07-29T14:21:55.021Z",
+          "modified_time": "2026-07-29T14:21:55.021Z",
+          "source_path": "Braidwood/IH-Estimate-BraidwoodRoad-C26-085-2026-07-27-v1.xlsx"
+        },
+        {
+          "drive_file_id": "19khYzx_ykK6fn7PJjoKMZ4iERXUtfDUH",
+          "name": "raw.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/19khYzx_ykK6fn7PJjoKMZ4iERXUtfDUH/view?usp=drivesdk",
+          "created_time": "2026-07-27T14:15:01.030Z",
+          "modified_time": "2026-07-27T14:15:01.030Z",
+          "source_path": "Braidwood/raw.pdf"
+        },
+        {
+          "drive_file_id": "1EQWB05ae1Y2W3UzUS51lKNvZK9sIQp-6",
+          "name": "Contract_Drawings.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1EQWB05ae1Y2W3UzUS51lKNvZK9sIQp-6/view?usp=drivesdk",
+          "created_time": "2026-07-27T13:21:03.656Z",
+          "modified_time": "2026-07-27T13:21:03.656Z",
+          "source_path": "Braidwood/Braidwood/Contract_Drawings.pdf"
+        },
+        {
+          "drive_file_id": "1XWXR3kVarmTldtRIjm4RldkuSo0d4dXt",
+          "name": "C26-085_Braidwood_Road_Corridor_Improvements_Tender_Package.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1XWXR3kVarmTldtRIjm4RldkuSo0d4dXt/view?usp=drivesdk",
+          "created_time": "2026-07-27T13:20:59.556Z",
+          "modified_time": "2026-07-27T13:20:59.556Z",
+          "source_path": "Braidwood/Braidwood/C26-085_Braidwood_Road_Corridor_Improvements_Tender_Package.pdf"
+        },
+        {
+          "drive_file_id": "1h5rZANlPhUtlktdPGIsqaVFzS2LKSEnT",
+          "name": "Geotechnical_Assessment.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1h5rZANlPhUtlktdPGIsqaVFzS2LKSEnT/view?usp=drivesdk",
+          "created_time": "2026-07-27T13:20:57.806Z",
+          "modified_time": "2026-07-27T13:20:57.806Z",
+          "source_path": "Braidwood/Braidwood/Geotechnical_Assessment.pdf"
+        },
+        {
+          "drive_file_id": "1hcr5tD_2-Cz1pnnWhYTJIgeBFdk80Fxx",
+          "name": "Archaeological_Chance_Find_Procedure.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1hcr5tD_2-Cz1pnnWhYTJIgeBFdk80Fxx/view?usp=drivesdk",
+          "created_time": "2026-07-27T13:20:56.286Z",
+          "modified_time": "2026-07-27T13:20:56.286Z",
+          "source_path": "Braidwood/Braidwood/Archaeological_Chance_Find_Procedure.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "14RLoWDd7OZ0aeIa60QQu9yB-U2vmWXcM",
+      "name": "McLeod Lake Watermain",
+      "url": "https://drive.google.com/drive/folders/14RLoWDd7OZ0aeIa60QQu9yB-U2vmWXcM",
+      "created_time": "2026-07-19T17:55:21.036Z",
+      "modified_time": "2026-07-24T14:29:01.678Z",
+      "files": [
+        {
+          "drive_file_id": "1Av4uMt5Lm7HR3IVC_OiFIsCdHAmiC9wO",
+          "name": "MLIB_Water_System_Improvements_-_Phase_1_-_Civil_Tender_-_2026-07-14.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1Av4uMt5Lm7HR3IVC_OiFIsCdHAmiC9wO/view?usp=drivesdk",
+          "created_time": "2026-07-19T17:55:57.096Z",
+          "modified_time": "2026-07-19T17:55:57.096Z",
+          "source_path": "McLeod Lake Watermain/MLIB_Water_System_Improvements_-_Phase_1_-_Civil_Tender_-_2026-07-14.pdf"
+        },
+        {
+          "drive_file_id": "14e9boKVnRoaBVNYtYS1wjgkSOD-vTxZ7",
+          "name": "a7f70533-02cc-4887-9b98-f55582e46568.html",
+          "mime_type": "text/html",
+          "url": "https://drive.google.com/file/d/14e9boKVnRoaBVNYtYS1wjgkSOD-vTxZ7/view?usp=drivesdk",
+          "created_time": "2026-07-19T17:55:54.633Z",
+          "modified_time": "2026-07-19T17:55:54.633Z",
+          "source_path": "McLeod Lake Watermain/a7f70533-02cc-4887-9b98-f55582e46568.html"
+        },
+        {
+          "drive_file_id": "1vlFXtL63p8LV33l3sDbjquhsrgMbo8NQ",
+          "name": "037fac8d-4042-4ceb-a33c-4e07aca22fc3.html",
+          "mime_type": "text/html",
+          "url": "https://drive.google.com/file/d/1vlFXtL63p8LV33l3sDbjquhsrgMbo8NQ/view?usp=drivesdk",
+          "created_time": "2026-07-19T17:55:53.265Z",
+          "modified_time": "2026-07-19T17:55:53.265Z",
+          "source_path": "McLeod Lake Watermain/037fac8d-4042-4ceb-a33c-4e07aca22fc3.html"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1Oeov9EaULG-h5Cfcrru7oaJFkLnBFmXM",
+      "name": "Cassidys",
+      "url": "https://drive.google.com/drive/folders/1Oeov9EaULG-h5Cfcrru7oaJFkLnBFmXM",
+      "created_time": "2026-07-22T15:36:33.530Z",
+      "modified_time": "2026-07-22T15:36:33.530Z",
+      "files": [
+        {
+          "drive_file_id": "1_wIz8solYz6yhYhQKFRWDP5lNQLSp4g_aJfPiS2ehXU",
+          "name": "IH-Estimate-Cassidys-Full-Bid-Workbook-2026-07-23-v2",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1_wIz8solYz6yhYhQKFRWDP5lNQLSp4g_aJfPiS2ehXU/edit?usp=drivesdk",
+          "created_time": "2026-07-23T19:30:49.812Z",
+          "modified_time": "2026-07-23T19:32:58.875Z",
+          "source_path": "Cassidys/IH-Estimate-Cassidys-Full-Bid-Workbook-2026-07-23-v2"
+        },
+        {
+          "drive_file_id": "1jA3vYKJkgcuOeaZc8_LQ4c8i8vHatJNA",
+          "name": "IMG_3115.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1jA3vYKJkgcuOeaZc8_LQ4c8i8vHatJNA/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:15.235Z",
+          "modified_time": "2026-07-22T16:15:15.235Z",
+          "source_path": "Cassidys/IMG_3115.HEIC"
+        },
+        {
+          "drive_file_id": "1rRKPYFzKaKQXb_Ujq8Zvpmf3s519lZlt",
+          "name": "IMG_3120.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1rRKPYFzKaKQXb_Ujq8Zvpmf3s519lZlt/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:14.464Z",
+          "modified_time": "2026-07-22T16:15:14.464Z",
+          "source_path": "Cassidys/IMG_3120.HEIC"
+        },
+        {
+          "drive_file_id": "1M1nwsqgsJ5FFs_ZDPrCePV36cu3K-IF7",
+          "name": "IMG_3116.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1M1nwsqgsJ5FFs_ZDPrCePV36cu3K-IF7/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:12.265Z",
+          "modified_time": "2026-07-22T16:15:12.265Z",
+          "source_path": "Cassidys/IMG_3116.HEIC"
+        },
+        {
+          "drive_file_id": "1YQv5KtrA5xuuHQpY2s9mbYSPDhKT5N-n",
+          "name": "IMG_3119.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1YQv5KtrA5xuuHQpY2s9mbYSPDhKT5N-n/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:11.276Z",
+          "modified_time": "2026-07-22T16:15:11.276Z",
+          "source_path": "Cassidys/IMG_3119.HEIC"
+        },
+        {
+          "drive_file_id": "1X9GPx3IM7-1Cil5yulTL5-TpzzEH6fd1",
+          "name": "IMG_3118.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1X9GPx3IM7-1Cil5yulTL5-TpzzEH6fd1/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:08.811Z",
+          "modified_time": "2026-07-22T16:15:08.811Z",
+          "source_path": "Cassidys/IMG_3118.HEIC"
+        },
+        {
+          "drive_file_id": "1fVXUk6ip3rVJdFaJuxp1ekwOcEnnJbTV",
+          "name": "IMG_3114.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1fVXUk6ip3rVJdFaJuxp1ekwOcEnnJbTV/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:06.143Z",
+          "modified_time": "2026-07-22T16:15:06.143Z",
+          "source_path": "Cassidys/IMG_3114.HEIC"
+        },
+        {
+          "drive_file_id": "1iuf5Qxqah0pxDgjRmFZpi7UuRGh_K-pl",
+          "name": "IMG_3117.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1iuf5Qxqah0pxDgjRmFZpi7UuRGh_K-pl/view?usp=drivesdk",
+          "created_time": "2026-07-22T16:15:03.168Z",
+          "modified_time": "2026-07-22T16:15:03.168Z",
+          "source_path": "Cassidys/IMG_3117.HEIC"
+        },
+        {
+          "drive_file_id": "1BqDtgI--KGBnyhIxDL9z2-ivZEj8tXAV",
+          "name": "IMG_3112.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1BqDtgI--KGBnyhIxDL9z2-ivZEj8tXAV/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:38:13.966Z",
+          "modified_time": "2026-07-22T15:38:13.966Z",
+          "source_path": "Cassidys/IMG_3112.HEIC"
+        },
+        {
+          "drive_file_id": "15iA8_fqHlFo7CnQ515uSi8Y3-Dw_a5XJ",
+          "name": "IMG_3113.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/15iA8_fqHlFo7CnQ515uSi8Y3-Dw_a5XJ/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:38:13.607Z",
+          "modified_time": "2026-07-22T15:38:13.607Z",
+          "source_path": "Cassidys/IMG_3113.HEIC"
+        },
+        {
+          "drive_file_id": "1Nh5TfRf-_9CjvwJn9b2A088HhDUMc7Ok",
+          "name": "IMG_3106.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1Nh5TfRf-_9CjvwJn9b2A088HhDUMc7Ok/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:38:12.703Z",
+          "modified_time": "2026-07-22T15:38:12.703Z",
+          "source_path": "Cassidys/IMG_3106.HEIC"
+        },
+        {
+          "drive_file_id": "1kMQ9XAT67uudXZHqcCIx8BSZENzJ6Tvq",
+          "name": "IMG_3105.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1kMQ9XAT67uudXZHqcCIx8BSZENzJ6Tvq/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:38:11.236Z",
+          "modified_time": "2026-07-22T15:38:11.236Z",
+          "source_path": "Cassidys/IMG_3105.HEIC"
+        },
+        {
+          "drive_file_id": "1jW57cSS-td-P-8_FrjollMSkL2VjthGE",
+          "name": "IMG_3098.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1jW57cSS-td-P-8_FrjollMSkL2VjthGE/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:38:10.169Z",
+          "modified_time": "2026-07-22T15:38:10.169Z",
+          "source_path": "Cassidys/IMG_3098.HEIC"
+        },
+        {
+          "drive_file_id": "19p7K04zElz6M1WBgMVOLSwu1hGMfq9Tn",
+          "name": "IMG_3103.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/19p7K04zElz6M1WBgMVOLSwu1hGMfq9Tn/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:56.653Z",
+          "modified_time": "2026-07-22T15:37:56.653Z",
+          "source_path": "Cassidys/IMG_3103.HEIC"
+        },
+        {
+          "drive_file_id": "10pY2CEisjhv9CTQEU6ou2RpidDxgM_co",
+          "name": "IMG_3099.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/10pY2CEisjhv9CTQEU6ou2RpidDxgM_co/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:51.252Z",
+          "modified_time": "2026-07-22T15:37:51.252Z",
+          "source_path": "Cassidys/IMG_3099.HEIC"
+        },
+        {
+          "drive_file_id": "13lcVzhhAkWzayIU2r6OHW8O67Vp6lCgA",
+          "name": "IMG_3096.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/13lcVzhhAkWzayIU2r6OHW8O67Vp6lCgA/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:50.938Z",
+          "modified_time": "2026-07-22T15:37:50.938Z",
+          "source_path": "Cassidys/IMG_3096.HEIC"
+        },
+        {
+          "drive_file_id": "1qXqtW78N9mKkjouDf6jDPXY3UzswFxKt",
+          "name": "IMG_3100.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1qXqtW78N9mKkjouDf6jDPXY3UzswFxKt/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:47.813Z",
+          "modified_time": "2026-07-22T15:37:47.813Z",
+          "source_path": "Cassidys/IMG_3100.HEIC"
+        },
+        {
+          "drive_file_id": "1u_smn_hcDvQXdP2oPcDn-bX4ySjJfF8p",
+          "name": "IMG_3101.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1u_smn_hcDvQXdP2oPcDn-bX4ySjJfF8p/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:34.932Z",
+          "modified_time": "2026-07-22T15:37:34.932Z",
+          "source_path": "Cassidys/IMG_3101.HEIC"
+        },
+        {
+          "drive_file_id": "1nhVHzs_tNIygmxEuC-zZMQmENwxmAL58",
+          "name": "IMG_3095.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1nhVHzs_tNIygmxEuC-zZMQmENwxmAL58/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:32.898Z",
+          "modified_time": "2026-07-22T15:37:32.898Z",
+          "source_path": "Cassidys/IMG_3095.HEIC"
+        },
+        {
+          "drive_file_id": "1RPH4En2mWEpGdKfvjqBeP0dwkyOKk9K1",
+          "name": "IMG_3097.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1RPH4En2mWEpGdKfvjqBeP0dwkyOKk9K1/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:31.838Z",
+          "modified_time": "2026-07-22T15:37:31.838Z",
+          "source_path": "Cassidys/IMG_3097.HEIC"
+        },
+        {
+          "drive_file_id": "1A5n1nQc0B_8fDFAbyo0isYvvObN3AwtB",
+          "name": "IMG_3104.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1A5n1nQc0B_8fDFAbyo0isYvvObN3AwtB/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:26.160Z",
+          "modified_time": "2026-07-22T15:37:26.160Z",
+          "source_path": "Cassidys/IMG_3104.HEIC"
+        },
+        {
+          "drive_file_id": "1-bPYAGweJjCuJph7p6xyaVYx1X6qnCRf",
+          "name": "IMG_3102.HEIC",
+          "mime_type": "image/heif",
+          "url": "https://drive.google.com/file/d/1-bPYAGweJjCuJph7p6xyaVYx1X6qnCRf/view?usp=drivesdk",
+          "created_time": "2026-07-22T15:37:19.443Z",
+          "modified_time": "2026-07-22T15:37:19.443Z",
+          "source_path": "Cassidys/IMG_3102.HEIC"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1rD6tekhy7se2oBgNbR4G3qTcmkFjkev9",
+      "name": "Elk River FSR",
+      "url": "https://drive.google.com/drive/folders/1rD6tekhy7se2oBgNbR4G3qTcmkFjkev9",
+      "created_time": "2026-07-21T18:17:40.719Z",
+      "modified_time": "2026-07-21T18:17:40.719Z",
+      "files": [
+        {
+          "drive_file_id": "1NUXVsqoD5deZPW8CXLxCdQASpWH6Cx00",
+          "name": "a1108d16-afd6-4aa8-85f0-7e7290a06924",
+          "mime_type": "application/octet-stream",
+          "url": "https://drive.google.com/file/d/1NUXVsqoD5deZPW8CXLxCdQASpWH6Cx00/view?usp=drivesdk",
+          "created_time": "2026-07-21T18:19:47.250Z",
+          "modified_time": "2026-07-21T18:19:47.250Z",
+          "source_path": "Elk River FSR/a1108d16-afd6-4aa8-85f0-7e7290a06924"
+        },
+        {
+          "drive_file_id": "1M-GGdVIdc6Oy2zg0LUDRKMJXYNHekTES",
+          "name": "997a83b9-0deb-4269-aa96-c5a791fe9af0",
+          "mime_type": "application/octet-stream",
+          "url": "https://drive.google.com/file/d/1M-GGdVIdc6Oy2zg0LUDRKMJXYNHekTES/view?usp=drivesdk",
+          "created_time": "2026-07-21T18:19:25.537Z",
+          "modified_time": "2026-07-21T18:19:25.537Z",
+          "source_path": "Elk River FSR/997a83b9-0deb-4269-aa96-c5a791fe9af0"
+        },
+        {
+          "drive_file_id": "1a94Um4nGUK04GNlGqeNKb9y1PNePAy3G",
+          "name": "997a83b9-0deb-4269-aa96-c5a791fe9af0",
+          "mime_type": "application/octet-stream",
+          "url": "https://drive.google.com/file/d/1a94Um4nGUK04GNlGqeNKb9y1PNePAy3G/view?usp=drivesdk",
+          "created_time": "2026-07-21T18:18:36.088Z",
+          "modified_time": "2026-07-21T18:18:36.088Z",
+          "source_path": "Elk River FSR/997a83b9-0deb-4269-aa96-c5a791fe9af0"
+        },
+        {
+          "drive_file_id": "1LMyow3IxZt9V7yWaduUlwXVt-ivxMBoI",
+          "name": "66ae7357-e173-4d07-9035-9917778f8b83",
+          "mime_type": "application/octet-stream",
+          "url": "https://drive.google.com/file/d/1LMyow3IxZt9V7yWaduUlwXVt-ivxMBoI/view?usp=drivesdk",
+          "created_time": "2026-07-21T18:18:15.231Z",
+          "modified_time": "2026-07-21T18:18:15.231Z",
+          "source_path": "Elk River FSR/66ae7357-e173-4d07-9035-9917778f8b83"
+        },
+        {
+          "drive_file_id": "1aFqUfyOL0eXGsD0JvBgEBNotLiDar0XT",
+          "name": "19452ef1-ebf6-466b-858f-7222e0f181be",
+          "mime_type": "application/octet-stream",
+          "url": "https://drive.google.com/file/d/1aFqUfyOL0eXGsD0JvBgEBNotLiDar0XT/view?usp=drivesdk",
+          "created_time": "2026-07-21T18:17:45.785Z",
+          "modified_time": "2026-07-21T18:17:45.785Z",
+          "source_path": "Elk River FSR/19452ef1-ebf6-466b-858f-7222e0f181be"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1SlGpPpOsdbsaQyihZkDSgIqOsaEIZhb4",
+      "name": "TFN path",
+      "url": "https://drive.google.com/drive/folders/1SlGpPpOsdbsaQyihZkDSgIqOsaEIZhb4",
+      "created_time": "2026-07-21T10:39:16.173Z",
+      "modified_time": "2026-07-21T10:39:16.173Z",
+      "files": [
+        {
+          "drive_file_id": "1n54gmRDDvse6NToVx8Fue6MRLNhYlgsW",
+          "name": "RFP_2026-003_Construction_Services_for_MUP.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1n54gmRDDvse6NToVx8Fue6MRLNhYlgsW/view?usp=drivesdk",
+          "created_time": "2026-07-21T10:40:07.796Z",
+          "modified_time": "2026-07-21T10:40:07.796Z",
+          "source_path": "TFN path/RFP_2026-003_Construction_Services_for_MUP.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1nBDbFY39zN5yiDDlyj6hR88Asjmxi783",
+      "name": "Downes Rd MOT",
+      "url": "https://drive.google.com/drive/folders/1nBDbFY39zN5yiDDlyj6hR88Asjmxi783",
+      "created_time": "2026-07-17T19:20:39.475Z",
+      "modified_time": "2026-07-17T19:20:39.475Z",
+      "files": [
+        {
+          "drive_file_id": "11bynWvwCt4fswG5miWLGgHSM2-DveWp7mWgf5ryjfPM",
+          "name": "Downes Road MOT - Estimate Draft",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/11bynWvwCt4fswG5miWLGgHSM2-DveWp7mWgf5ryjfPM/edit?usp=drivesdk",
+          "created_time": "2026-07-17T19:28:45.366Z",
+          "modified_time": "2026-07-20T12:25:11.592Z",
+          "source_path": "Downes Rd MOT/Downes Road MOT - Estimate Draft"
+        },
+        {
+          "drive_file_id": "1e7NbmlpDtNbCYaytBRohjQG1HTT1CA6t",
+          "name": "PatchDrainReinstatement_260211.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1e7NbmlpDtNbCYaytBRohjQG1HTT1CA6t/view?usp=drivesdk",
+          "created_time": "2026-07-17T19:22:12.264Z",
+          "modified_time": "2026-07-17T19:22:12.264Z",
+          "source_path": "Downes Rd MOT/PatchDrainReinstatement_260211.pdf"
+        },
+        {
+          "drive_file_id": "10k31piaOZAwGj-BqTpDbxgNrMCDOh5jv",
+          "name": "PatchDrainReinstatement_260211.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/10k31piaOZAwGj-BqTpDbxgNrMCDOh5jv/view?usp=drivesdk",
+          "created_time": "2026-07-17T19:21:50.388Z",
+          "modified_time": "2026-07-17T19:21:50.388Z",
+          "source_path": "Downes Rd MOT/PatchDrainReinstatement_260211.pdf"
+        },
+        {
+          "drive_file_id": "1YLBZ5ih-KHuRl58Ud_7TF4wpZGl_QYNK",
+          "name": "Hello,.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1YLBZ5ih-KHuRl58Ud_7TF4wpZGl_QYNK/view?usp=drivesdk",
+          "created_time": "2026-07-17T19:20:46.616Z",
+          "modified_time": "2026-07-17T19:20:46.616Z",
+          "source_path": "Downes Rd MOT/Hello,.pdf"
+        }
+      ]
+    },
+    {
+      "drive_folder_id": "1ZKHtT_Gm2ljkmdyQGDkfiVHZUSvv2MsU",
+      "name": "IHCC-TEST-001_Test_Municipal_Road_Improvements",
+      "url": "https://drive.google.com/drive/folders/1ZKHtT_Gm2ljkmdyQGDkfiVHZUSvv2MsU",
+      "created_time": "2026-07-03T17:09:57.353Z",
+      "modified_time": "2026-07-03T17:09:57.353Z",
+      "files": [
+        {
+          "drive_file_id": "1DsgAKIbAQgnyDwXQYKKIZdyaeqffqPvGoB0KrEUgIrI",
+          "name": "IHCC-TEST-001 - Estimate Workbook",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1DsgAKIbAQgnyDwXQYKKIZdyaeqffqPvGoB0KrEUgIrI/edit?usp=drivesdk",
+          "created_time": "2026-07-03T17:11:07.391Z",
+          "modified_time": "2026-07-03T17:11:07.391Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/09_Estimate/IHCC-TEST-001 - Estimate Workbook"
+        },
+        {
+          "drive_file_id": "1Q5RFRm-4WXaDGqYojGCvnBIECmsqr2b_",
+          "name": "text.txt",
+          "mime_type": "text/plain",
+          "url": "https://drive.google.com/file/d/1Q5RFRm-4WXaDGqYojGCvnBIECmsqr2b_/view?usp=drivesdk",
+          "created_time": "2026-07-06T17:09:05.774Z",
+          "modified_time": "2026-07-06T17:09:05.774Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/text.txt"
+        },
+        {
+          "drive_file_id": "1PbZdT9ZC6qU67RC-ehoV4kY1QlhNSo0o",
+          "name": "Tender_Form_26-151.xlsx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "url": "https://docs.google.com/spreadsheets/d/1PbZdT9ZC6qU67RC-ehoV4kY1QlhNSo0o/edit?usp=drivesdk&ouid=107231313353501423718&rtpof=true&sd=true",
+          "created_time": "2026-07-06T17:08:30.034Z",
+          "modified_time": "2026-07-06T17:08:30.034Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/Tender_Form_26-151.xlsx"
+        },
+        {
+          "drive_file_id": "1sC9Yx7tvZ8Gw2Fq9HfDiIty1j8ZBlfPj",
+          "name": "T2026-017_-_Drawings_IFT.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/1sC9Yx7tvZ8Gw2Fq9HfDiIty1j8ZBlfPj/view?usp=drivesdk",
+          "created_time": "2026-07-05T00:03:44.575Z",
+          "modified_time": "2026-07-05T00:03:44.575Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/T2026-017_204_Street_Logan_Avenue_Roadworks/02_Drawings/T2026-017_-_Drawings_IFT.pdf"
+        },
+        {
+          "drive_file_id": "1NlC-6_ZvZfdECvc646xXVpOhA61DVOwHs1Ao5ymzDT8",
+          "name": "T2026-017 - 204 Street and Logan Avenue Estimate",
+          "mime_type": "application/vnd.google-apps.spreadsheet",
+          "url": "https://docs.google.com/spreadsheets/d/1NlC-6_ZvZfdECvc646xXVpOhA61DVOwHs1Ao5ymzDT8/edit?usp=drivesdk",
+          "created_time": "2026-07-03T17:38:58.582Z",
+          "modified_time": "2026-08-01T02:34:00.894Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/T2026-017_204_Street_Logan_Avenue_Roadworks/09_Estimate/T2026-017 - 204 Street and Logan Avenue Estimate"
+        },
+        {
+          "drive_file_id": "1GkhgGwJwZ3v9cuTNCE3jI3wIj9WG3WIm",
+          "name": "text.txt",
+          "mime_type": "text/plain",
+          "url": "https://drive.google.com/file/d/1GkhgGwJwZ3v9cuTNCE3jI3wIj9WG3WIm/view?usp=drivesdk",
+          "created_time": "2026-07-06T17:07:22.674Z",
+          "modified_time": "2026-07-06T17:07:22.674Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/T2026-017_204_Street_Logan_Avenue_Roadworks/01_Tender_Documents/text.txt"
+        },
+        {
+          "drive_file_id": "15xlXnLqtpA90scVWxpLHR_9Vy8DJjwjg",
+          "name": "T2026-017_Tender_Document_204_Street_and_Logan_Avenue_Roadworks.pdf",
+          "mime_type": "application/pdf",
+          "url": "https://drive.google.com/file/d/15xlXnLqtpA90scVWxpLHR_9Vy8DJjwjg/view?usp=drivesdk",
+          "created_time": "2026-07-05T00:01:12.224Z",
+          "modified_time": "2026-07-05T00:01:12.224Z",
+          "source_path": "IHCC-TEST-001_Test_Municipal_Road_Improvements/01_Tender_Documents/T2026-017_204_Street_Logan_Avenue_Roadworks/01_Tender_Documents/T2026-017_Tender_Document_204_Street_and_Logan_Avenue_Roadworks.pdf"
+        }
+      ]
+    }
+  ]
+}
