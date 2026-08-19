@@ -1,7 +1,8 @@
 {
-  "version": 3,
-  "strategy": "field-operations-reviewable-builds",
-  "program": "Iron House Field Operations",
+  "version": 4,
+  "strategy": "github-issue-linked-builds",
+  "program": "Iron House OS",
+  "canonical_queue_url": "https://github.com/iron-house-os/iron-house-os/issues/1",
   "constraints": [
     "Preserve the approved production visual baseline",
     "Exclude SIN, banking, medical and payroll data",
@@ -28,7 +29,8 @@
     {
       "id": "build-222-vendor-rental-workflow",
       "priority": 222,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Complete subcontractor and rental workflow",
       "summary": "Add vendor-filtered subcontractor and rental equipment entries with hours, rates, quantities, tickets and cost-code matching.",
       "acceptance_criteria": ["Vendor categories filter selections", "Rental and subcontract costs calculate", "Documents attach to entries", "Tests pass"]
@@ -36,7 +38,8 @@
     {
       "id": "build-223-safety-form-engine",
       "priority": 223,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Complete selectable safety form engine",
       "summary": "Build reusable task-hazard-control templates, crew attendance, individual authenticated signatures and corrective-action tracking.",
       "acceptance_criteria": ["Selectable tasks populate hazards and controls", "Every selected employee can sign", "Unsigned workers remain visible", "Corrective actions alert management"]
@@ -44,7 +47,8 @@
     {
       "id": "build-224-inspections-alerts-service",
       "priority": 224,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Complete inspections and service alerts",
       "summary": "Add equipment-specific inspection checklists, hours, next service calculations, severity routing and Jeremie/Mac notification delivery.",
       "acceptance_criteria": ["Inspection templates vary by equipment", "Flagged items create actionable alerts", "Service due dates and hours update", "Alert delivery is audited"]
@@ -52,7 +56,8 @@
     {
       "id": "build-225-employee-compliance",
       "priority": 225,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Complete employee compliance records",
       "summary": "Add management entry/edit screens for contacts, emergency contacts, positions, course tickets, attachments and expiry notifications.",
       "acceptance_criteria": ["Management can maintain employee records", "Tickets support document photos", "60/30/7-day expiry alerts work", "Sensitive excluded data is not collected"]
@@ -60,7 +65,8 @@
     {
       "id": "build-226-requests-reviews",
       "priority": 226,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Complete time-off and performance workflows",
       "summary": "Add employee requests, manager decisions, status history, private review scheduling and acknowledgement.",
       "acceptance_criteria": ["Employees submit and track requests", "Managers approve or decline with audit history", "Performance reviews are access controlled", "Tests pass"]
@@ -68,7 +74,8 @@
     {
       "id": "build-227-field-reporting-exports",
       "priority": 227,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Build field reporting and exports",
       "summary": "Create daily report, weekly labour, fuel, maintenance, production, safety and expense summaries with spreadsheet/PDF export.",
       "acceptance_criteria": ["Reports filter by job and date", "Cost codes reconcile across records", "Exports preserve photos and signatures by reference", "Tests pass"]
@@ -76,7 +83,8 @@
     {
       "id": "build-228-field-role-security",
       "priority": 228,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Harden field role permissions",
       "summary": "Provision Foreman, Operator and Employee access with own-record boundaries, manager oversight and portal-specific navigation.",
       "acceptance_criteria": ["Employees only access authorized records", "Foremen access assigned crews/jobs", "Operators access assigned equipment/jobs", "Permission-denial tests pass"]
@@ -84,7 +92,8 @@
     {
       "id": "build-229-mobile-offline",
       "priority": 229,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Add mobile offline field capture",
       "summary": "Queue time, inspections, safety forms and photos during poor connectivity, then synchronize safely with conflict handling.",
       "acceptance_criteria": ["Forms save offline", "Uploads resume", "Duplicate submissions are prevented", "iPhone and iPad flows pass"]
@@ -92,10 +101,22 @@
     {
       "id": "build-230-production-validation",
       "priority": 230,
-      "status": "open",
+      "status": "superseded",
+      "superseded_by": "https://github.com/iron-house-os/iron-house-os/issues/1",
       "title": "Validate field operations in production",
       "summary": "Run migration, backup, permission, mobile, upload, alert and rollback checks before the controlled production release.",
       "acceptance_criteria": ["Production backup is verified", "Migration and rollback rehearsal pass", "Field acceptance checklist passes", "Release evidence is recorded"]
+    },
+    {
+      "id": "issue-213-build-agent-queue-governance",
+      "priority": 213,
+      "status": "open",
+      "repository": "iron-house-os/iron-house-os",
+      "github_issue_number": 213,
+      "github_issue_url": "https://github.com/iron-house-os/iron-house-os/issues/213",
+      "title": "Stop Build Agent from reopening superseded legacy builds",
+      "summary": "Require issue-linked current tasks, ignore superseded legacy builds, and fail closed when GitHub issue state cannot be verified.",
+      "acceptance_criteria": ["Legacy Builds 222-230 are not selected", "Open tasks require canonical GitHub issue references", "Closed issues are not selected", "Focused tests pass"]
     }
   ]
 }

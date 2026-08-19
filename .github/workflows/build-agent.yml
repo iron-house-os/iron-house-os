@@ -37,6 +37,8 @@ jobs:
         run: npm install
 
       - name: Run Build Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python automation/iron_house_build_agent.py
 
       - name: Show Build Agent output
