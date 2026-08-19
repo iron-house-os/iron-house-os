@@ -418,10 +418,10 @@ def _upsert_document(
     title = revision.source_title if baseline else revision.replacement_title
     drive_url = revision.source_url if baseline else revision.replacement_url
     if document is None:
-        document = Document(title=title, category="estimate")
+        document = Document(title=title, category="other")
         db.add(document)
     document.title = title
-    document.category = "estimate"
+    document.category = "other"
     document.status = "archived" if baseline else "registered"
     document.project_id = project.id
     document.tender_id = tender.id
@@ -442,6 +442,7 @@ def _upsert_document(
             "original_filename": title,
             "source_folder_ids": [revision.source_folder_id],
             "source": SOURCE_KEY,
+            "document_role": "estimate",
             "revision_key": revision.key,
             "record_status": "superseded_archived" if baseline else "provisional_active",
             "source_immutable": True,

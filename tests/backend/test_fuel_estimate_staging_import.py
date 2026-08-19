@@ -72,6 +72,8 @@ def test_apply_is_idempotent_and_archives_only_the_ihos_baseline_link() -> None:
         replacements = [item for item in documents if item.status == "registered"]
         assert len(baseline) == 2
         assert len(replacements) == 2
+        assert all(item.category == "other" for item in documents)
+        assert all(item.metadata_json["document_role"] == "estimate" for item in documents)
         assert all(
             item.metadata_json["record_status"] == "superseded_archived" for item in baseline
         )

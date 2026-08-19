@@ -32,7 +32,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.display_title == 'Fix RFQ document status and retry approved staging imports (#208)'
+      github.event.workflow_run.display_title == 'Fix estimate document category and retry staging imports (#210)'
     runs-on: [self-hosted, linux, ihos-staging]
     timeout-minutes: 45
     env:
