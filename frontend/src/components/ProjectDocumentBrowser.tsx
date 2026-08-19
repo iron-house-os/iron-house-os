@@ -54,43 +54,97 @@ export function ProjectDocumentBrowser({ projectId }: Props) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-base font-semibold text-iron-950">Project Document Browser</h2>
-          <p className="mt-1 text-sm text-iron-500">Load uploaded documents, download stored files with short-lived links, and mark records current or superseded.</p>
+          <p className="mt-1 text-sm text-iron-500">
+            Load uploaded documents, open linked Drive sources, and mark records current or superseded.
+          </p>
         </div>
-        <button type="button" onClick={loadDocuments} disabled={isLoading} className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800">
+        <button
+          type="button"
+          onClick={loadDocuments}
+          disabled={isLoading}
+          className="rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800"
+        >
           {isLoading ? "Loading..." : "Load documents"}
         </button>
       </div>
       {error ? <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {documents ? (
-        <div className="mt-4 overflow-hidden rounded-md border border-iron-100">
+        <div className="mt-4 overflow-x-auto rounded-md border border-iron-100">
           <table className="w-full text-left text-sm">
             <thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500">
-              <tr><th className="px-3 py-2">Title</th><th className="px-3 py-2">Category</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Revision</th><th className="px-3 py-2">Actions</th></tr>
+              <tr>
+                <th className="px-3 py-2">Title</th>
+                <th className="px-3 py-2">Category</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Revision</th>
+                <th className="px-3 py-2">Actions</th>
+              </tr>
             </thead>
             <tbody>
-              {documents.items.map((document) => (
-                <tr key={document.id} className="border-t border-iron-100">
-                  <td className="px-3 py-2 font-medium text-iron-950">{document.title}</td>
-                  <td className="px-3 py-2 text-iron-700">{document.category}</td>
-                  <td className="px-3 py-2 text-iron-700">{document.status}</td>
-                  <td className="px-3 py-2 text-iron-700">{document.drawing?.revision ?? "-"}</td>
-                  <td className="space-x-2 px-3 py-2 text-iron-700">
-                    {document.storage_uri ? (
-                      <button type="button" className="font-semibold" disabled={downloadingId === document.id} onClick={() => void downloadDocument(document)}>
-                        {downloadingId === document.id ? "Preparing..." : "Download"}
+              {documents.items.map((document) => {
+                const driveUrl = externalDriveUrl(document);
+                return (
+                  <tr key={document.id} className="border-t border-iron-100">
+                    <td className="px-3 py-2 font-medium text-iron-950">{document.title}</td>
+                    <td className="px-3 py-2 text-iron-700">{document.category}</td>
+                    <td className="px-3 py-2 text-iron-700">{document.status}</td>
+                    <td className="px-3 py-2 text-iron-700">{document.drawing?.revision ?? "-"}</td>
+                    <td className="space-x-2 whitespace-nowrap px-3 py-2 text-iron-700">
+                      {driveUrl ? (
+                        <a className="font-semibold" href={driveUrl} target="_blank" rel="noreferrer noopener">
+                          Open in Drive
+                        </a>
+                      ) : null}
+                      {document.storage_uri ? (
+                        <button
+                          type="button"
+                          className="font-semibold"
+                          disabled={downloadingId === document.id}
+                          onClick={() => void downloadDocument(document)}
+                        >
+                          {downloadingId === document.id ? "Preparing..." : "Download"}
+                        </button>
+                      ) : null}
+                      <button type="button" className="font-semibold" onClick={() => void setStatus(document, "current")}>
+                        Current
                       </button>
-                    ) : null}
-                    <button type="button" className="font-semibold" onClick={() => void setStatus(document, "current")}>Current</button>
-                    <button type="button" className="font-semibold" onClick={() => void setStatus(document, "superseded")}>Supersede</button>
-                  </td>
+                      <button type="button" className="font-semibold" onClick={() => void setStatus(document, "superseded")}>
+                        Supersede
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {documents.items.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-iron-500" colSpan={5}>No documents found.</td>
                 </tr>
-              ))}
-              {documents.items.length === 0 ? <tr><td className="px-3 py-3 text-iron-500" colSpan={5}>No documents found.</td></tr> : null}
+              ) : null}
             </tbody>
           </table>
         </div>
       ) : null}
-      {documents?.items.some((item) => item.category === "photo") ? <div className="mt-5"><UniversalPhotoField documentIds={documents.items.filter((item) => item.category === "photo").map((item) => item.id)} label="Project photo gallery" /></div> : null}
+      {documents?.items.some((item) => item.category === "photo") ? (
+        <div className="mt-5">
+          <UniversalPhotoField
+            documentIds={documents.items.filter((item) => item.category === "photo").map((item) => item.id)}
+            label="Project photo gallery"
+          />
+        </div>
+      ) : null}
     </div>
   );
+}
+
+export function externalDriveUrl(document: LibraryDocument): string | null {
+  const candidate = document.metadata.drive_url;
+  if (typeof candidate !== "string") return null;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "https:") return null;
+    if (!["drive.google.com", "docs.google.com"].includes(url.hostname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
