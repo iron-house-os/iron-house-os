@@ -136,6 +136,10 @@ def test_apply_is_idempotent_and_links_all_controlled_objects() -> None:
         assert all(document.status == "attached" for document in rfq_documents)
 
 
+def test_rfq_document_default_matches_database_constraint() -> None:
+    assert RFQPackageDocument.__table__.c.status.default.arg == "pending"
+
+
 def test_apply_requires_expired_intake_confirmation() -> None:
     require_expired_intake_confirmation(False, False)
     require_expired_intake_confirmation(True, True)
