@@ -69,6 +69,22 @@ export type Certification = {
   expiry_status: "current" | "expires_soon" | "expired" | "no_expiry";
   days_until_expiry: number | null;
 };
+export type SafetyAnalytics = {
+  as_of: string;
+  safety_controls_total: number;
+  blocked_permits: number;
+  at_risk_permits: number;
+  open_corrective_actions: number;
+  overdue_corrective_actions: number;
+  active_emergency_cards: number;
+  flha_last_30_days: number;
+  toolbox_talks_last_30_days: number;
+  open_incidents: number;
+  credentials_expiring_60_days: number;
+  credentials_expired: number;
+  audit_export_records: number;
+  confidential_record_types_excluded: string[];
+};
 export type FieldOperationsBootstrap = {
   employees: Employee[];
   projects: SelectRecord[];
@@ -192,6 +208,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const fieldOperationsApi = {
   bootstrap: () => request<FieldOperationsBootstrap>("/field-operations/bootstrap"),
+  safetyAnalytics: () => request<SafetyAnalytics>("/field-operations/safety/analytics"),
   createVehicleLog: (payload: Record<string, unknown>) =>
     request<{ id: string }>("/field-operations/vehicle-logs", { method: "POST", body: JSON.stringify(payload) }),
   updateVehicle: (id: string, payload: Record<string, unknown>) =>
@@ -220,4 +237,5 @@ export const fieldOperationsApi = {
   createCertification: (payload: Record<string, unknown>) =>
     request<Certification>("/field-operations/certifications", { method: "POST", body: JSON.stringify(payload) }),
   certificationExportUrl: API_BASE_URL + "/field-operations/certifications.csv",
+  safetyAuditExportUrl: API_BASE_URL + "/field-operations/safety/audit.csv",
 };

@@ -20,6 +20,7 @@ from app.schemas.field_operations import (
     MilestoneDecision,
     SignatureCreate,
     SafetyRecordUpdate,
+    SafetyAnalytics,
     TimeEntryCreate,
     TimeEntryRead,
     TimeOffDecision,
@@ -57,6 +58,20 @@ def export_certifications(db: DBSession, user: CurrentUser) -> Response:
         content=field_operations.export_certifications_csv(db, user),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="safety-credential-status.csv"'},
+    )
+
+
+@router.get("/safety/analytics", response_model=SafetyAnalytics)
+def safety_analytics(db: DBSession, user: CurrentUser) -> SafetyAnalytics:
+    return field_operations.get_safety_analytics(db, user)
+
+
+@router.get("/safety/audit.csv")
+def export_safety_audit(db: DBSession, user: CurrentUser) -> Response:
+    return Response(
+        content=field_operations.export_safety_audit_csv(db, user),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="safety-control-audit.csv"'},
     )
 
 

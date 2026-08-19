@@ -559,6 +559,130 @@ def test_safety_credentials_are_management_only_and_export_operational_status() 
     assert "'=Approved trainer" in exported.text
 
 
+def test_management_safety_analytics_and_audit_export_preserve_privacy() -> None:
+    worker = _employee()
+    project = _project()
+    yesterday = date.today() - timedelta(days=1)
+
+    records = [
+        {
+            "record_type": "equipment_inspection",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "=Inspection control",
+            "severity": "high",
+            "details": {"private_note": "Worker details must not export."},
+        },
+        {
+            "record_type": "safety_permit",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Ground disturbance permit",
+            "details": {"project": "Field Operations Test"},
+        },
+        {
+            "record_type": "corrective_action",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Correct access control",
+            "details": {"due": str(yesterday), "owner": "Safety lead"},
+        },
+        {
+            "record_type": "emergency_action_card",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Emergency action card",
+        },
+        {
+            "record_type": "toolbox_talk",
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Weekly toolbox talk",
+        },
+    ]
+    for payload in records:
+        response = client.post("/api/v1/field-operations/records", json=payload)
+        assert response.status_code == 201, response.text
+
+    incident_title = "Confidential incident narrative marker"
+    incident = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "incident",
+            "employee_id": worker["id"],
+            "work_date": str(date.today()),
+            "title": incident_title,
+            "details": {
+                "occurrence_kind": "near_miss",
+                "occurred_at": f"{date.today()}T09:00",
+                "location": "Private location",
+                "description": "Private incident description",
+                "immediate_controls": "Private immediate controls",
+            },
+        },
+    )
+    assert incident.status_code == 201
+
+    first_aid_title = "Confidential first-aid marker"
+    first_aid = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "first_aid_record",
+            "employee_id": worker["id"],
+            "work_date": str(date.today()),
+            "title": first_aid_title,
+            "details": {
+                "occurred_at": f"{date.today()}T10:00",
+                "location": "Private location",
+                "first_aid_attendant": "Private attendant",
+                "general_nature": "Private general nature",
+                "aid_provided": "Private aid details",
+                "outcome": "returned_to_work",
+            },
+        },
+    )
+    assert first_aid.status_code == 201
+
+    for name, expiry in [
+        ("Expiring credential", date.today() + timedelta(days=30)),
+        ("Expired credential", date.today() - timedelta(days=1)),
+    ]:
+        response = client.post(
+            "/api/v1/field-operations/certifications",
+            json={"employee_id": worker["id"], "name": name, "expiry_date": str(expiry)},
+        )
+        assert response.status_code == 201
+
+    analytics = client.get("/api/v1/field-operations/safety/analytics")
+    assert analytics.status_code == 200
+    body = analytics.json()
+    assert body["blocked_permits"] == 1
+    assert body["open_corrective_actions"] == 1
+    assert body["overdue_corrective_actions"] == 1
+    assert body["active_emergency_cards"] == 1
+    assert body["toolbox_talks_last_30_days"] == 1
+    assert body["open_incidents"] == 1
+    assert body["credentials_expiring_60_days"] == 1
+    assert body["credentials_expired"] == 1
+    assert body["audit_export_records"] == 5
+    assert body["confidential_record_types_excluded"] == ["first_aid_record", "incident"]
+
+    exported = client.get("/api/v1/field-operations/safety/audit.csv")
+    assert exported.status_code == 200
+    assert "safety-control-audit.csv" in exported.headers["content-disposition"]
+    assert "=Inspection control" not in exported.text
+    assert "title" not in exported.text.splitlines()[0]
+    assert "Worker details must not export." not in exported.text
+    assert incident_title not in exported.text
+    assert first_aid_title not in exported.text
+    assert worker["id"] not in exported.text
+    assert "test-admin@ironhousecontracting.com" not in exported.text
+
+    _authenticate_as("viewer", worker["email"])
+    assert client.get("/api/v1/field-operations/safety/analytics").status_code == 403
+    assert client.get("/api/v1/field-operations/safety/audit.csv").status_code == 403
+
+
 def test_job_workbook_compares_estimated_installed_and_remaining_quantities() -> None:
     project = _project()
     workspace = client.post(
