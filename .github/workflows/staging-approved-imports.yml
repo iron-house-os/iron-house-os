@@ -23,7 +23,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Superseded import run cancelled; waiting for staging deployment completion."
+      - run: echo "Superseded import run cancelled; waiting for the uniquely named staging deployment."
 
   apply:
     name: Dry-run, apply, and verify approved staging imports
@@ -32,7 +32,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_sha == 'b8d055e2bfe8593f55004d96e2029baacd025960'
+      github.event.workflow_run.display_title == 'Ops: activate one-time approved staging imports (#204)'
     runs-on: [self-hosted, linux, ihos-staging]
     timeout-minutes: 45
     env:
