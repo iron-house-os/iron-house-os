@@ -4,30 +4,47 @@ on:
   push:
     branches: [main]
     paths:
-      - ops/staging-imports/2026-08-19-issues-129-132-134.json
+      - .github/workflows/staging-approved-imports.yml
+  workflow_run:
+    workflows: ["Staging deploy"]
+    types: [completed]
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: iron-house-os-approved-staging-imports
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
+  cancel-stale:
+    name: Release stale staging-runner reservation
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Superseded import run cancelled; waiting for staging deployment completion."
+
   apply:
     name: Dry-run, apply, and verify approved staging imports
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_sha == 'b8d055e2bfe8593f55004d96e2029baacd025960'
     runs-on: [self-hosted, linux, ihos-staging]
     timeout-minutes: 45
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Check out exact approved release
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.RELEASE_SHA }}
           fetch-depth: 0
 
       - name: Verify main ancestry and approval marker
-        env:
-          RELEASE_SHA: ${{ github.sha }}
         run: |
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           git fetch --no-tags origin main
@@ -37,7 +54,6 @@ jobs:
 
       - name: Execute owner-approved staging-only imports
         env:
-          RELEASE_SHA: ${{ github.sha }}
           EVIDENCE_DIR: ${{ runner.temp }}/approved-staging-import-evidence
           IHOS_IMPORT_OPERATOR: Iron House OS GitHub staging automation (owner-approved 2026-08-19)
         run: bash ops/staging-imports/run-approved-tender-imports.sh
