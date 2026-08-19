@@ -364,7 +364,7 @@ def _link_documents(
                 document_type=document.category,
                 title=document.title,
                 required=True,
-                status="registered",
+                status="attached",
                 storage_uri=None,
                 metadata_json={},
             )
