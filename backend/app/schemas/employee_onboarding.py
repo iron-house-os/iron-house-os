@@ -28,6 +28,7 @@ class EmploymentPosition(StrEnum):
     PROJECT_MANAGER = "project_manager"
     COO = "coo"
     CEO = "ceo"
+    PRESIDENT = "president"
 
 
 FIELD_POSITIONS = {
@@ -47,6 +48,7 @@ OFFICE_POSITIONS = {
     EmploymentPosition.PROJECT_MANAGER,
     EmploymentPosition.COO,
     EmploymentPosition.CEO,
+    EmploymentPosition.PRESIDENT,
 }
 
 
@@ -288,4 +290,5 @@ POSITION_OPTIONS = [
     PositionOption(value=EmploymentPosition.PROJECT_MANAGER, label="Project Manager", category=EmploymentCategory.OFFICE_STAFF, level=3),
     PositionOption(value=EmploymentPosition.COO, label="COO", category=EmploymentCategory.OFFICE_STAFF, level=4),
     PositionOption(value=EmploymentPosition.CEO, label="CEO", category=EmploymentCategory.OFFICE_STAFF, level=5),
+    PositionOption(value=EmploymentPosition.PRESIDENT, label="President", category=EmploymentCategory.OFFICE_STAFF, level=6),
 ]

@@ -13,6 +13,7 @@ from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardin
 from app.models.user import Employee, UserAccount
 from app.schemas.employee_onboarding import REQUIRED_ORIENTATION_TOPIC_CODES
 from app.services.auth import hash_password, verify_password
+from app.services.employee_onboarding import portal_role_for_position
 
 
 def _client() -> tuple[TestClient, sessionmaker[Session], str]:
@@ -180,3 +181,8 @@ def test_activation_rejects_an_existing_portal_identity_without_overwriting() ->
         account = db.query(UserAccount).filter_by(email="alex.operator@example.com").one()
         assert account.display_name == "Existing Account"
         assert account.session_version == 4
+
+
+def test_executive_titles_do_not_auto_escalate_portal_access() -> None:
+    assert portal_role_for_position("ceo") == "employee"
+    assert portal_role_for_position("president") == "employee"
