@@ -24,8 +24,8 @@ def payload(**overrides):
 
 
 def test_all_approved_positions_are_exposed_once():
-    assert len(POSITION_OPTIONS) == 15
-    assert len({item.value for item in POSITION_OPTIONS}) == 15
+    assert len(POSITION_OPTIONS) == 16
+    assert len({item.value for item in POSITION_OPTIONS}) == 16
 
 
 def test_field_position_accepts_field_category():
@@ -50,3 +50,10 @@ def test_office_position_accepts_office_category():
         payload(category=EmploymentCategory.OFFICE_STAFF, position=EmploymentPosition.PRESIDENT)
     )
     assert model.position == EmploymentPosition.PRESIDENT
+
+
+def test_cfo_is_a_controlled_office_position():
+    model = EmployeeOnboardingCreate.model_validate(
+        payload(category=EmploymentCategory.OFFICE_STAFF, position=EmploymentPosition.CFO)
+    )
+    assert model.position == EmploymentPosition.CFO

@@ -186,3 +186,4 @@ def test_activation_rejects_an_existing_portal_identity_without_overwriting() ->
 def test_executive_titles_do_not_auto_escalate_portal_access() -> None:
     assert portal_role_for_position("ceo") == "employee"
     assert portal_role_for_position("president") == "employee"
+    assert portal_role_for_position("cfo") == "employee"

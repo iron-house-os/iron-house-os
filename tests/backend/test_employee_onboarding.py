@@ -71,6 +71,19 @@ def test_president_is_a_controlled_office_position() -> None:
     assert payload.position == EmploymentPosition.PRESIDENT
 
 
+def test_cfo_is_a_controlled_office_position() -> None:
+    payload = EmployeeOnboardingCreate(
+        legal_first_name="Test",
+        legal_last_name="CFO",
+        personal_email="cfo@example.com",
+        category=EmploymentCategory.OFFICE_STAFF,
+        position=EmploymentPosition.CFO,
+        employment_type="salary",
+        start_date=date(2026, 8, 20),
+    )
+    assert payload.position == EmploymentPosition.CFO
+
+
 def test_orientation_requires_every_regulatory_topic_once() -> None:
     payload = WorkerOrientationCreate(
         scope="company",
