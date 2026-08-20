@@ -42,7 +42,7 @@ const emptyPacket = {
 };
 
 test("invited employee completes actual IHOS forms on a mobile-safe portal", async ({ page }) => {
-  await page.route("**/api/v1/employee-onboarding/portal/secure-token", async (route) => {
+  await page.route("**/api/v1/employee-onboarding/portal/secure-token**", async (route) => {
     if (route.request().method() === "PUT") {
       const payload = route.request().postDataJSON() as { packet: typeof emptyPacket };
       await route.fulfill({ json: { onboarding: { ...onboarding, completion_percent: 11 }, packet: payload.packet } });
