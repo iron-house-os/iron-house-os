@@ -13,10 +13,9 @@ export const requiredOnboardingItems = [
   ["personal_information", "Personal information"],
   ["emergency_contact", "Emergency contact"],
   ["address", "Address"],
-  ["payroll", "Payroll information provided through the approved secure process"],
-  ["tax_forms", "Tax forms provided through the approved secure process"],
+  ["payroll", "Payroll and direct deposit"],
+  ["tax_forms", "2026 federal and British Columbia TD1 tax forms"],
   ["employment_agreements", "Employment agreements and policies"],
-  ["safety_orientation", "Safety orientation"],
   ["certifications", "Licences, tickets, and certifications"],
   ["ppe_requirements", "PPE requirements and sizing"],
   ["electronic_signature", "Electronic acknowledgement"],
@@ -122,6 +121,86 @@ export type Invitation = {
   expires_at: string;
 };
 
+export type PortalCertification = {
+  name: string;
+  certificate_number: string | null;
+  issuer: string | null;
+  expiry_date: string | null;
+};
+
+export type PortalPacket = {
+  personal_information: {
+    preferred_name: string | null;
+    mobile_phone: string;
+    date_of_birth: string;
+  } | null;
+  address: {
+    street_address: string;
+    unit: string | null;
+    city: string;
+    province: string;
+    postal_code: string;
+    country: string;
+  } | null;
+  emergency_contact: {
+    full_name: string;
+    relationship: string;
+    primary_phone: string;
+    alternate_phone: string | null;
+  } | null;
+  payroll: {
+    payment_method: "direct_deposit" | "cheque";
+    account_holder_name: string | null;
+    institution_number: string | null;
+    transit_number: string | null;
+    account_number: string | null;
+    direct_deposit_authorized: boolean;
+  } | null;
+  tax_forms: {
+    form_year: 2026;
+    social_insurance_number: string;
+    country_of_permanent_residence: string;
+    federal_claim_amounts: string[];
+    bc_claim_amounts: string[];
+    federal_more_than_one_employer: boolean;
+    federal_total_income_less_than_claim: boolean;
+    non_resident_world_income_90_percent_or_more: boolean | null;
+    additional_tax_per_payment: string;
+    bc_more_than_one_employer: boolean;
+    bc_total_income_less_than_claim: boolean;
+    federal_certified: boolean;
+    bc_certified: boolean;
+  } | null;
+  employment_agreements: {
+    employment_terms_reviewed: boolean;
+    company_policies_reviewed: boolean;
+    privacy_notice_reviewed: boolean;
+    purchase_receipt_standard_reviewed: boolean;
+    questions_resolved: boolean;
+  } | null;
+  certifications: {
+    none_to_report: boolean;
+    certifications: PortalCertification[];
+  } | null;
+  ppe_requirements: {
+    site_ppe_required: boolean;
+    boot_size: string | null;
+    glove_size: string | null;
+    shirt_size: string | null;
+    trouser_size: string | null;
+    prescription_safety_glasses: boolean;
+    respirator_fit_test_required: boolean;
+    notes: string | null;
+  } | null;
+  signature_name: string | null;
+  signed_at: string | null;
+};
+
+export type PortalOnboarding = {
+  onboarding: OnboardingRecord;
+  packet: PortalPacket;
+};
+
 export type PortalActivation = {
   onboarding: OnboardingRecord;
   employee_id: string;
@@ -153,6 +232,8 @@ export const employeeOnboardingApi = {
     }),
   invite: (id: string) =>
     request<Invitation>(`/employee-onboarding/${id}/invite`, { method: "POST" }),
+  reviewPacket: (id: string) =>
+    request<PortalPacket>(`/employee-onboarding/${id}/packet`),
   revoke: (id: string) =>
     request<OnboardingRecord>(`/employee-onboarding/${id}/revoke`, { method: "POST" }),
   requestCorrections: (id: string, note: string) =>
@@ -172,15 +253,15 @@ export const employeeOnboardingApi = {
       body: JSON.stringify(payload),
     }),
   portalRecord: (token: string) =>
-    request<OnboardingRecord>(`/employee-onboarding/portal/${token}`),
-  savePortalProgress: (token: string, completedItems: string[]) =>
-    request<OnboardingRecord>(`/employee-onboarding/portal/${token}/progress`, {
+    request<PortalOnboarding>(`/employee-onboarding/portal/${token}`),
+  savePortalProgress: (token: string, packet: PortalPacket) =>
+    request<PortalOnboarding>(`/employee-onboarding/portal/${token}/progress`, {
       method: "PUT",
-      body: JSON.stringify({ completed_items: completedItems }),
+      body: JSON.stringify({ packet }),
     }),
-  submitPortal: (token: string, completedItems: string[], acknowledgement: boolean) =>
-    request<OnboardingRecord>(`/employee-onboarding/portal/${token}/submit`, {
+  submitPortal: (token: string, packet: PortalPacket, acknowledgement: boolean, signatureName: string) =>
+    request<PortalOnboarding>(`/employee-onboarding/portal/${token}/submit`, {
       method: "POST",
-      body: JSON.stringify({ completed_items: completedItems, acknowledgement }),
+      body: JSON.stringify({ packet, acknowledgement, signature_name: signatureName }),
     }),
 };

@@ -19,11 +19,13 @@ from app.schemas.employee_onboarding import (
     InvitationRead,
     POSITION_OPTIONS,
     PortalActivationRead,
+    PortalPacket,
     PositionOption,
     WorkerOrientationCreate,
     WorkerOrientationRead,
 )
 from app.services import employee_onboarding as service
+from app.services.onboarding_data import OnboardingDataUnavailable
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -126,6 +128,27 @@ def activate(onboarding_id: UUID, admin: AdminUser, db: DBSession) -> PortalActi
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{onboarding_id}/packet", response_model=PortalPacket)
+def review_packet(onboarding_id: UUID, admin: AdminUser, db: DBSession) -> PortalPacket:
+    record = _record_or_404(db, onboarding_id)
+    try:
+        packet = service.portal_packet(record)
+    except OnboardingDataUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Restricted onboarding data is unavailable. Administrator review is required.",
+        ) from exc
+    service.audit(
+        db,
+        record,
+        "restricted_packet_viewed",
+        admin.email,
+        {"status": record.status},
+    )
+    db.commit()
+    return packet
 
 
 @router.get("/{onboarding_id}/orientations", response_model=list[WorkerOrientationRead])

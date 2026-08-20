@@ -15,21 +15,26 @@ from app.schemas.employee_onboarding import (
     EmployeeOnboardingCreate,
     EmploymentPosition,
     OnboardingStatus,
+    PortalOnboardingRead,
+    PortalPacket,
     REQUIRED_ORIENTATION_TOPIC_CODES,
     WorkerOrientationCreate,
 )
 from app.services.auth import hash_password
+from app.services.onboarding_data import decrypt_packet, encrypt_packet
 
-REQUIRED_ITEMS = [
+EMPLOYEE_PACKET_SECTIONS = [
     "personal_information",
     "emergency_contact",
     "address",
     "payroll",
     "tax_forms",
     "employment_agreements",
-    "safety_orientation",
     "certifications",
     "ppe_requirements",
+]
+REQUIRED_ITEMS = [
+    *EMPLOYEE_PACKET_SECTIONS,
     "electronic_signature",
 ]
 INVITABLE_STATUSES = {
@@ -213,30 +218,91 @@ def resolve_token(db: Session, token: str) -> EmployeeOnboarding | None:
     return record
 
 
-def update_progress(db: Session, record: EmployeeOnboarding, completed_items: list[str]) -> EmployeeOnboarding:
+def portal_packet(record: EmployeeOnboarding) -> PortalPacket:
+    return decrypt_packet(record.encrypted_portal_data)
+
+
+def portal_read(record: EmployeeOnboarding) -> PortalOnboardingRead:
+    return PortalOnboardingRead(
+        onboarding=record,
+        packet=portal_packet(record),
+    )
+
+
+def _completed_packet_sections(packet: PortalPacket) -> list[str]:
+    return [
+        section
+        for section in EMPLOYEE_PACKET_SECTIONS
+        if getattr(packet, section) is not None
+    ]
+
+
+def update_progress(db: Session, record: EmployeeOnboarding, packet: PortalPacket) -> EmployeeOnboarding:
     if record.status not in EMPLOYEE_EDITABLE_STATUSES:
         raise ValueError("Onboarding is not open for employee changes.")
-    completed = sorted(set(completed_items) & set(REQUIRED_ITEMS))
+    packet = packet.model_copy(update={"signature_name": None, "signed_at": None})
+    completed = _completed_packet_sections(packet)
+    record.encrypted_portal_data = encrypt_packet(packet)
+    if packet.personal_information is not None:
+        record.preferred_name = packet.personal_information.preferred_name
+        record.mobile_phone = packet.personal_information.mobile_phone
     record.completed_items = completed
     record.missing_items = [item for item in REQUIRED_ITEMS if item not in completed]
     record.completion_percent = round(len(completed) / len(REQUIRED_ITEMS) * 100)
     record.status = OnboardingStatus.IN_PROGRESS.value
-    audit(db, record, "progress_saved", record.personal_email, {"completion_percent": record.completion_percent})
+    audit(
+        db,
+        record,
+        "progress_saved",
+        record.personal_email,
+        {
+            "completion_percent": record.completion_percent,
+            "completed_sections": completed,
+        },
+    )
     db.commit()
     db.refresh(record)
     return record
 
 
-def submit(db: Session, record: EmployeeOnboarding, completed_items: list[str], acknowledgement: bool) -> EmployeeOnboarding:
+def submit(
+    db: Session,
+    record: EmployeeOnboarding,
+    packet: PortalPacket,
+    acknowledgement: bool,
+    signature_name: str,
+) -> EmployeeOnboarding:
     if record.status not in EMPLOYEE_EDITABLE_STATUSES:
         raise ValueError("Onboarding is not open for submission.")
-    update_progress(db, record, completed_items)
-    if record.missing_items or not acknowledgement:
-        raise ValueError("All required onboarding items and acknowledgement are required.")
+    completed = _completed_packet_sections(packet)
+    missing_sections = [
+        section for section in EMPLOYEE_PACKET_SECTIONS if section not in completed
+    ]
+    if missing_sections or not acknowledgement or not signature_name.strip():
+        raise ValueError("All required onboarding forms, acknowledgement, and signature are required.")
+    signed_packet = packet.model_copy(
+        update={
+            "signature_name": signature_name.strip(),
+            "signed_at": utcnow(),
+        }
+    )
+    record.encrypted_portal_data = encrypt_packet(signed_packet)
+    if packet.personal_information is not None:
+        record.preferred_name = packet.personal_information.preferred_name
+        record.mobile_phone = packet.personal_information.mobile_phone
+    record.completed_items = REQUIRED_ITEMS.copy()
+    record.missing_items = []
+    record.completion_percent = 100
     record.status = OnboardingStatus.SUBMITTED.value
     record.submitted_at = utcnow()
     record.invitation_used_at = utcnow()
-    audit(db, record, "submitted", record.personal_email)
+    audit(
+        db,
+        record,
+        "submitted",
+        record.personal_email,
+        {"completed_sections": REQUIRED_ITEMS.copy()},
+    )
     db.commit()
     db.refresh(record)
     return record
