@@ -19,6 +19,23 @@ type Props = {
 
 type Annotation = { type: "draw" | "arrow" | "box" | "highlight" | "text"; text?: string };
 
+function fileIdentity(file: File): string {
+  return [file.name, file.size, file.type, file.lastModified].join(":");
+}
+
+export function mergePhotoSelections(current: File[], incoming: File[]): File[] {
+  const existing = new Set(current.map(fileIdentity));
+  return [
+    ...current,
+    ...incoming.filter((file) => {
+      const identity = fileIdentity(file);
+      if (existing.has(identity)) return false;
+      existing.add(identity);
+      return true;
+    }),
+  ];
+}
+
 export function UniversalPhotoField({
   files = [],
   onFilesChange,
@@ -74,19 +91,23 @@ export function UniversalPhotoField({
           <Camera className="h-4 w-4" />
           {selectedFiles.length ? selectedFiles.length + " ready to upload" : "Take photos or choose multiple"}
           <input
+            aria-label="Take photos or choose multiple"
             type="file"
             accept="image/*"
             multiple
             capture="environment"
             className="sr-only"
-            onChange={(event) => changeFiles(Array.from(event.target.files ?? []))}
+            onChange={(event) => {
+              changeFiles(mergePhotoSelections(selectedFiles, Array.from(event.target.files ?? [])));
+              event.currentTarget.value = "";
+            }}
           />
         </label>
       ) : null}
       {previews.length ? (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {previews.map(({ file, url }, index) => (
-            <div key={file.name + file.lastModified} className="relative aspect-square overflow-hidden rounded-md border border-iron-100 bg-iron-50">
+            <div key={fileIdentity(file)} className="relative aspect-square overflow-hidden rounded-md border border-iron-100 bg-iron-50">
               <img src={url} alt={file.name} className="h-full w-full object-cover" />
               <button
                 type="button"

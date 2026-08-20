@@ -1,15 +1,16 @@
 import { Camera, RefreshCw, ShieldCheck } from "lucide-react";
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { BackupsIntake, BackupsRoutableDestination, backupsApi } from "../api/backups";
 import { mediaApi } from "../api/media";
+import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { useAuth } from "../contexts/AuthContext";
 
 export function BackupsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<BackupsIntake[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadedMediaId, setUploadedMediaId] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [projectHint, setProjectHint] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,47 +28,41 @@ export function BackupsPage() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const previewUrl = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
-
-  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    setFile(event.target.files?.[0] ?? null);
-    setUploadedMediaId(null);
-    setMessage(null);
-    setError(null);
-  }
-
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!file && !uploadedMediaId) return;
+    if (!files.length && !uploadedMediaIds.length) return;
     setBusy(true);
     setError(null);
     setMessage(null);
+    let remaining = [...uploadedMediaIds];
     try {
-      let mediaId = uploadedMediaId;
-      if (!mediaId) {
+      if (!remaining.length) {
         const uploaded = await mediaApi.upload({
-          files: [file as File],
+          files,
           caption: note.trim() || "Backups intake",
           category: "backup",
         });
-        if (uploaded.length !== 1) throw new Error("Backups accepts exactly one image.");
-        mediaId = uploaded[0].id;
-        setUploadedMediaId(mediaId);
+        remaining = uploaded.map((item) => item.id);
+        setUploadedMediaIds(remaining);
+        setFiles([]);
       }
-      await backupsApi.create({
-        media_id: mediaId,
-        note: note.trim() || null,
-        project_hint: projectHint.trim() || null,
-      });
-      setFile(null);
-      setUploadedMediaId(null);
+      const count = remaining.length;
+      while (remaining.length) {
+        await backupsApi.create({
+          media_id: remaining[0],
+          note: note.trim() || null,
+          project_hint: projectHint.trim() || null,
+        });
+        remaining = remaining.slice(1);
+        setUploadedMediaIds(remaining);
+      }
       setNote("");
       setProjectHint("");
-      setMessage("Photo stored. The daily controller will route it for review.");
+      setMessage(`${count} photo${count === 1 ? "" : "s"} stored. The daily controller will route each one for review.`);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to submit this photo.");
+      setUploadedMediaIds(remaining);
+      setError(reason instanceof Error ? reason.message : "Unable to submit these photos. Unfinished items were retained for retry.");
     } finally {
       setBusy(false);
     }
@@ -126,29 +121,22 @@ export function BackupsPage() {
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-brand-gold">Document intake</div>
             <h1 className="mt-2 text-3xl font-semibold text-brand-silver">Backups</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-100">
-              Save one original photo now. Daily routing creates review-only records and never approves, posts, pays, or accepts documents.
+              Save multiple original photos now. Daily routing creates review-only records and never approves, posts, pays, or accepts documents.
             </p>
           </div>
         </div>
       </header>
 
       <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
-        <h2 className="font-semibold text-iron-950">Add one photo</h2>
-        <p className="mt-1 text-sm text-iron-500">Use the camera or choose a single image. The immutable original stays in private media storage.</p>
+        <h2 className="font-semibold text-iron-950">Add photos</h2>
+        <p className="mt-1 text-sm text-iron-500">Take several photos or choose multiple images. Every immutable original stays in private media storage.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="grid gap-1 text-sm font-medium text-iron-700">
-            Photo
-            <span className="flex min-h-24 cursor-pointer items-center justify-center rounded-md border border-dashed border-brand-gold/60 bg-brand-gold/5 px-3 py-4 text-center font-semibold">
-              {file ? file.name : "Take photo or choose image"}
-              <input aria-label="Photo" className="sr-only" type="file" accept="image/*" capture="environment" onChange={chooseFile} />
-            </span>
-          </label>
-          {previewUrl ? <img src={previewUrl} alt="Selected Backups preview" className="h-32 w-full rounded-md border border-iron-100 object-contain" /> : null}
+          <UniversalPhotoField files={files} onFilesChange={(next) => { setFiles(next); setUploadedMediaIds([]); setMessage(null); setError(null); }} category="backup" label="Backup photos" />
           <label className="grid gap-1 text-sm font-medium text-iron-700">Optional note<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} className="min-h-24 rounded-md border border-iron-100 px-3 py-2" /></label>
           <label className="grid gap-1 text-sm font-medium text-iron-700">Optional project hint<input value={projectHint} onChange={(event) => setProjectHint(event.target.value)} maxLength={255} className="rounded-md border border-iron-100 px-3 py-2" /></label>
         </div>
-        <button disabled={busy || (!file && !uploadedMediaId)} className="mt-4 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">
-          {busy ? "Saving…" : uploadedMediaId ? "Retry intake record" : "Store photo in Backups"}
+        <button disabled={busy || (!files.length && !uploadedMediaIds.length)} className="mt-4 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">
+          {busy ? "Saving…" : uploadedMediaIds.length ? `Retry ${uploadedMediaIds.length} intake${uploadedMediaIds.length === 1 ? "" : "s"}` : `Store ${files.length} photo${files.length === 1 ? "" : "s"} in Backups`}
         </button>
       </form>
 

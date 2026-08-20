@@ -39,6 +39,30 @@ def upload_asset(
     return response.json()[0]
 
 
+def test_batch_upload_retains_every_selected_photo_in_the_project_folder(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(file_storage, "storage_provider", LocalFileStorageProvider(tmp_path))
+    project = client.post("/api/v1/projects", json={"name": "Multi Photo Job", "project_number": "PHOTO-223"})
+    assert project.status_code == 201, project.text
+
+    response = client.post(
+        "/api/v1/media",
+        data={"category": "flha", "project_id": project.json()["id"], "caption": "FLHA field evidence"},
+        files=[
+            ("files", ("control-1.jpg", BytesIO(b"first-control-photo"), "image/jpeg")),
+            ("files", ("control-2.jpg", BytesIO(b"second-control-photo"), "image/jpeg")),
+        ],
+    )
+
+    assert response.status_code == 201, response.text
+    assets = response.json()
+    assert len(assets) == 2
+    assert {item["project_id"] for item in assets} == {project.json()["id"]}
+    assert len({item["original_document_id"] for item in assets}) == 2
+
+
 def test_original_is_immutable_and_versions_link_editor_parent_and_operations(
     monkeypatch,
     tmp_path: Path,

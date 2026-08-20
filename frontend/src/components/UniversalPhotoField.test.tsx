@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UniversalPhotoField } from "./UniversalPhotoField";
@@ -99,5 +100,26 @@ describe("UniversalPhotoField", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Local selection retained"));
     expect(screen.getByText("1 ready to upload")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry upload/i })).toBeInTheDocument();
+  });
+
+  it("accumulates repeated camera captures instead of replacing the previous photo", () => {
+    function Harness() {
+      const [files, setFiles] = useState<File[]>([]);
+      return <UniversalPhotoField files={files} onFilesChange={setFiles} category="flha" />;
+    }
+    render(<Harness />);
+
+    const input = screen.getByLabelText("Take photos or choose multiple") as HTMLInputElement;
+    const first = new File(["first"], "flha-1.jpg", { type: "image/jpeg", lastModified: 1 });
+    const second = new File(["second"], "flha-2.jpg", { type: "image/jpeg", lastModified: 2 });
+    fireEvent.change(input, { target: { files: [first] } });
+    fireEvent.change(input, { target: { files: [second] } });
+
+    expect(screen.getByText("2 ready to upload")).toBeInTheDocument();
+    expect(screen.getByAltText("flha-1.jpg")).toBeInTheDocument();
+    expect(screen.getByAltText("flha-2.jpg")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove flha-1.jpg" }));
+    expect(screen.getByText("1 ready to upload")).toBeInTheDocument();
+    expect(screen.queryByAltText("flha-1.jpg")).not.toBeInTheDocument();
   });
 });

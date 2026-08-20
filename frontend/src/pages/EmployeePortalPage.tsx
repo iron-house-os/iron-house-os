@@ -21,6 +21,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import { Link } from "react-router-dom";
 
 import { MediaCategory, mediaApi } from "../api/media";
+import { FormReviewPanel } from "../components/FormReviewPanel";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { DailyTimesheetWorkflow } from "../components/DailyTimesheetWorkflow";
 import { BackupsPage } from "./BackupsPage";
@@ -78,10 +79,16 @@ export function VehicleTrackingPage() {
   const [details, setDetails] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
-  async function submit(event: FormEvent) {
+  function review(event: FormEvent) {
     event.preventDefault();
     if (!vehicleId) return;
+    state.setError(null);
+    setReviewing(true);
+  }
+
+  async function post() {
     setSaving(true);
     state.setError(null);
     try {
@@ -99,6 +106,7 @@ export function VehicleTrackingPage() {
       });
       await linkPhotos(documentIds, "vehicle_log", log.id);
       setOdometer(""); setLitres(""); setAmount(""); setVendor(""); setDetails(""); setFiles([]);
+      setReviewing(false);
       await state.refresh();
     } catch (current) {
       state.setError(current instanceof Error ? current.message : "Unable to save vehicle log.");
@@ -106,6 +114,9 @@ export function VehicleTrackingPage() {
       setSaving(false);
     }
   }
+
+  const selectedVehicle = state.data?.vehicles.find((item) => item.id === vehicleId);
+  if (reviewing) return <PortalShell title="Vehicle Tracking" eyebrow="Fleet operations" description="Fuel, kilometres, maintenance, receipts and service status for Iron House vehicles." icon={<Truck />}><Status state={state} /><FormReviewPanel title="Vehicle entry" destination={`Fleet / ${selectedVehicle ? `Truck ${selectedVehicle.unit_number} — ${selectedVehicle.name}` : "Selected vehicle"}`} items={[{ label: "Entry type", value: logType }, { label: "Odometer (km)", value: odometer }, { label: "Litres", value: litres }, { label: "Cost", value: amount }, { label: "Vendor", value: vendor }, { label: "Details", value: details }]} files={files} onFilesChange={setFiles} category="receipt" onBack={() => setReviewing(false)} onPost={() => void post()} posting={saving} postLabel="Post entry to vehicle record" /></PortalShell>;
 
   return (
     <PortalShell title="Vehicle Tracking" eyebrow="Fleet operations" description="Fuel, kilometres, maintenance, receipts and service status for Iron House vehicles." icon={<Truck />}>
@@ -129,7 +140,7 @@ export function VehicleTrackingPage() {
           </article>
         ))}
       </div>
-      <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+      <form onSubmit={review} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <SectionTitle icon={<Fuel />} title="Add vehicle entry" subtitle="Attach multiple fuel receipts, invoices or maintenance photos in one entry." />
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Select label="Vehicle" value={vehicleId} onChange={setVehicleId} required options={state.data?.vehicles.map((item) => [item.id, "Truck " + item.unit_number + " — " + (item.assigned_driver_name ?? item.name)]) ?? []} />
@@ -141,7 +152,7 @@ export function VehicleTrackingPage() {
           <Input label="Details" value={details} onChange={setDetails} />
           <FilePicker files={files} onChange={setFiles} />
         </div>
-        <PrimaryButton disabled={saving || !vehicleId}>{saving ? "Saving…" : "Save vehicle entry"}</PrimaryButton>
+        <PrimaryButton disabled={!vehicleId}>Review vehicle entry</PrimaryButton>
       </form>
       {state.data?.vehicle_logs.some((log) => log.document_ids.length) ? <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<Camera />} title="Fleet photo history" subtitle="Receipts, inspections and maintenance photos use the shared versioned viewer." /><div className="mt-4 grid gap-4 md:grid-cols-2">{state.data.vehicle_logs.filter((log) => log.document_ids.length).map((log) => <article key={log.id} className="rounded-md border border-iron-100 p-3"><div className="mb-3 text-sm font-semibold text-iron-800">{log.log_type.replaceAll("_", " ")} · {log.entry_date}</div><UniversalPhotoField documentIds={log.document_ids} /></article>)}</div></section> : null}
     </PortalShell>
@@ -187,6 +198,7 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const totalTonnes = Number(loads || 0) * Number(tonnesPerLoad || 0);
   const material = data.material_types.find((item) => item.code === materialCode);
   const selectedHaulUnit = [
@@ -195,9 +207,15 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
   ].find((item) => item.value === haulUnit);
   const summaries = data.material_movement_summary.filter((item) => !projectId || item.project_id === projectId);
 
-  async function submit(event: FormEvent) {
+  function review(event: FormEvent) {
     event.preventDefault();
     if (!projectId || !costCode || !material || totalTonnes <= 0 || (mode === "operator" && !selectedHaulUnit)) return;
+    onError(null);
+    setReviewing(true);
+  }
+
+  async function post() {
+    if (!material) return;
     setSaving(true); onError(null);
     try {
       const documentIds = await uploadPhotos(files, projectId, direction + " material ticket");
@@ -209,15 +227,36 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
         details: { direction, material_code: material.code, material_type: material.name, loads: Number(loads), tonnes_per_load: Number(tonnesPerLoad), total_tonnes: totalTonnes, ticket_number: ticketNumber, notes, haul_unit_id: selectedHaulUnit?.id, haul_unit_type: selectedHaulUnit?.type, haul_unit_name: selectedHaulUnit?.name },
       });
       await linkPhotos(documentIds, "field_record", record.id);
-      setLoads(""); setTonnesPerLoad(""); setTicketNumber(""); setNotes(""); setFiles([]); await onSaved();
+      setLoads(""); setTonnesPerLoad(""); setTicketNumber(""); setNotes(""); setFiles([]); setReviewing(false); await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save material movement."); }
     finally { setSaving(false); }
   }
 
+  if (reviewing) return <FormReviewPanel
+    title="Material movement"
+    destination={`${data.projects.find((item) => item.id === projectId)?.name ?? "Selected job"} / Field forms / Materials`}
+    items={[
+      { label: "Direction", value: direction },
+      { label: "Material", value: material?.name ?? "" },
+      { label: "Loads", value: loads },
+      { label: "Tonnes per load", value: tonnesPerLoad },
+      { label: "Total tonnes", value: totalTonnes.toLocaleString("en-CA") },
+      { label: "Cost code", value: costCode },
+      { label: "Scale ticket / reference", value: ticketNumber },
+      { label: "Notes", value: notes },
+    ]}
+    files={files}
+    onFilesChange={setFiles}
+    category="job_photo"
+    onBack={() => setReviewing(false)}
+    onPost={() => void post()}
+    posting={saving}
+  />;
+
   return (
     <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
       <SectionTitle icon={<ArrowDownUp />} title={mode === "operator" ? "Load tracker" : "Imported and exported materials"} subtitle={mode === "operator" ? "Track loads hauled and tonnes by equipment, material, job and cost code." : "Record gravel and other material by truck loads and tonnes, linked to the job and cost code."} />
-      <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <form onSubmit={review} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Select label="Project" value={projectId} onChange={setProjectId} required options={data.projects.map((item) => [item.id, item.name])} />
         <Select label="Direction" value={direction} onChange={setDirection} options={[["imported", "Imported to job"], ["exported", "Exported from job"]]} />
         <Select label="Material / gravel type" value={materialCode} onChange={setMaterialCode} required options={data.material_types.map((item) => [item.code, item.name])} />
@@ -233,7 +272,7 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
         <Input label="Notes" value={notes} onChange={setNotes} />
         <FilePicker files={files} onChange={setFiles} />
         <div className="rounded-md bg-iron-50 p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-iron-500">Calculated total</div><div className="mt-1 text-lg font-semibold text-iron-950">{totalTonnes.toLocaleString("en-CA")} tonnes</div></div>
-        <div className="self-end"><PrimaryButton disabled={saving || !projectId || !costCode || !materialCode || totalTonnes <= 0 || (mode === "operator" && !selectedHaulUnit)}>{saving ? "Saving…" : mode === "operator" ? "Record loads" : "Record material movement"}</PrimaryButton></div>
+        <div className="self-end"><PrimaryButton disabled={!projectId || !costCode || !materialCode || totalTonnes <= 0 || (mode === "operator" && !selectedHaulUnit)}>Review material record</PrimaryButton></div>
       </form>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {summaries.map((item) => <div key={(item.project_id ?? "all") + item.direction + item.material_code} className="rounded-md border border-iron-100 p-3"><div className="text-xs font-semibold uppercase tracking-wide text-brand-gold-dark">{item.direction}</div><div className="mt-1 text-sm font-semibold text-iron-950">{item.material_type}</div><div className="mt-3 grid grid-cols-2 gap-2"><Fact label="Loads" value={item.loads.toLocaleString("en-CA")} /><Fact label="Tonnes" value={item.total_tonnes.toLocaleString("en-CA")} /></div></div>)}
@@ -484,18 +523,25 @@ function SmallEquipmentInspectionCard({ data, onSaved, onError }: { data: FieldO
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
-  async function submit(event: FormEvent) {
+  const [reviewing, setReviewing] = useState(false);
+  function review(event: FormEvent) {
     event.preventDefault(); if (!employeeId || !equipmentType) return;
+    onError(null); setReviewing(true);
+  }
+  async function post() {
     setSaving(true); onError(null);
     try {
       const documentIds = await uploadPhotos(files, projectId || undefined, "Small equipment inspection", "inspection");
       const record = await fieldOperationsApi.createRecord({ record_type: "small_equipment_inspection", employee_id: employeeId, project_id: projectId || null, work_date: today(), title: equipmentType + (identifier ? " — " + identifier : ""), severity: condition === "serviceable" ? "none" : condition === "remove_from_service" ? "high" : "medium", details: { equipment_type: equipmentType, identifier, condition, notes, checks: ["guards", "controls", "cords_or_hoses", "fuel_or_battery", "general_condition"] }, document_ids: documentIds });
       await linkPhotos(documentIds, "field_record", record.id);
-      setIdentifier(""); setNotes(""); setFiles([]); setCondition("serviceable"); await onSaved();
+      setIdentifier(""); setNotes(""); setFiles([]); setCondition("serviceable"); setReviewing(false); await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save small equipment inspection."); }
     finally { setSaving(false); }
   }
-  return <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<Wrench />} title="Small equipment inspection" subtitle="Inspect saws, compactors, pumps, generators, lasers and power tools before use. Flagged items alert management." /><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><Select label="Employee" value={employeeId} onChange={setEmployeeId} required options={employeeOptions(data.employees)} /><Select label="Project" value={projectId} onChange={setProjectId} options={data.projects.map((item) => [item.id, item.name])} /><Select label="Equipment type" value={equipmentType} onChange={setEquipmentType} required options={[["Cut-off saw", "Cut-off saw"], ["Chainsaw", "Chainsaw"], ["Plate compactor", "Plate compactor"], ["Jumping jack", "Jumping jack"], ["Pump", "Pump"], ["Generator", "Generator"], ["Laser / level", "Laser / level"], ["Power tool", "Power tool"], ["Other", "Other"]]} /><Input label="Asset number / description" value={identifier} onChange={setIdentifier} /><Select label="Condition" value={condition} onChange={setCondition} options={[["serviceable", "Serviceable"], ["monitor", "Monitor / repair soon"], ["remove_from_service", "Remove from service"]]} /><Input label="Inspection comments" value={notes} onChange={setNotes} /><FilePicker files={files} onChange={setFiles} /></div><div className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-600">Check guards, controls, cords or hoses, fuel or battery condition, leaks, damage and overall safe operation.</div><PrimaryButton disabled={saving || !employeeId || !equipmentType}>{saving ? "Saving…" : "Submit inspection"}</PrimaryButton></form>;
+  const project = data.projects.find((item) => item.id === projectId);
+  const employee = data.employees.find((item) => item.id === employeeId);
+  if (reviewing) return <FormReviewPanel title="Small equipment inspection" destination={project ? `${project.name} / Field forms / Inspections` : "Company records / Equipment inspections"} items={[{ label: "Employee", value: employee ? `${employee.first_name} ${employee.last_name}` : "" }, { label: "Equipment type", value: equipmentType }, { label: "Asset number / description", value: identifier }, { label: "Condition", value: condition.replaceAll("_", " ") }, { label: "Inspection comments", value: notes }]} files={files} onFilesChange={setFiles} category="inspection" onBack={() => setReviewing(false)} onPost={() => void post()} posting={saving} postLabel={project ? "Post inspection to job folder" : "Post inspection to company records"} />;
+  return <form onSubmit={review} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionTitle icon={<Wrench />} title="Small equipment inspection" subtitle="Inspect saws, compactors, pumps, generators, lasers and power tools before use. Flagged items alert management." /><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><Select label="Employee" value={employeeId} onChange={setEmployeeId} required options={employeeOptions(data.employees)} /><Select label="Project" value={projectId} onChange={setProjectId} options={data.projects.map((item) => [item.id, item.name])} /><Select label="Equipment type" value={equipmentType} onChange={setEquipmentType} required options={[["Cut-off saw", "Cut-off saw"], ["Chainsaw", "Chainsaw"], ["Plate compactor", "Plate compactor"], ["Jumping jack", "Jumping jack"], ["Pump", "Pump"], ["Generator", "Generator"], ["Laser / level", "Laser / level"], ["Power tool", "Power tool"], ["Other", "Other"]]} /><Input label="Asset number / description" value={identifier} onChange={setIdentifier} /><Select label="Condition" value={condition} onChange={setCondition} options={[["serviceable", "Serviceable"], ["monitor", "Monitor / repair soon"], ["remove_from_service", "Remove from service"]]} /><Input label="Inspection comments" value={notes} onChange={setNotes} /><FilePicker files={files} onChange={setFiles} /></div><div className="mt-4 rounded-md bg-iron-50 p-4 text-sm text-iron-600">Check guards, controls, cords or hoses, fuel or battery condition, leaks, damage and overall safe operation.</div><PrimaryButton disabled={!employeeId || !equipmentType}>Review inspection</PrimaryButton></form>;
 }
 
 function MilestoneDecisionControls({ record, onSaved, onError }: { record: FieldRecord; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
@@ -575,9 +621,15 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
   const [files, setFiles] = useState<File[]>([]);
   const [attendees, setAttendees] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
-  async function submit(event: FormEvent) {
+  function review(event: FormEvent) {
     event.preventDefault();
+    onError(null);
+    setReviewing(true);
+  }
+
+  async function post() {
     setSaving(true); onError(null);
     try {
       const documentIds = await uploadPhotos(files, projectId || undefined, title || recordType, categoryForRecord(recordType));
@@ -600,12 +652,44 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
       await linkPhotos(documentIds, "field_record", record.id);
       setTitle(""); setNotes(""); setQuantity(""); setWeather(""); setFiles([]); setAttendees([]); setSeverity("none");
       setOccurrenceKind("near_miss"); setOccurredAt(""); setOccurrenceLocation(""); setImmediateControls("");
+      setReviewing(false);
       await onSaved();
     } catch (current) { onError(current instanceof Error ? current.message : "Unable to save field record."); }
     finally { setSaving(false); }
   }
+  const selectedType = availableTypes.find(([value]) => value === recordType)?.[1] ?? recordType;
+  const selectedProject = data.projects.find((item) => item.id === projectId);
+  const selectedEmployee = data.employees.find((item) => item.id === employeeId);
+  if (reviewing) return <FormReviewPanel
+    title={selectedType}
+    destination={selectedProject ? `${selectedProject.name} / Field forms` : "Company records / Unassigned field forms"}
+    items={[
+      { label: "Form", value: selectedType },
+      { label: "Title", value: title },
+      { label: "Project / job", value: selectedProject?.name ?? "Unassigned" },
+      { label: "Employee", value: selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : "Unassigned" },
+      { label: "Severity", value: severity },
+      { label: "Cost code", value: costCode },
+      { label: "Notes / description", value: notes },
+      { label: "Quantity / hours / amount", value: quantity },
+      { label: "Weather / temperature", value: weather },
+      ...(recordType === "incident" ? [
+        { label: "Occurrence type", value: occurrenceKind },
+        { label: "Occurred at", value: occurredAt.replace("T", " ") },
+        { label: "Location", value: occurrenceLocation },
+        { label: "Immediate controls", value: immediateControls },
+      ] : []),
+    ]}
+    files={files}
+    onFilesChange={setFiles}
+    category={categoryForRecord(recordType)}
+    onBack={() => setReviewing(false)}
+    onPost={() => void post()}
+    posting={saving}
+    postLabel={selectedProject ? "Post form to job folder" : "Post form to company records"}
+  />;
   return (
-    <form onSubmit={submit} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+    <form onSubmit={review} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
       <SectionTitle icon={<ClipboardCheck />} title="Field forms and records" subtitle="Photos are stored with the selected job and form. Medium or higher issues alert Jeremie and Mac." />
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Select label="Form" value={recordType} onChange={setRecordType} options={availableTypes} />
@@ -630,7 +714,7 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
       {["daily_hazard_assessment", "toolbox_talk"].includes(recordType) ? (
         <EmployeeChecklist employees={data.employees} selected={attendees} onChange={setAttendees} />
       ) : null}
-      <PrimaryButton disabled={saving || !title || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>{saving ? "Saving and uploading…" : "Submit field record"}</PrimaryButton>
+      <PrimaryButton disabled={!title || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>Review field record</PrimaryButton>
     </form>
   );
 }
