@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, ShieldCheck, UserPlus } from "lucide-react";
+import { Download, KeyRound, Mail, ShieldCheck, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import {
@@ -9,6 +9,7 @@ import {
   Invitation,
   OnboardingCreatePayload,
   OnboardingRecord,
+  PortalPacket,
   PortalActivation,
   PositionOption,
 } from "../api/employeeOnboarding";
@@ -39,7 +40,12 @@ export function EmployeeOnboardingPage() {
   const [form, setForm] = useState<OnboardingCreatePayload>(blankForm);
   const [correctionNotes, setCorrectionNotes] = useState<Record<string, string>>({});
   const [invitation, setInvitation] = useState<Invitation | null>(null);
+  const [invitationRecipient, setInvitationRecipient] = useState<OnboardingRecord | null>(null);
+  const [invitationQr, setInvitationQr] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<PortalActivation | null>(null);
+  const [reviewPacket, setReviewPacket] = useState<PortalPacket | null>(null);
+  const [reviewEmployee, setReviewEmployee] = useState<OnboardingRecord | null>(null);
+  const [showRestricted, setShowRestricted] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -70,6 +76,21 @@ export function EmployeeOnboardingPage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    let active = true;
+    setInvitationQr(null);
+    if (invitation) {
+      void import("qrcode")
+        .then(({ default: QRCode }) => QRCode.toString(invitation.invite_url, {
+          type: "svg", errorCorrectionLevel: "M", margin: 2, width: 256,
+          color: { dark: "#0b0d11", light: "#ffffff" },
+        }))
+        .then((svg) => { if (active) setInvitationQr(`data:image/svg+xml,${encodeURIComponent(svg)}`); })
+        .catch(() => { if (active) setError("Invitation generated, but the local QR code could not be prepared."); });
+    }
+    return () => { active = false; };
+  }, [invitation]);
+
   const availablePositions = useMemo(
     () => positions.filter((position) => position.category === form.category),
     [form.category, positions],
@@ -97,7 +118,10 @@ export function EmployeeOnboardingPage() {
     setError(null);
     setMessage(null);
     setInvitation(null);
+    setInvitationRecipient(null);
     setCredentials(null);
+    setReviewPacket(null);
+    setReviewEmployee(null);
     setActingId("new");
     try {
       await employeeOnboardingApi.create(form);
@@ -115,7 +139,10 @@ export function EmployeeOnboardingPage() {
     setError(null);
     setMessage(null);
     setInvitation(null);
+    setInvitationRecipient(null);
     setCredentials(null);
+    setReviewPacket(null);
+    setReviewEmployee(null);
     setActingId(record.id);
     try {
       await action();
@@ -134,9 +161,37 @@ export function EmployeeOnboardingPage() {
       async () => {
         const generated = await employeeOnboardingApi.invite(record.id);
         setInvitation(generated);
+        setInvitationRecipient(record);
       },
       "Secure invitation generated. Share it only with the intended employee.",
     );
+  }
+
+  async function shareInvitation() {
+    if (!invitation || !invitationRecipient) return;
+    setError(null);
+    setMessage(null);
+    const subject = "Iron House employee onboarding invitation";
+    const text = `Hello ${invitationRecipient.preferred_name || invitationRecipient.legal_first_name},\n\nOpen your secure Iron House onboarding portal using this link or the attached QR code. The invitation expires ${new Date(invitation.expires_at).toLocaleString("en-CA")}.\n\n${invitation.invite_url}\n\nThis invitation is personal and should not be forwarded.`;
+    if (invitationQr && navigator.share) {
+      try {
+        const response = await fetch(invitationQr);
+        const file = new File([await response.blob()], `ihos-onboarding-${invitationRecipient.legal_first_name.toLowerCase()}.svg`, { type: "image/svg+xml" });
+        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: subject, text, files: [file] });
+          setMessage("Invitation handed to the device share sheet.");
+          return;
+        }
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === "AbortError") {
+          setMessage("Sharing cancelled. The current invitation and QR remain available.");
+        } else {
+          setError("The device could not share the QR. Download it or use the email link instead.");
+        }
+        return;
+      }
+    }
+    window.location.href = `mailto:${encodeURIComponent(invitationRecipient.personal_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
   }
 
   async function activate(record: OnboardingRecord) {
@@ -148,6 +203,18 @@ export function EmployeeOnboardingPage() {
       },
       "Employee activated and portal credentials created.",
     );
+  }
+
+  async function openPacket(record: OnboardingRecord) {
+    setActingId(record.id); setError(null); setMessage(null); setShowRestricted(false);
+    try {
+      const packet = await employeeOnboardingApi.reviewPacket(record.id);
+      setReviewPacket(packet); setReviewEmployee(record);
+      setMessage(`Restricted onboarding packet opened for ${record.legal_first_name} ${record.legal_last_name}. Access was audited.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to open restricted onboarding packet.");
+    } finally { setActingId(null); }
   }
 
   return (
@@ -177,7 +244,7 @@ export function EmployeeOnboardingPage() {
         <section className="rounded-xl border border-brand-gold/40 bg-brand-gold/10 p-5 shadow-sm" aria-label="Generated invitation">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-brand-gold-dark" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="font-semibold text-iron-950">Secure invitation generated</h2>
               <p className="mt-1 text-sm text-iron-600">
                 This link expires {new Date(invitation.expires_at).toLocaleString("en-CA")}. A resend invalidates the previous link.
@@ -185,6 +252,14 @@ export function EmployeeOnboardingPage() {
               <code className="mt-3 block overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-iron-800">
                 {invitation.invite_url}
               </code>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                {invitationQr ? <img src={invitationQr} alt={`Onboarding QR code for ${invitationRecipient?.legal_first_name ?? "employee"}`} className="h-56 w-56 rounded-md border bg-white p-2" /> : <p className="text-sm text-iron-600">Preparing local QR code…</p>}
+                <div className="grid gap-2">
+                  {invitationQr ? <a href={invitationQr} download={`ihos-onboarding-${invitationRecipient?.legal_first_name.toLowerCase() ?? "employee"}.svg`} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold/60 bg-white px-4 text-sm font-semibold text-iron-800"><Download className="h-4 w-4" />Download QR</a> : null}
+                  <button type="button" onClick={() => void shareInvitation()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-gold px-4 text-sm font-semibold text-brand-black"><Mail className="h-4 w-4" />Email or share QR</button>
+                </div>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-iron-600">The QR is generated locally from this exact time-limited link. It contains no completed form data. Reissuing the invitation invalidates this QR.</p>
             </div>
           </div>
         </section>
@@ -207,6 +282,10 @@ export function EmployeeOnboardingPage() {
             </div>
           </div>
         </section>
+      ) : null}
+
+      {reviewPacket && reviewEmployee ? (
+        <PacketReview record={reviewEmployee} packet={reviewPacket} showRestricted={showRestricted} onToggleRestricted={() => setShowRestricted((current) => !current)} />
       ) : null}
 
       <form onSubmit={createOnboarding} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
@@ -307,6 +386,7 @@ export function EmployeeOnboardingPage() {
                 {record.correction_note ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">Correction requested: {record.correction_note}</p> : null}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {canInvite ? <Action disabled={busy} onClick={() => void generateInvitation(record)}>Generate invitation</Action> : null}
+                  {record.completion_percent > 0 ? <Action disabled={busy} onClick={() => void openPacket(record)}>Review saved forms</Action> : null}
                   {!['active', 'cancelled'].includes(record.status) ? (
                     <Action disabled={busy} onClick={() => void runAction(record, () => employeeOnboardingApi.revoke(record.id), "Invitation revoked and onboarding cancelled.")}>Revoke</Action>
                   ) : null}
@@ -395,3 +475,23 @@ function ReadinessPill({ value }: { value: DeploymentStatus["status"] }) {
   const tone = value === "Ready" ? "bg-emerald-100 text-emerald-800" : value === "Blocked" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800";
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}</span>;
 }
+
+function PacketReview({ record, packet, showRestricted, onToggleRestricted }: { record: OnboardingRecord; packet: PortalPacket; showRestricted: boolean; onToggleRestricted: () => void }) {
+  const tax = packet.tax_forms;
+  const payroll = packet.payroll;
+  const mask = (value: string | null | undefined, visible = showRestricted) => visible ? value || "—" : value ? `••••${value.slice(-4)}` : "—";
+  return <section className="rounded-xl border border-amber-300 bg-white p-5 shadow-sm" aria-label="Restricted onboarding packet">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-iron-950">Restricted onboarding packet — {record.legal_first_name} {record.legal_last_name}</h2><p className="mt-1 text-sm text-iron-600">Viewing this record is audited. Do not copy restricted values into email or chat.</p></div><button type="button" onClick={onToggleRestricted} className="min-h-11 rounded-md border border-amber-400 px-4 text-sm font-semibold">{showRestricted ? "Hide banking and SIN" : "Reveal banking and SIN"}</button></div>
+    <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <ReviewGroup title="Personal and address" values={[`Phone: ${packet.personal_information?.mobile_phone ?? "—"}`, `DOB: ${packet.personal_information?.date_of_birth ?? "—"}`, packet.address ? `${packet.address.street_address}${packet.address.unit ? `, ${packet.address.unit}` : ""}, ${packet.address.city}, ${packet.address.province} ${packet.address.postal_code}` : "Address not saved"]} />
+      <ReviewGroup title="Emergency contact" values={packet.emergency_contact ? [packet.emergency_contact.full_name, packet.emergency_contact.relationship, packet.emergency_contact.primary_phone] : ["Not saved"]} />
+      <ReviewGroup title="Payroll" values={[`Method: ${payroll?.payment_method.replaceAll("_", " ") ?? "—"}`, `Institution: ${mask(payroll?.institution_number)}`, `Transit: ${mask(payroll?.transit_number)}`, `Account: ${mask(payroll?.account_number)}`]} />
+      <ReviewGroup title="Tax forms" values={[`Year: ${tax?.form_year ?? "—"}`, `SIN: ${mask(tax?.social_insurance_number)}`, `Federal total: ${sumAmounts(tax?.federal_claim_amounts)}`, `BC total: ${sumAmounts(tax?.bc_claim_amounts)}`]} />
+      <ReviewGroup title="Certifications" values={packet.certifications?.none_to_report ? ["None reported"] : packet.certifications?.certifications.map((item) => `${item.name}${item.expiry_date ? ` · expires ${item.expiry_date}` : ""}`) ?? ["Not saved"]} />
+      <ReviewGroup title="PPE" values={packet.ppe_requirements ? [packet.ppe_requirements.site_ppe_required ? "Site PPE required" : "Office / no site PPE assigned", `Boot ${packet.ppe_requirements.boot_size ?? "—"} · glove ${packet.ppe_requirements.glove_size ?? "—"} · shirt ${packet.ppe_requirements.shirt_size ?? "—"} · trouser ${packet.ppe_requirements.trouser_size ?? "—"}`] : ["Not saved"]} />
+    </div>
+  </section>;
+}
+
+function ReviewGroup({ title, values }: { title: string; values: string[] }) { return <div className="rounded-md bg-iron-50 p-4"><h3 className="text-sm font-semibold">{title}</h3><ul className="mt-2 grid gap-1 text-sm text-iron-700">{values.map((value, index) => <li key={`${title}-${index}`} className="break-words">{value}</li>)}</ul></div>; }
+function sumAmounts(values: string[] | undefined) { return values ? values.reduce((sum, value) => sum + (Number(value) || 0), 0).toLocaleString("en-CA", { style: "currency", currency: "CAD" }) : "—"; }
