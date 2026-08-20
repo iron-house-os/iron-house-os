@@ -33,6 +33,7 @@ BUSINESS_MODULES = (
     "equipment",
     "field-operations",
     "daily-timesheets",
+    "employee-onboarding",
     "finance",
     "media",
 )
@@ -70,6 +71,7 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
         "iron-house-chat",
         "meeting-minutes",
         "google-calendar",
+        "employee-onboarding",
     } and normalized_role not in {
         "admin",
         "operations_manager",
