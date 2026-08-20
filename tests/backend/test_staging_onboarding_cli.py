@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from io import BytesIO
 import json
+import stat
 from urllib.error import HTTPError
 from urllib.request import Request
 
@@ -10,9 +11,12 @@ import pytest
 
 from app.tools.staging_onboarding import (
     OnboardingDraft,
+    InvitationLink,
+    RosterRecord,
     StagingOnboardingClient,
     StagingOnboardingError,
     validate_staging_base_url,
+    write_invitation_handoff,
 )
 
 
@@ -132,3 +136,88 @@ def test_position_verification_requires_all_executive_titles() -> None:
 
     with pytest.raises(StagingOnboardingError, match="cfo"):
         client.verify_positions({"ceo", "president", "cfo"})
+
+
+def _record(first_name: str, last_name: str, position: str, identifier: str) -> dict[str, str]:
+    return {
+        "id": identifier,
+        "legal_first_name": first_name,
+        "legal_last_name": last_name,
+        "position": position,
+        "status": "draft",
+    }
+
+
+def test_exact_executive_roster_records_are_resolved() -> None:
+    opener = FakeOpener(
+        [
+            {
+                "items": [
+                    _record("Mack", "Warren", "ceo", "mack-id"),
+                    _record("Jeremie", "Peters", "president", "jeremie-id"),
+                    _record("Stefani", "Warren", "cfo", "stefani-id"),
+                ]
+            }
+        ]
+    )
+    client = StagingOnboardingClient(opener=opener)
+
+    records = client.executive_roster_records()
+
+    assert [record.onboarding_id for record in records] == ["mack-id", "jeremie-id", "stefani-id"]
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_missing_or_ambiguous_roster_record_is_refused(duplicate: bool) -> None:
+    mack = _record("Mack", "Warren", "ceo", "mack-id")
+    items = [mack, _record("Jeremie", "Peters", "president", "jeremie-id")]
+    if duplicate:
+        items.append({**mack, "id": "second-mack-id"})
+    opener = FakeOpener([{"items": items}])
+    client = StagingOnboardingClient(opener=opener)
+
+    with pytest.raises(StagingOnboardingError, match="missing|ambiguous"):
+        client.executive_roster_records()
+
+
+def test_fresh_invitation_is_issued_for_selected_record() -> None:
+    opener = FakeOpener(
+        [
+            {
+                "invite_url": "https://staging.os.ironhousecivil.com/employee-onboarding/secure-token",
+                "expires_at": "2026-08-23T10:00:00Z",
+            }
+        ]
+    )
+    client = StagingOnboardingClient(opener=opener)
+    record = RosterRecord(
+        onboarding_id="mack-id",
+        legal_first_name="Mack",
+        legal_last_name="Warren",
+        position="ceo",
+        label="CEO",
+        status="draft",
+    )
+
+    invitation = client.issue_invitation(record)
+
+    assert invitation.worker_name == "Mack Warren"
+    assert invitation.label == "CEO"
+    assert opener.requests[0].get_method() == "POST"
+    assert opener.requests[0].full_url.endswith("/employee-onboarding/mack-id/invite")
+
+
+def test_invitation_handoff_file_is_private_and_contains_current_link(tmp_path) -> None:
+    invitation = InvitationLink(
+        worker_name="Test Worker",
+        label="CEO",
+        invite_url="https://staging.os.ironhousecivil.com/employee-onboarding/secure-token",
+        expires_at="2026-08-23T10:00:00Z",
+    )
+
+    path = write_invitation_handoff([invitation], directory=tmp_path)
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    content = path.read_text()
+    assert "Test Worker — CEO" in content
+    assert "secure-token" in content
