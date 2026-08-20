@@ -28,9 +28,9 @@ CANONICAL_MEMORY = (
     ("canonical:identity", "Company identity", 95, "Iron House Civil Constructors operates Iron House OS. Owners named in project planning are Jeremie Peters and Mack Warren. The established OS visual appearance is locked against significant change without Jeremie Peters' explicit approval."),
     ("canonical:execution-model", "Civil execution model", 90, "Default bid execution model: self-perform excavation, trenching, pipe installation, manholes and catch basins, backfill, compaction, subgrade, granular base, topsoil, cleanup and general earthworks. Subcontract concrete formwork and placement, fine grading for asphalt, asphalt paving, pavement markings and street lighting."),
     ("canonical:suppliers", "Default supplier preferences", 90, "Use EMCO for PVC and ductile iron pipe; Amrize for catch basins and manholes; Superior Paving for asphalt; Advanced Testing for testing; JWS for concrete subcontracting; and Performance Coring for coring unless management directs otherwise."),
-    ("canonical:portals", "Role-scoped portals", 95, "Employees receive only their own employee, foreman or operator portal. Portal work includes time, schedules, journals, safety, milestones, small equipment, photos, inspections, loads, employee records and role-specific workflows. Company and management modules remain hidden from employee accounts."),
+    ("canonical:portals", "Workforce portals and operator authorization", 100, "Employee Portal and Foreman Portal are the only workforce entry points. Employees retain general employee workflows; operator tools appear inside Employee Portal and server-side actions require a current operational equipment or vehicle assignment, Ready orientation and deployment controls, and approved written and practical operator qualification evidence. Foreman Portal remains separate for supervisory and crew controls. Portal visibility never grants authority to operate equipment."),
     ("canonical:cost-codes", "Utility cost-code structure", 95, "Cost codes separate storm mains and services, sanitary mains and services, and water mains and services. Shallows separately includes combined hydro and communications plus streetlight installation."),
-    ("canonical:field-materials", "Field materials and load tracking", 90, "Foreman material tracking records imports and exports, gravel types, loads and tonnes. Operator portal includes a load tracker."),
+    ("canonical:field-materials", "Field materials and load tracking", 90, "Foreman material tracking records imports and exports, gravel types, loads and tonnes. Assignment-authorized load tracking is available in the Employee Portal operator section."),
     ("canonical:agent-policy", "Iron House agent operating policy", 100, "The embedded agent is management-only, separate from ChatGPT, and must preserve an audit trail. Deployed code and database state outrank merged build records, explicit management decisions, newer chats and older discussions. Consequential writes, merges, deployments, financial approvals, deletions and external messages require a preview and explicit management confirmation."),
 )
 
@@ -38,9 +38,18 @@ CANONICAL_MEMORY = (
 def seed_canonical_memory(db: Session) -> None:
     changed = False
     for source_id, title, authority, content in CANONICAL_MEMORY:
-        if db.scalar(select(ProjectMemory.id).where(ProjectMemory.source_id == source_id)) is None:
+        existing = db.scalar(select(ProjectMemory).where(ProjectMemory.source_id == source_id))
+        if existing is None:
             db.add(ProjectMemory(source_kind="management_decision", source_id=source_id, title=title,
-                                 content=content, authority=authority, imported_by="Build 229 canonical seed"))
+                                 content=content, authority=authority, imported_by="Build 230 canonical seed"))
+            changed = True
+        elif source_id in {"canonical:portals", "canonical:field-materials"} and (
+            existing.title != title or existing.content != content or existing.authority != authority
+        ):
+            existing.title = title
+            existing.content = content
+            existing.authority = authority
+            existing.imported_by = "Build 230 approved portal consolidation"
             changed = True
     if changed:
         db.commit()

@@ -18,6 +18,7 @@ Office staff: Admin, Controller, Project Manager, CFO, COO, CEO, President.
 6. The employee reviews the completed packet, certifies it with a typed electronic signature, and submits it.
 7. An administrator can open the restricted packet through an audited management-only action, request corrections, or approve the submission.
 8. Supervisor-led safety orientation, qualification verification, competency assessment, and deployment readiness remain separate IHOS controls. Only an approved and deployment-ready onboarding can be activated into an employee record.
+9. Activated employees enter through Employee Portal unless they hold the separate Foreman Portal role. Equipment Operator remains a workforce classification; it does not create a standalone portal or grant equipment-operation authority.
 
 ## Restricted data controls
 

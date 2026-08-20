@@ -9,6 +9,7 @@ export type Equipment = {
   identifier: string | null;
   status: EquipmentStatus;
   hourly_rate: number | null;
+  assigned_employee_id: string | null;
   safety_procedure_codes: string[];
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ export type EquipmentCreate = {
   identifier?: string;
   status?: EquipmentStatus;
   hourly_rate?: number | null;
+  assigned_employee_id?: string | null;
   safety_procedure_codes?: string[];
 };
 

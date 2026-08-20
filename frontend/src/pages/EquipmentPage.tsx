@@ -1,6 +1,8 @@
 import { Copy, Download, Plus, QrCode, RefreshCw, ShieldCheck, Truck } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { fieldOperationsApi } from "../api/fieldOperations";
+import type { Employee } from "../api/fieldOperations";
 import { EquipmentRateLibraryPanel } from "../components/EquipmentRateLibraryPanel";
 import { UniversalPhotoField } from "../components/UniversalPhotoField";
 import { useAuth } from "../contexts/AuthContext";
@@ -19,6 +21,7 @@ const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD
 export function EquipmentPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<Equipment[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [statusFilter, setStatusFilter] = useState<EquipmentStatus | "">("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,13 +31,18 @@ export function EquipmentPage() {
     setIsLoading(true);
     setError(null);
     try {
-      setItems((await equipmentApi.list(statusFilter)).items);
+      const [equipment, fieldOperations] = await Promise.all([
+        equipmentApi.list(statusFilter),
+        canManageSafetyAssignments ? fieldOperationsApi.bootstrap() : Promise.resolve(null),
+      ]);
+      setItems(equipment.items);
+      setEmployees(fieldOperations?.employees.filter((item) => item.status === "active") ?? []);
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load equipment");
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter]);
+  }, [canManageSafetyAssignments, statusFilter]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -70,6 +78,16 @@ export function EquipmentPage() {
       setItems((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to update equipment safety procedures");
+    }
+  }
+
+  async function updateAssignment(item: Equipment, assignedEmployeeId: string) {
+    setError(null);
+    try {
+      const updated = await equipmentApi.update(item.id, { assigned_employee_id: assignedEmployeeId || null });
+      setItems((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update equipment assignment");
     }
   }
 
@@ -123,6 +141,7 @@ export function EquipmentPage() {
                 {equipmentStatuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
               </select>
               <div className="md:col-span-3">
+                {canManageSafetyAssignments ? <label className="mb-3 grid max-w-xl gap-1 text-sm"><span className="font-medium text-iron-700">Assigned employee</span><select aria-label={`Assigned employee for ${item.name}`} value={item.assigned_employee_id ?? ""} onChange={(event) => void updateAssignment(item, event.target.value)} className="min-h-11 rounded-md border border-iron-100 px-3 py-2"><option value="">No current assignment</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.first_name} {employee.last_name}</option>)}</select><span className="text-xs leading-5 text-iron-500">Assignment is one gate only. Operator actions also require Ready orientation controls and approved written and practical qualification evidence.</span></label> : null}
                 <div className="flex flex-wrap items-center gap-2 text-sm"><ShieldCheck className="h-4 w-4 text-brand-gold-dark" /><b>Assigned controlled procedures:</b>{item.safety_procedure_codes?.length ? item.safety_procedure_codes.map((code) => <span key={code} className="rounded-full bg-iron-100 px-2 py-1 text-xs font-semibold">{code}</span>) : <span className="text-amber-800">None assigned</span>}</div>
                 {canManageSafetyAssignments ? <EquipmentSafetyAssignments item={item} onSave={updateSafetyProcedures} /> : null}
                 <EquipmentFieldAccess item={item} />

@@ -13,7 +13,6 @@ import {
   Gauge,
   HardHat,
   UserPlus,
-  UserRoundCog,
   Landmark,
   Mic2,
   Ruler,
@@ -60,13 +59,6 @@ export const modules: AppModule[] = [
     path: "/foreman-portal",
     icon: ClipboardList,
     description: "Crew time, field records, vendors, quantities, weather, safety and production photos.",
-    status: "Build 220 active",
-  },
-  {
-    label: "Operator Portal",
-    path: "/operator-portal",
-    icon: UserRoundCog,
-    description: "Operator time, inspections, machine issues, job photos and employee requests.",
     status: "Build 220 active",
   },
   {

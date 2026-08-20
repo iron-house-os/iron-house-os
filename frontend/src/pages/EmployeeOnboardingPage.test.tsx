@@ -120,7 +120,7 @@ describe("EmployeeOnboardingPage", () => {
 
     expect(await screen.findByText("one-time-password-2026")).toBeInTheDocument();
     expect(screen.getByText("alex.operator@example.com")).toBeInTheDocument();
-    expect(screen.getByText("operator portal")).toBeInTheDocument();
+    expect(screen.getByText("employee portal")).toBeInTheDocument();
     expect(employeeOnboardingApi.activate).toHaveBeenCalledWith("onboarding-1");
   });
 

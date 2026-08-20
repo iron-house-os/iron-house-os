@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.equipment import Equipment
+from app.models.user import Employee
 from app.schemas.equipment import EquipmentCreate, EquipmentRead, EquipmentUpdate
 
 
@@ -24,6 +25,7 @@ def get_equipment(db: Session, equipment_id: UUID) -> EquipmentRead:
 
 
 def create_equipment(db: Session, payload: EquipmentCreate) -> EquipmentRead:
+    _validate_assignment(db, payload.assigned_employee_id)
     item = Equipment(**payload.model_dump())
     db.add(item)
     _commit(db)
@@ -35,7 +37,10 @@ def update_equipment(db: Session, equipment_id: UUID, payload: EquipmentUpdate) 
     item = db.get(Equipment, equipment_id)
     if item is None:
         raise AppError("Equipment not found", status_code=404)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    if "assigned_employee_id" in values:
+        _validate_assignment(db, values["assigned_employee_id"])
+    for key, value in values.items():
         setattr(item, key, value)
     _commit(db)
     db.refresh(item)
@@ -65,10 +70,19 @@ def _to_schema(item: Equipment) -> EquipmentRead:
         identifier=item.identifier,
         status=normalized_status,
         hourly_rate=float(item.hourly_rate) if item.hourly_rate is not None else None,
+        assigned_employee_id=item.assigned_employee_id,
         safety_procedure_codes=item.safety_procedure_codes or [],
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
+
+
+def _validate_assignment(db: Session, employee_id: UUID | None) -> None:
+    if employee_id is None:
+        return
+    employee = db.get(Employee, employee_id)
+    if employee is None or employee.status != "active":
+        raise AppError("Equipment can only be assigned to an active employee.", status_code=400)
 
 
 def _commit(db: Session) -> None:

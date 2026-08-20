@@ -20,6 +20,7 @@ export type Employee = {
 export type Vehicle = SelectRecord & {
   unit_number: string;
   assigned_driver_name: string | null;
+  assigned_employee_id: string | null;
   make: string | null;
   model: string | null;
   current_km: number;
@@ -153,6 +154,19 @@ export type FieldOperationsBootstrap = {
     name: string;
     rows: Array<Record<string, unknown>>;
   }>;
+  operator_access: {
+    authorized: boolean;
+    employee_id: string | null;
+    blockers: string[];
+    assignments: Array<{
+      resource_type: "equipment" | "vehicle";
+      resource_id: string;
+      name: string;
+      status: string;
+    }>;
+    orientation_status: "Ready" | "Blocked" | "Supervised work only" | "Not recorded";
+    qualification_record_id: string | null;
+  };
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -200,8 +214,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: unknown } | null;
-    throw new Error(formatApiErrorDetail(body?.detail) ?? "Request failed with " + response.status);
+    const body = await response.json().catch(() => null) as { detail?: unknown; error?: { message?: unknown } } | null;
+    const appError = typeof body?.error?.message === "string" ? body.error.message.trim() : "";
+    throw new Error((formatApiErrorDetail(body?.detail) ?? appError) || "Request failed with " + response.status);
   }
   return response.json() as Promise<T>;
 }

@@ -11,7 +11,7 @@ describe("EquipmentFieldPage", () => {
   beforeEach(() => {
     vi.mocked(equipmentApi.get).mockResolvedValue({
       id: "equipment-1", name: "20 t excavator", equipment_type: "Excavator", identifier: "EX-20",
-      status: "available", hourly_rate: 195, safety_procedure_codes: ["SWP-003", "SWP-008"],
+      status: "available", hourly_rate: 195, assigned_employee_id: null, safety_procedure_codes: ["SWP-003", "SWP-008"],
       created_at: "2026-08-18T00:00:00Z", updated_at: "2026-08-18T00:00:00Z",
     });
   });
