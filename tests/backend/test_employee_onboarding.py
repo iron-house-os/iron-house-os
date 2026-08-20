@@ -32,6 +32,19 @@ def test_field_position_must_match_category() -> None:
     assert payload.position == EmploymentPosition.GREEN_LABOURER
 
 
+def test_equipment_operator_is_a_controlled_field_position() -> None:
+    payload = EmployeeOnboardingCreate(
+        legal_first_name="Test",
+        legal_last_name="Operator",
+        personal_email="operator@example.com",
+        category=EmploymentCategory.FIELD_STAFF,
+        position=EmploymentPosition.EQUIPMENT_OPERATOR,
+        employment_type="full_time",
+        start_date=date(2026, 8, 10),
+    )
+    assert payload.position == EmploymentPosition.EQUIPMENT_OPERATOR
+
+
 def test_office_position_is_controlled() -> None:
     payload = EmployeeOnboardingCreate(
         legal_first_name="Office",

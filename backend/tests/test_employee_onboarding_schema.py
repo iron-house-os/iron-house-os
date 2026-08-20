@@ -24,13 +24,20 @@ def payload(**overrides):
 
 
 def test_all_approved_positions_are_exposed_once():
-    assert len(POSITION_OPTIONS) == 13
-    assert len({item.value for item in POSITION_OPTIONS}) == 13
+    assert len(POSITION_OPTIONS) == 14
+    assert len({item.value for item in POSITION_OPTIONS}) == 14
 
 
 def test_field_position_accepts_field_category():
     model = EmployeeOnboardingCreate.model_validate(payload())
     assert model.position == EmploymentPosition.GREEN_LABOURER
+
+
+def test_equipment_operator_is_a_controlled_field_position():
+    model = EmployeeOnboardingCreate.model_validate(
+        payload(position=EmploymentPosition.EQUIPMENT_OPERATOR)
+    )
+    assert model.position == EmploymentPosition.EQUIPMENT_OPERATOR
 
 
 def test_office_position_rejects_field_category():
