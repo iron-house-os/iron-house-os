@@ -12,7 +12,6 @@ import { DrawingIntelligencePage } from "./pages/DrawingIntelligencePage";
 import {
   EmployeePortalPage,
   ForemanPortalPage,
-  OperatorPortalPage,
   VehicleTrackingPage,
 } from "./pages/EmployeePortalPage";
 import { EmployeeOnboardingPage } from "./pages/EmployeeOnboardingPage";
@@ -49,8 +48,25 @@ import {
 } from "./observability/performance";
 
 function EmployeePortalRoute() { return <EmployeePortalPage section={useParams().section} />; }
+function EmployeeOperatorRoute() { return <EmployeePortalPage section="operator" operatorSection={useParams().operatorSection} />; }
 function ForemanPortalRoute() { return <ForemanPortalPage section={useParams().section} />; }
-function OperatorPortalRoute() { return <OperatorPortalPage section={useParams().section} />; }
+
+export function legacyOperatorTarget(section?: string) {
+  if (!section || section === "dashboard") return "/employee-portal/operator";
+  const employeeSections: Record<string, string> = {
+    backups: "backups",
+    receipts: "receipts",
+    schedule: "schedule",
+    "small-equipment": "small-equipment",
+  };
+  return employeeSections[section]
+    ? `/employee-portal/${employeeSections[section]}`
+    : `/employee-portal/operator/${section === "milestones" ? "qualification" : section}`;
+}
+
+function LegacyOperatorRoute() {
+  return <Navigate to={legacyOperatorTarget(useParams().section)} replace />;
+}
 
 function AuthenticatedApp() {
   const { user, portalRole, isLoading } = useAuth();
@@ -73,10 +89,11 @@ function AuthenticatedApp() {
   if (user.password_reset_required) return <PasswordRecoveryPage />;
 
   if (user.role === "viewer") {
-    const root = `/${portalRole ?? "employee"}-portal`;
-    const sections = portalRole === "foreman" ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : portalRole === "operator" ? ["time", "backups", "receipts", "schedule", "loads", "inspections", "small-equipment", "photos", "milestones", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
-    const Page = portalRole === "foreman" ? ForemanPortalPage : portalRole === "operator" ? OperatorPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} /><Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    const isForeman = portalRole === "foreman";
+    const root = isForeman ? "/foreman-portal" : "/employee-portal";
+    const sections = isForeman ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
+    const Page = isForeman ? ForemanPortalPage : EmployeePortalPage;
+    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} /><Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}{!isForeman ? <><Route path="/employee-portal/operator" element={<EmployeePortalPage section="operator" />} /><Route path="/employee-portal/operator/:operatorSection" element={<EmployeeOperatorRoute />} /><Route path="/operator" element={<LegacyOperatorRoute />} /><Route path="/operator/:section" element={<LegacyOperatorRoute />} /><Route path="/operator-portal" element={<LegacyOperatorRoute />} /><Route path="/operator-portal/:section" element={<LegacyOperatorRoute />} /></> : null}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -88,10 +105,13 @@ function AuthenticatedApp() {
         <Route path="/backups" element={<BackupsPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
         <Route path="/employee-portal/:section" element={<EmployeePortalRoute />} />
+        <Route path="/employee-portal/operator/:operatorSection" element={<EmployeeOperatorRoute />} />
         <Route path="/foreman-portal" element={<ForemanPortalPage />} />
         <Route path="/foreman-portal/:section" element={<ForemanPortalRoute />} />
-        <Route path="/operator-portal" element={<OperatorPortalPage />} />
-        <Route path="/operator-portal/:section" element={<OperatorPortalRoute />} />
+        <Route path="/operator" element={<LegacyOperatorRoute />} />
+        <Route path="/operator/:section" element={<LegacyOperatorRoute />} />
+        <Route path="/operator-portal" element={<LegacyOperatorRoute />} />
+        <Route path="/operator-portal/:section" element={<LegacyOperatorRoute />} />
         <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
         <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />

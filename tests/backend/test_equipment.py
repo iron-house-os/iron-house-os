@@ -20,6 +20,7 @@ def test_equipment_create_list_and_update() -> None:
     )
     assert created.status_code == 201
     equipment_id = created.json()["id"]
+    assert created.json()["assigned_employee_id"] is None
     assert created.json()["safety_procedure_codes"] == ["SWP-003", "SWP-008"]
 
     read = client.get(f"/api/v1/equipment/{equipment_id}")
@@ -31,13 +32,25 @@ def test_equipment_create_list_and_update() -> None:
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["name"] == "Rental 20 t excavator"
 
+    employee = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Assigned",
+            "last_name": "Operator",
+            "email": "assigned.operator@ironhousecontracting.com",
+            "portal_role": "employee",
+        },
+    )
+    assert employee.status_code == 201
+
     updated = client.patch(
         f"/api/v1/equipment/{equipment_id}",
-        json={"status": "reserved", "hourly_rate": 205, "safety_procedure_codes": ["SWP-001"]},
+        json={"status": "reserved", "hourly_rate": 205, "assigned_employee_id": employee.json()["id"], "safety_procedure_codes": ["SWP-001"]},
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "reserved"
     assert updated.json()["hourly_rate"] == 205
+    assert updated.json()["assigned_employee_id"] == employee.json()["id"]
     assert updated.json()["safety_procedure_codes"] == ["SWP-001"]
 
     rejected = client.patch(

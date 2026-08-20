@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.models.employee_onboarding import EmployeeOnboarding
 from app.models.equipment import Equipment
 from app.models.bid import Bid
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
@@ -29,6 +30,8 @@ from app.schemas.field_operations import (
     FieldRecordCreate,
     FieldRecordRead,
     MilestoneDecision,
+    OperatorAccessRead,
+    OperatorAssignmentRead,
     SignatureCreate,
     TimeOffDecision,
     TimeEntryCreate,
@@ -42,6 +45,7 @@ from app.schemas.field_operations import (
 )
 from app.services.auth import AuthenticatedUser, hash_password
 from app.services.cost_codes import get_cost_code_library
+from app.services.employee_onboarding import deployment_status
 
 
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
@@ -185,6 +189,7 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     material_movement_summary = build_material_movement_summary(db)
     milestone_recognitions = build_milestone_recognitions(db)
     paperwork_recognitions = build_paperwork_recognitions(db, employees)
+    operator_access = operator_access_for_employee(db, profile)
     if user.role == "viewer" and profile is None:
         employees = []
         time_entries = []
@@ -253,7 +258,132 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
                 for item in projects
             ],
         ],
+        operator_access=operator_access,
     )
+
+
+def operator_access_for_employee(db: Session, employee: Employee | None) -> OperatorAccessRead:
+    if employee is None:
+        return OperatorAccessRead(
+            authorized=False,
+            employee_id=None,
+            blockers=["The signed-in account is not linked to an employee profile."],
+            assignments=[],
+            orientation_status="Not recorded",
+            qualification_record_id=None,
+        )
+
+    blockers: list[str] = []
+    if employee.status != "active":
+        blockers.append("The employee profile is not active.")
+
+    equipment = list(db.scalars(select(Equipment).where(Equipment.assigned_employee_id == employee.id)))
+    vehicles = list(db.scalars(select(Vehicle).where(Vehicle.assigned_employee_id == employee.id)))
+    assignments = [
+        OperatorAssignmentRead(
+            resource_type="equipment",
+            resource_id=item.id,
+            name=item.name,
+            status=item.status,
+        )
+        for item in equipment
+        if _resource_is_operational(item.status)
+    ]
+    assignments.extend(
+        OperatorAssignmentRead(
+            resource_type="vehicle",
+            resource_id=item.id,
+            name=f"Truck {item.unit_number} — {item.name}",
+            status=item.status,
+        )
+        for item in vehicles
+        if _resource_is_operational(item.status)
+    )
+    if not assignments:
+        blockers.append("No current operational equipment or vehicle assignment is recorded.")
+
+    onboarding = db.scalar(
+        select(EmployeeOnboarding)
+        .where(EmployeeOnboarding.employee_id == employee.id, EmployeeOnboarding.status == "active")
+        .order_by(EmployeeOnboarding.updated_at.desc())
+    )
+    orientation_status = "Not recorded"
+    if onboarding is None:
+        blockers.append("No active onboarding record is linked to this employee.")
+    else:
+        readiness = deployment_status(db, onboarding)
+        orientation_status = readiness.status
+        if readiness.status != "Ready":
+            blockers.append("Orientation, PPE, qualification, and competency deployment gates are not ready.")
+
+    qualification = next(
+        (
+            item
+            for item in db.scalars(
+                select(FieldRecord)
+                .where(
+                    FieldRecord.employee_id == employee.id,
+                    FieldRecord.record_type == "milestone_review",
+                    FieldRecord.status == "approved",
+                )
+                .order_by(FieldRecord.updated_at.desc())
+            )
+            if (item.details or {}).get("track") == "operator"
+            and (item.details or {}).get("written_passed") is True
+            and (item.details or {}).get("practical_status") == "passed"
+        ),
+        None,
+    )
+    if qualification is None:
+        blockers.append("No approved operator qualification with passed written and practical evidence is recorded.")
+
+    return OperatorAccessRead(
+        authorized=not blockers,
+        employee_id=employee.id,
+        blockers=blockers,
+        assignments=assignments,
+        orientation_status=orientation_status,
+        qualification_record_id=qualification.id if qualification else None,
+    )
+
+
+def _resource_is_operational(status: str) -> bool:
+    return status.strip().casefold().replace("-", "_").replace(" ", "_") in {
+        "active",
+        "available",
+        "deployed",
+        "in_use",
+        "operational",
+        "ready",
+        "reserved",
+        "working",
+    }
+
+
+def _validate_active_employee(db: Session, employee_id: UUID | None) -> None:
+    if employee_id is None:
+        return
+    employee = db.get(Employee, employee_id)
+    if employee is None or employee.status != "active":
+        raise AppError("The assignment requires an active employee profile.", status_code=400)
+
+
+def require_operator_access(
+    db: Session,
+    employee: Employee,
+    *,
+    resource_type: str | None = None,
+    resource_id: UUID | None = None,
+) -> OperatorAccessRead:
+    access = operator_access_for_employee(db, employee)
+    if not access.authorized:
+        raise AppError("Operator access is blocked: " + " ".join(access.blockers), status_code=403)
+    if resource_type and resource_id and not any(
+        assignment.resource_type == resource_type and assignment.resource_id == resource_id
+        for assignment in access.assignments
+    ):
+        raise AppError("Operator access is limited to the employee's current equipment assignments.", status_code=403)
+    return access
 
 
 def public_milestone_catalog() -> list[dict]:
@@ -579,7 +709,10 @@ def _safe_csv_cell(value: object) -> object:
     return f"'{value}" if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
 
-def create_vehicle(db: Session, payload: VehicleCreate) -> VehicleRead:
+def create_vehicle(db: Session, payload: VehicleCreate, user: AuthenticatedUser) -> VehicleRead:
+    if user.role not in MANAGEMENT_ROLES:
+        raise AppError("Management access is required to create vehicles.", status_code=403)
+    _validate_active_employee(db, payload.assigned_employee_id)
     item = Vehicle(**payload.model_dump())
     db.add(item)
     commit(db, "That vehicle unit number or VIN already exists.")
@@ -587,9 +720,19 @@ def create_vehicle(db: Session, payload: VehicleCreate) -> VehicleRead:
     return vehicle_schema(item)
 
 
-def update_vehicle(db: Session, vehicle_id: UUID, payload: VehicleUpdate) -> VehicleRead:
+def update_vehicle(
+    db: Session,
+    vehicle_id: UUID,
+    payload: VehicleUpdate,
+    user: AuthenticatedUser,
+) -> VehicleRead:
+    if user.role not in MANAGEMENT_ROLES:
+        raise AppError("Management access is required to update vehicles.", status_code=403)
     item = require_exists(db, Vehicle, vehicle_id, "Vehicle")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    if "assigned_employee_id" in values:
+        _validate_active_employee(db, values["assigned_employee_id"])
+    for key, value in values.items():
         setattr(item, key, value)
     db.add(item)
     commit(db)
@@ -597,8 +740,17 @@ def update_vehicle(db: Session, vehicle_id: UUID, payload: VehicleUpdate) -> Veh
     return vehicle_schema(item)
 
 
-def create_vehicle_log(db: Session, payload: VehicleLogCreate) -> VehicleLogRead:
+def create_vehicle_log(
+    db: Session,
+    payload: VehicleLogCreate,
+    user: AuthenticatedUser,
+) -> VehicleLogRead:
     vehicle = require_exists(db, Vehicle, payload.vehicle_id, "Vehicle")
+    if user.role == "viewer":
+        profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+        if profile is None:
+            raise AppError("Your employee profile is not linked to this account.", status_code=400)
+        require_operator_access(db, profile, resource_type="vehicle", resource_id=vehicle.id)
     values = payload.model_dump()
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     item = VehicleLog(**values)
@@ -616,6 +768,8 @@ def create_time_entry(db: Session, payload: TimeEntryCreate, user: Authenticated
     profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
     if user.role == "viewer" and (profile is None or (profile.portal_role != "foreman" and employee.id != profile.id)):
         raise AppError("You can only submit time for your own employee profile.", status_code=403)
+    if payload.entry_type == "operator":
+        require_operator_access(db, employee)
     require_exists(db, Project, payload.project_id, "Project")
     item = TimeEntry(**payload.model_dump(), status="submitted", submitted_by=user.email)
     db.add(item)
@@ -645,6 +799,37 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             if payload.employee_id and payload.employee_id != profile.id:
                 raise AppError("You can only create records for your own employee profile.", status_code=403)
             values["employee_id"] = profile.id
+            if payload.record_type == "equipment_inspection":
+                if payload.equipment_id is None:
+                    raise AppError("Select the assigned equipment for the inspection.", status_code=400)
+                require_operator_access(
+                    db,
+                    profile,
+                    resource_type="equipment",
+                    resource_id=payload.equipment_id,
+                )
+            if payload.record_type == "job_photo" and payload.equipment_id is not None:
+                require_operator_access(
+                    db,
+                    profile,
+                    resource_type="equipment",
+                    resource_id=payload.equipment_id,
+                )
+            if payload.record_type == "material_movement":
+                resource_type = str(payload.details.get("haul_unit_type") or "")
+                resource_id_value = payload.details.get("haul_unit_id")
+                try:
+                    resource_id = UUID(str(resource_id_value))
+                except (TypeError, ValueError) as exc:
+                    raise AppError("Select a current assigned haul unit.", status_code=400) from exc
+                if resource_type not in {"equipment", "vehicle"}:
+                    raise AppError("Select a current assigned haul unit.", status_code=400)
+                require_operator_access(
+                    db,
+                    profile,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                )
     if payload.record_type == "crew_shift":
         values["status"] = "scheduled"
         values["details"] = {**payload.details, "scheduled_by": user.display_name, "scheduled_at": datetime.now(UTC).isoformat()}

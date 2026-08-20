@@ -1,4 +1,6 @@
-from sqlalchemy import JSON, Numeric, String
+from uuid import UUID
+
+from sqlalchemy import ForeignKey, JSON, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -13,4 +15,5 @@ class Equipment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     identifier: Mapped[str | None] = mapped_column(String(120), unique=True)
     status: Mapped[str] = mapped_column(String(80), default="available")
     hourly_rate: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    assigned_employee_id: Mapped[UUID | None] = mapped_column(ForeignKey("employees.id"), index=True)
     safety_procedure_codes: Mapped[list[str]] = mapped_column(JSON, default=list)

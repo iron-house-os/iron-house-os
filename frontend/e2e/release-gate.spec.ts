@@ -13,7 +13,18 @@ const user = {
   updated_at: "2026-07-14T00:00:00Z",
 };
 
-async function mockApi(page: Page) {
+type MockOperatorAccess = {
+  authorized: boolean;
+  employee_id: string | null;
+  blockers: string[];
+  assignments: Array<{ resource_type: "equipment" | "vehicle"; resource_id: string; name: string; status: string }>;
+  orientation_status: "Ready" | "Blocked" | "Supervised work only" | "Not recorded";
+  qualification_record_id: string | null;
+};
+
+const blockedOperatorAccess: MockOperatorAccess = { authorized: false, employee_id: null, blockers: ["The signed-in account is not linked to an employee profile."], assignments: [], orientation_status: "Not recorded", qualification_record_id: null };
+
+async function mockApi(page: Page, operatorAccess: MockOperatorAccess = blockedOperatorAccess) {
   let authenticated = false;
   await page.route("http://localhost:8000/api/v1/**", async (route) => {
     const request = route.request();
@@ -65,12 +76,14 @@ async function mockApi(page: Page) {
       await route.fulfill({
         status: 200,
         json: {
-          employees: [], projects: [], suppliers: [], equipment: [], cost_codes: [],
+          employees: operatorAccess.authorized ? [{ id: "11500000-0000-0000-0000-000000000020", first_name: "Release", last_name: "Operator", email: user.email, role: "Equipment Operator", portal_role: "operator", status: "active" }] : [],
+          projects: [], suppliers: [], equipment: operatorAccess.authorized ? [{ id: "11500000-0000-0000-0000-000000000021", name: "Assigned excavator", identifier: "EX-115", status: "available" }] : [], cost_codes: [],
           job_workbooks: [], production_items: [], material_types: [], material_movement_summary: [],
           milestone_catalog: [], milestone_recognitions: [], paperwork_recognitions: [],
           vehicles: [], vehicle_logs: [], time_entries: [], records: [], certifications: [], alerts: [],
           toolbox_talk: { week_of: "2026-08-02", title: "Release gate", summary: "Staging-only QA", discussion_points: [], source_name: "WorkSafeBC", source_url: "https://www.worksafebc.com/" },
           flha_presets: [],
+          operator_access: operatorAccess,
         },
       });
       return;
@@ -253,6 +266,31 @@ test("receipt capture and financial review surfaces pass responsive accessibilit
   );
   expect(hasHorizontalOverflow).toBe(false);
   expect(pageErrors).toEqual([]);
+});
+
+test("legacy operator links open authorized tools inside the responsive Employee Portal", async ({ page }) => {
+  await mockApi(page, {
+    authorized: true,
+    employee_id: "11500000-0000-0000-0000-000000000020",
+    blockers: [],
+    assignments: [{ resource_type: "equipment", resource_id: "11500000-0000-0000-0000-000000000021", name: "Assigned excavator", status: "available" }],
+    orientation_status: "Ready",
+    qualification_record_id: "11500000-0000-0000-0000-000000000022",
+  });
+  await signIn(page);
+
+  await page.goto("/operator-portal/inspections");
+  await expect(page).toHaveURL(/\/employee-portal\/operator\/inspections$/);
+  await expect(page.getByRole("heading", { name: "Employee Portal" })).toBeVisible();
+  await expect(page.getByText("Authorised for assigned resources")).toBeVisible();
+  await expect(page.getByLabel("Machine / rental")).toHaveValue("");
+  await expect(page.getByLabel("Machine / rental").locator("option")).toHaveCount(2);
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+  await expectNoSeriousAccessibilityViolations(page);
 });
 
 test("foreman daily time sheet passes responsive interaction and accessibility QA", async ({ page }) => {

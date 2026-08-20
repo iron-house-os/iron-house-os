@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class EmploymentCategory(StrEnum):
@@ -151,13 +152,185 @@ class CorrectionRequest(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
 
 
+class PortalPersonalInformation(BaseModel):
+    preferred_name: str | None = Field(default=None, max_length=100)
+    mobile_phone: str = Field(min_length=7, max_length=40)
+    date_of_birth: date
+
+
+class PortalAddress(BaseModel):
+    street_address: str = Field(min_length=1, max_length=200)
+    unit: str | None = Field(default=None, max_length=40)
+    city: str = Field(min_length=1, max_length=100)
+    province: str = Field(min_length=2, max_length=100)
+    postal_code: str = Field(pattern=r"^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$")
+    country: str = Field(default="Canada", min_length=2, max_length=100)
+
+
+class PortalEmergencyContact(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+    relationship: str = Field(min_length=1, max_length=100)
+    primary_phone: str = Field(min_length=7, max_length=40)
+    alternate_phone: str | None = Field(default=None, max_length=40)
+
+
+class PortalPayroll(BaseModel):
+    payment_method: Literal["direct_deposit", "cheque"]
+    account_holder_name: str | None = Field(default=None, max_length=200)
+    institution_number: str | None = Field(default=None, pattern=r"^\d{3}$")
+    transit_number: str | None = Field(default=None, pattern=r"^\d{5}$")
+    account_number: str | None = Field(default=None, pattern=r"^\d{5,17}$")
+    direct_deposit_authorized: bool = False
+
+    @model_validator(mode="after")
+    def validate_direct_deposit(self) -> PortalPayroll:
+        if self.payment_method == "direct_deposit" and not all(
+            (
+                self.account_holder_name,
+                self.institution_number,
+                self.transit_number,
+                self.account_number,
+                self.direct_deposit_authorized,
+            )
+        ):
+            raise ValueError("Complete and authorise every direct-deposit field.")
+        return self
+
+
+class PortalTaxForms(BaseModel):
+    form_year: Literal[2026] = 2026
+    social_insurance_number: str = Field(pattern=r"^\d{9}$")
+    country_of_permanent_residence: str = Field(default="Canada", min_length=2, max_length=100)
+    federal_claim_amounts: list[Decimal] = Field(min_length=12, max_length=12)
+    bc_claim_amounts: list[Decimal] = Field(min_length=10, max_length=10)
+    federal_more_than_one_employer: bool = False
+    federal_total_income_less_than_claim: bool = False
+    non_resident_world_income_90_percent_or_more: bool | None = None
+    additional_tax_per_payment: Decimal = Field(default=Decimal("0"), ge=0)
+    bc_more_than_one_employer: bool = False
+    bc_total_income_less_than_claim: bool = False
+    federal_certified: bool
+    bc_certified: bool
+
+    @field_validator("social_insurance_number")
+    @classmethod
+    def validate_sin(cls, value: str) -> str:
+        digits = [int(character) for character in value]
+        checksum = 0
+        for index, digit in enumerate(digits):
+            product = digit * (2 if index % 2 else 1)
+            checksum += product // 10 + product % 10
+        if checksum % 10:
+            raise ValueError("Enter a valid nine-digit Social Insurance Number.")
+        return value
+
+    @field_validator("federal_claim_amounts", "bc_claim_amounts")
+    @classmethod
+    def validate_claim_amounts(cls, values: list[Decimal]) -> list[Decimal]:
+        if any(value < 0 for value in values):
+            raise ValueError("Tax credit claim amounts cannot be negative.")
+        return values
+
+    @model_validator(mode="after")
+    def validate_certification(self) -> PortalTaxForms:
+        if not self.federal_certified or not self.bc_certified:
+            raise ValueError("Both 2026 TD1 certifications are required.")
+        is_non_resident = self.country_of_permanent_residence.strip().casefold() != "canada"
+        if is_non_resident and self.non_resident_world_income_90_percent_or_more is None:
+            raise ValueError(
+                "Non-residents must answer the 2026 federal TD1 world-income question."
+            )
+        if (
+            is_non_resident
+            and self.non_resident_world_income_90_percent_or_more is False
+            and any(self.federal_claim_amounts)
+        ):
+            raise ValueError(
+                "Non-residents who answer no to the 90% world-income question must enter zero "
+                "for every federal TD1 claim amount."
+            )
+        if not is_non_resident and self.non_resident_world_income_90_percent_or_more is not None:
+            raise ValueError("The federal TD1 world-income question is for non-residents only.")
+        return self
+
+
+class PortalAgreements(BaseModel):
+    employment_terms_reviewed: bool
+    company_policies_reviewed: bool
+    privacy_notice_reviewed: bool
+    purchase_receipt_standard_reviewed: bool
+    questions_resolved: bool
+
+    @model_validator(mode="after")
+    def validate_acknowledgements(self) -> PortalAgreements:
+        if not all(self.model_dump().values()):
+            raise ValueError("Review and acknowledge every assigned agreement and policy.")
+        return self
+
+
+class PortalCertification(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    certificate_number: str | None = Field(default=None, max_length=100)
+    issuer: str | None = Field(default=None, max_length=160)
+    expiry_date: date | None = None
+
+
+class PortalCertifications(BaseModel):
+    none_to_report: bool = False
+    certifications: list[PortalCertification] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="after")
+    def validate_certifications(self) -> PortalCertifications:
+        if self.none_to_report == bool(self.certifications):
+            raise ValueError("Add at least one certification or confirm there are none to report.")
+        return self
+
+
+class PortalPPERequirements(BaseModel):
+    site_ppe_required: bool
+    boot_size: str | None = Field(default=None, max_length=30)
+    glove_size: str | None = Field(default=None, max_length=30)
+    shirt_size: str | None = Field(default=None, max_length=30)
+    trouser_size: str | None = Field(default=None, max_length=30)
+    prescription_safety_glasses: bool = False
+    respirator_fit_test_required: bool = False
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_site_sizes(self) -> PortalPPERequirements:
+        if self.site_ppe_required and not all(
+            (self.boot_size, self.glove_size, self.shirt_size, self.trouser_size)
+        ):
+            raise ValueError("Provide all PPE sizes when site PPE is required.")
+        return self
+
+
+class PortalPacket(BaseModel):
+    personal_information: PortalPersonalInformation | None = None
+    address: PortalAddress | None = None
+    emergency_contact: PortalEmergencyContact | None = None
+    payroll: PortalPayroll | None = None
+    tax_forms: PortalTaxForms | None = None
+    employment_agreements: PortalAgreements | None = None
+    certifications: PortalCertifications | None = None
+    ppe_requirements: PortalPPERequirements | None = None
+    signature_name: str | None = Field(default=None, max_length=200)
+    signed_at: datetime | None = None
+
+
+class PortalOnboardingRead(BaseModel):
+    onboarding: EmployeeOnboardingRead
+    packet: PortalPacket
+
+
 class PortalProgressUpdate(BaseModel):
-    completed_items: list[str] = Field(default_factory=list)
+    packet: PortalPacket
 
 
 class PortalSubmission(BaseModel):
-    completed_items: list[str]
+    packet: PortalPacket
     acknowledgement: bool
+    signature_name: str = Field(min_length=1, max_length=200)
 
 
 OrientationScope = Literal["company", "site"]

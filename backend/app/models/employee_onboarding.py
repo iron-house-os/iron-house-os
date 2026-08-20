@@ -27,6 +27,7 @@ class EmployeeOnboarding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completion_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completed_items: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     missing_items: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    encrypted_portal_data: Mapped[str | None] = mapped_column(Text)
     reviewer_id: Mapped[UUID | None] = mapped_column(ForeignKey("user_accounts.id"))
     correction_note: Mapped[str | None] = mapped_column(Text)
     invitation_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)

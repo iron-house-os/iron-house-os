@@ -6,6 +6,10 @@ import { fieldOperationsApi } from "../api/fieldOperations";
 
 export type PortalRole = "employee" | "operator" | "foreman" | "management" | null;
 
+export function workforceEntryRole(role: PortalRole): PortalRole {
+  return role === "operator" ? "employee" : role;
+}
+
 type AuthContextValue = {
   user: AuthUser | null;
   isLoading: boolean;
@@ -27,7 +31,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (account.role !== "viewer") { setPortalRole("management"); return; }
     try {
       const field = await fieldOperationsApi.bootstrap();
-      setPortalRole(field.employees.find((item) => item.email.toLowerCase() === account.email.toLowerCase())?.portal_role ?? "employee");
+      const resolved = field.employees.find((item) => item.email.toLowerCase() === account.email.toLowerCase())?.portal_role ?? "employee";
+      setPortalRole(workforceEntryRole(resolved));
     } catch { setPortalRole("employee"); }
   }, []);
 

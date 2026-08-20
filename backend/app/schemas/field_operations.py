@@ -362,6 +362,22 @@ class SafetyAnalytics(BaseModel):
     confidential_record_types_excluded: list[str]
 
 
+class OperatorAssignmentRead(BaseModel):
+    resource_type: Literal["equipment", "vehicle"]
+    resource_id: UUID
+    name: str
+    status: str
+
+
+class OperatorAccessRead(BaseModel):
+    authorized: bool
+    employee_id: UUID | None
+    blockers: list[str]
+    assignments: list[OperatorAssignmentRead]
+    orientation_status: Literal["Ready", "Blocked", "Supervised work only", "Not recorded"]
+    qualification_record_id: UUID | None
+
+
 class FieldOperationsBootstrap(BaseModel):
     employees: list[EmployeeRead]
     projects: list[dict]
@@ -383,3 +399,4 @@ class FieldOperationsBootstrap(BaseModel):
     alerts: list[dict]
     toolbox_talk: ToolboxTalk
     flha_presets: list[dict]
+    operator_access: OperatorAccessRead
