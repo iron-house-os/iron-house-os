@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { equipmentApi } from "../api/equipment";
+import { FieldOperationsBootstrap, fieldOperationsApi } from "../api/fieldOperations";
 import { EquipmentPage } from "./EquipmentPage";
 
 vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: { role: "operations_manager" } }) }));
@@ -12,26 +13,33 @@ vi.mock("../api/equipment", () => ({
   equipmentStatuses: ["available", "reserved", "in_use", "maintenance", "retired"],
   equipmentApi: { list: vi.fn(), create: vi.fn(), update: vi.fn() },
 }));
+vi.mock("../api/fieldOperations", () => ({ fieldOperationsApi: { bootstrap: vi.fn() } }));
 
 const item = {
   id: "equipment-1", name: "20 t excavator", equipment_type: "Excavator", identifier: "EX-20",
-  status: "available" as const, hourly_rate: 195, safety_procedure_codes: [],
+  status: "available" as const, hourly_rate: 195, assigned_employee_id: null, safety_procedure_codes: [],
   created_at: "2026-08-18T00:00:00Z", updated_at: "2026-08-18T00:00:00Z",
 };
 
 describe("EquipmentPage safety field access", () => {
   beforeEach(() => {
+    vi.mocked(fieldOperationsApi.bootstrap).mockResolvedValue({
+      employees: [{ id: "employee-1", first_name: "Alex", last_name: "Operator", status: "active" }],
+    } as unknown as FieldOperationsBootstrap);
     vi.mocked(equipmentApi.list).mockResolvedValue({
       items: [{ ...item, safety_procedure_codes: undefined as unknown as string[] }],
       total: 1,
     });
-    vi.mocked(equipmentApi.update).mockResolvedValue({ ...item, safety_procedure_codes: ["SWP-003"] });
+    vi.mocked(equipmentApi.update).mockImplementation(async (_id, payload) => ({ ...item, ...payload }));
   });
 
   it("saves management assignments and generates a token-free QR field link", async () => {
     const user = userEvent.setup();
     render(<EquipmentPage />);
     expect(await screen.findByText("20 t excavator")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Assigned employee for 20 t excavator"), "employee-1");
+    expect(equipmentApi.update).toHaveBeenCalledWith("equipment-1", { assigned_employee_id: "employee-1" });
 
     await user.click(screen.getByText("Manage field procedure assignments"));
     await user.click(screen.getByLabelText(/SWP-003 · Mobile Equipment and Spotters/));

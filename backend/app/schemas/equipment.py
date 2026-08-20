@@ -25,6 +25,7 @@ class EquipmentCreate(BaseModel):
     identifier: str | None = Field(default=None, max_length=120)
     status: EquipmentStatus = "available"
     hourly_rate: float | None = Field(default=None, ge=0)
+    assigned_employee_id: UUID | None = None
     safety_procedure_codes: list[str] = Field(default_factory=list, max_length=12)
 
     @field_validator("name")
@@ -53,6 +54,7 @@ class EquipmentUpdate(BaseModel):
     identifier: str | None = Field(default=None, max_length=120)
     status: EquipmentStatus | None = None
     hourly_rate: float | None = Field(default=None, ge=0)
+    assigned_employee_id: UUID | None = None
     safety_procedure_codes: list[str] | None = Field(default=None, max_length=12)
 
     @field_validator("name")
@@ -86,6 +88,7 @@ class EquipmentRead(BaseModel):
     identifier: str | None
     status: EquipmentStatus
     hourly_rate: float | None
+    assigned_employee_id: UUID | None
     safety_procedure_codes: list[str]
     created_at: datetime
     updated_at: datetime

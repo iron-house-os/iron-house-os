@@ -77,18 +77,23 @@ def export_safety_audit(db: DBSession, user: CurrentUser) -> Response:
 
 
 @router.post("/vehicles", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
-def create_vehicle(payload: VehicleCreate, db: DBSession) -> VehicleRead:
-    return field_operations.create_vehicle(db, payload)
+def create_vehicle(payload: VehicleCreate, db: DBSession, user: CurrentUser) -> VehicleRead:
+    return field_operations.create_vehicle(db, payload, user)
 
 
 @router.patch("/vehicles/{vehicle_id}", response_model=VehicleRead)
-def update_vehicle(vehicle_id: UUID, payload: VehicleUpdate, db: DBSession) -> VehicleRead:
-    return field_operations.update_vehicle(db, vehicle_id, payload)
+def update_vehicle(
+    vehicle_id: UUID,
+    payload: VehicleUpdate,
+    db: DBSession,
+    user: CurrentUser,
+) -> VehicleRead:
+    return field_operations.update_vehicle(db, vehicle_id, payload, user)
 
 
 @router.post("/vehicle-logs", response_model=VehicleLogRead, status_code=status.HTTP_201_CREATED)
-def create_vehicle_log(payload: VehicleLogCreate, db: DBSession) -> VehicleLogRead:
-    return field_operations.create_vehicle_log(db, payload)
+def create_vehicle_log(payload: VehicleLogCreate, db: DBSession, user: CurrentUser) -> VehicleLogRead:
+    return field_operations.create_vehicle_log(db, payload, user)
 
 
 @router.post("/time-entries", response_model=TimeEntryRead, status_code=status.HTTP_201_CREATED)

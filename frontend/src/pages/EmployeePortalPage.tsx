@@ -68,6 +68,7 @@ function useFieldOperations() {
 }
 
 export function VehicleTrackingPage() {
+  const { user } = useAuth();
   const state = useFieldOperations();
   const [vehicleId, setVehicleId] = useState("");
   const [logType, setLogType] = useState("fuel");
@@ -78,6 +79,21 @@ export function VehicleTrackingPage() {
   const [details, setDetails] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const canAssign = user?.role === "admin" || user?.role === "operations_manager";
+
+  async function updateAssignment(vehicleId: string, employeeId: string) {
+    state.setError(null);
+    try {
+      const employee = state.data?.employees.find((item) => item.id === employeeId);
+      await fieldOperationsApi.updateVehicle(vehicleId, {
+        assigned_employee_id: employeeId || null,
+        assigned_driver_name: employee ? `${employee.first_name} ${employee.last_name}` : null,
+      });
+      await state.refresh();
+    } catch (current) {
+      state.setError(current instanceof Error ? current.message : "Unable to update vehicle assignment.");
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -121,6 +137,7 @@ export function VehicleTrackingPage() {
               </div>
               <StatusPill status={vehicle.service_status} />
             </div>
+            {canAssign ? <label className="mt-4 grid gap-1 text-sm"><span className="font-medium text-iron-700">Assigned employee</span><select aria-label={`Assigned employee for truck ${vehicle.unit_number}`} value={vehicle.assigned_employee_id ?? ""} onChange={(event) => void updateAssignment(vehicle.id, event.target.value)} className="min-h-11 rounded-md border border-iron-100 px-3"><option value="">No current assignment</option>{state.data?.employees.filter((item) => item.status === "active").map((employee) => <option key={employee.id} value={employee.id}>{employee.first_name} {employee.last_name}</option>)}</select><span className="text-xs leading-5 text-iron-500">Assignment alone does not authorize operation; qualification and orientation gates still apply.</span></label> : null}
             <div className="mt-5 grid grid-cols-3 gap-3">
               <Fact label="Current km" value={vehicle.current_km.toLocaleString("en-CA")} />
               <Fact label="Next service" value={vehicle.next_service_km?.toLocaleString("en-CA") ?? "Set km"} />
@@ -160,7 +177,7 @@ export function ForemanPortalPage({ section = "dashboard" }: { section?: string 
           <AlertStrip alerts={state.data.alerts} />
           {section === "production" ? <JobWorkbookCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "loads" ? <MaterialMovementCard data={state.data} mode="foreman" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "milestones" ? <><MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /><MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "receipts" ? <ReceiptCapturePanel /> : null}
           {section === "time" ? <DailyTimesheetWorkflow /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} canSchedule onSaved={state.refresh} onError={state.setError} /> : null}
@@ -189,9 +206,12 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
   const [saving, setSaving] = useState(false);
   const totalTonnes = Number(loads || 0) * Number(tonnesPerLoad || 0);
   const material = data.material_types.find((item) => item.code === materialCode);
+  const assignedResources = new Set(data.operator_access.assignments.map((item) => `${item.resource_type}:${item.resource_id}`));
+  const operatorVehicles = data.vehicles.filter((item) => mode !== "operator" || assignedResources.has(`vehicle:${item.id}`));
+  const operatorEquipment = data.equipment.filter((item) => mode !== "operator" || assignedResources.has(`equipment:${item.id}`));
   const selectedHaulUnit = [
-    ...data.vehicles.map((item) => ({ value: "vehicle:" + item.id, id: item.id, type: "vehicle", name: "Truck " + item.unit_number + " — " + (item.assigned_driver_name ?? item.name) })),
-    ...data.equipment.map((item) => ({ value: "equipment:" + item.id, id: item.id, type: "equipment", name: item.name })),
+    ...operatorVehicles.map((item) => ({ value: "vehicle:" + item.id, id: item.id, type: "vehicle", name: "Truck " + item.unit_number + " — " + (item.assigned_driver_name ?? item.name) })),
+    ...operatorEquipment.map((item) => ({ value: "equipment:" + item.id, id: item.id, type: "equipment", name: item.name })),
   ].find((item) => item.value === haulUnit);
   const summaries = data.material_movement_summary.filter((item) => !projectId || item.project_id === projectId);
 
@@ -224,8 +244,8 @@ function MaterialMovementCard({ data, mode, onSaved, onError }: { data: FieldOpe
         <Select label="Cost code" value={costCode} onChange={setCostCode} required options={data.cost_codes.map((item) => [item.code, item.code + " — " + item.name])} />
         <Select label="Supplier / disposal site" value={supplierId} onChange={setSupplierId} options={data.suppliers.map((item) => [item.id, item.name])} />
         {mode === "operator" ? <Select label="Truck / equipment" value={haulUnit} onChange={setHaulUnit} required options={[
-          ...data.vehicles.map((item) => ["vehicle:" + item.id, "Truck " + item.unit_number + " — " + (item.assigned_driver_name ?? item.name)]),
-          ...data.equipment.map((item) => ["equipment:" + item.id, item.name]),
+          ...operatorVehicles.map((item) => ["vehicle:" + item.id, "Truck " + item.unit_number + " — " + (item.assigned_driver_name ?? item.name)]),
+          ...operatorEquipment.map((item) => ["equipment:" + item.id, item.name]),
         ]} /> : null}
         <Input label="Number of loads" value={loads} onChange={setLoads} type="number" required />
         <Input label="Tonnes per load" value={tonnesPerLoad} onChange={setTonnesPerLoad} type="number" required />
@@ -286,45 +306,22 @@ function JobWorkbookCard({ data, onSaved, onError }: { data: FieldOperationsBoot
   );
 }
 
-export function OperatorPortalPage({ section = "dashboard" }: { section?: string }) {
-  const state = useFieldOperations();
-  return (
-    <PortalShell title="Operator Portal" eyebrow="Equipment and time" description="Cost-coded time, machine inspections, service alerts, job photos and employee requests." icon={<Wrench />}>
-      <Status state={state} />
-      {section === "backups" ? <BackupsPage /> : null}
-      {section === "dashboard" ? <PortalSectionDashboard root="operator-portal" items={[["backups", "Backups"], ["time", "Time tracking"], ["schedule", "My schedule and time off"], ["loads", "Load tracker"], ["inspections", "Machine inspections"], ["small-equipment", "Small equipment inspections"], ["photos", "Job photos and requests"], ["milestones", "Milestones and recognition"], ["records", "Recent records"]]} /> : null}
-      {state.data ? (
-        <>
-          <AlertStrip alerts={state.data.alerts} />
-          {section === "loads" ? <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "milestones" ? <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "receipts" ? <ReceiptCapturePanel /> : null}
-          {section === "time" ? <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
-          {["inspections", "photos"].includes(section) ? <RecordForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "records" ? <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "small_equipment_inspection", "job_photo", "time_off_request", "performance_review"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
-        </>
-      ) : null}
-    </PortalShell>
-  );
-}
-
-export function EmployeePortalPage({ section = "dashboard" }: { section?: string }) {
+export function EmployeePortalPage({ section = "dashboard", operatorSection = "dashboard" }: { section?: string; operatorSection?: string }) {
   const state = useFieldOperations();
   return (
     <PortalShell title="Employee Portal" eyebrow="Iron House Contracting" description="Time, daily journal, safety, job photos, requests, contact information and course tickets." icon={<HardHat />}>
       <Status state={state} />
       {section === "backups" ? <BackupsPage /> : null}
-      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["backups", "Backups"], ["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"]]} /> : null}
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal" items={[["backups", "Backups"], ["time", "My time"], ["receipts", "Receipt capture"], ["journal", "Journal and photos"], ["schedule", "Schedule and requests"], ["safety", "Safety and toolbox talks"], ["milestones", "Milestones and recognition"], ["small-equipment", "Small equipment inspections"], ["profile", "My profile and tickets"], ["records", "My records"], ["operator", "Operator tools"]]} /> : null}
       {section === "safety" ? <SafetyProgramCard /> : null}
+      {section === "operator" ? <OperatorWorkspace state={state} section={operatorSection} /> : null}
       {state.data ? (
         <>
           {section === "receipts" ? <ReceiptCapturePanel /> : null}
           {section === "time" ? <TimeEntryForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "journal" ? <RecordForm data={state.data} mode="employee" onSaved={state.refresh} onError={state.setError} /> : null}
           {section === "schedule" ? <CrewScheduleCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
-          {section === "milestones" ? <MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /> : null}
+          {section === "milestones" ? <><MilestoneCard data={state.data} track="civil" onSaved={state.refresh} onError={state.setError} /><MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "profile" ? <EmployeeDirectory data={state.data} /> : null}
           {section === "safety" ? <><FLHAWorkflow data={state.data} canCreate={false} onSaved={state.refresh} onError={state.setError} /><ToolboxTalkCard data={state.data} onSaved={state.refresh} onError={state.setError} /></> : null}
           {section === "small-equipment" ? <SmallEquipmentInspectionCard data={state.data} onSaved={state.refresh} onError={state.setError} /> : null}
@@ -333,6 +330,39 @@ export function EmployeePortalPage({ section = "dashboard" }: { section?: string
       ) : null}
     </PortalShell>
   );
+}
+
+function OperatorWorkspace({ state, section }: { state: ReturnType<typeof useFieldOperations>; section: string }) {
+  if (!state.data) return null;
+  const { operator_access: access } = state.data;
+  const assignedEquipment = new Set(access.assignments.filter((item) => item.resource_type === "equipment").map((item) => item.resource_id));
+  return <div className="space-y-5">
+    <section className={`rounded-xl border p-5 shadow-sm ${access.authorized ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className="flex items-start gap-3">
+        <Wrench className={`mt-0.5 h-5 w-5 shrink-0 ${access.authorized ? "text-emerald-700" : "text-amber-800"}`} />
+        <div>
+          <h2 className="font-semibold text-iron-950">Operator tools</h2>
+          <p className="mt-1 text-sm leading-6 text-iron-700">This section does not authorize equipment operation. IHOS enables operator actions only while a current equipment or vehicle assignment, Ready orientation controls, and an approved written and practical operator qualification are all recorded.</p>
+          <div className="mt-3 text-sm font-semibold">{access.authorized ? "Authorised for assigned resources" : "Operator actions blocked"}</div>
+          {access.assignments.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-iron-700">{access.assignments.map((item) => <li key={`${item.resource_type}:${item.resource_id}`}>{item.name} · {item.status.replaceAll("_", " ")}</li>)}</ul> : null}
+          {!access.authorized ? <><ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-950">{access.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul><Link to="/employee-portal/milestones" className="mt-3 inline-flex min-h-11 items-center rounded-md border border-amber-300 px-3 text-sm font-semibold text-amber-950">Open qualification and milestone requests</Link></> : null}
+        </div>
+      </div>
+    </section>
+    {access.authorized ? <>
+      {section === "dashboard" ? <PortalSectionDashboard root="employee-portal/operator" items={[["time", "Operator time"], ["loads", "Assigned load tracker"], ["inspections", "Assigned machine inspections"], ["photos", "Operator job photos"], ["qualification", "Operator qualification"], ["records", "Operator records"]]} /> : null}
+      {section === "loads" ? <MaterialMovementCard data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+      {section === "qualification" ? <MilestoneCard data={state.data} track="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+      {section === "time" ? <TimeEntryForm data={state.data} mode="operator" onSaved={state.refresh} onError={state.setError} /> : null}
+      {section === "inspections" ? assignedEquipment.size ? <RecordForm data={state.data} mode="operator" initialType="equipment_inspection" onSaved={state.refresh} onError={state.setError} /> : <OperatorNotice>No operational equipment is assigned. Vehicle assignment alone does not enable machine inspections.</OperatorNotice> : null}
+      {section === "photos" ? <RecordForm data={state.data} mode="operator" initialType="job_photo" onSaved={state.refresh} onError={state.setError} /> : null}
+      {section === "records" ? <RecentRecords records={state.data.records.filter((item) => ["material_movement", "equipment_inspection", "job_photo"].includes(item.record_type))} employees={state.data.employees} onSaved={state.refresh} onError={state.setError} /> : null}
+    </> : null}
+  </div>;
+}
+
+function OperatorNotice({ children }: { children: ReactNode }) {
+  return <div role="status" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{children}</div>;
 }
 
 function CrewScheduleCard({ data, canSchedule = false, onSaved, onError }: { data: FieldOperationsBootstrap; canSchedule?: boolean; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
@@ -431,8 +461,8 @@ function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperation
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const selected = milestones.find((item) => item.id === milestoneId);
-  const requests = data.records.filter((item) => item.record_type === "milestone_review" && (!employee || item.employee_id === employee.id));
-  const pending = data.records.filter((item) => item.record_type === "milestone_review" && ["practical_pending", "written_retry_required"].includes(item.status));
+  const requests = data.records.filter((item) => item.record_type === "milestone_review" && item.details.track === track && (!employee || item.employee_id === employee.id));
+  const pending = data.records.filter((item) => item.record_type === "milestone_review" && item.details.track === track && ["practical_pending", "written_retry_required"].includes(item.status));
   const isManagement = ["admin", "operations_manager"].includes(user?.role ?? "");
 
   async function submit(event: FormEvent) {
@@ -452,7 +482,11 @@ function MilestoneCard({ data, track, onSaved, onError }: { data: FieldOperation
 
   return (
     <section className="rounded-xl border border-brand-gold/40 bg-white p-5 shadow-sm">
-      <SectionTitle icon={<Award />} title="Career milestones and recognition" subtitle="Request a written and practical review. Management approval is required before advancement or rewards are announced." />
+      <SectionTitle
+        icon={<Award />}
+        title={track === "operator" ? "Operator qualification milestones" : "Career milestones and recognition"}
+        subtitle={track === "operator" ? "Request an operator written and observed practical review. Approval records qualification evidence but does not itself grant equipment access." : "Request a written and practical review. Management approval is required before advancement or rewards are announced."}
+      />
       {employee ? <form onSubmit={submit} className="mt-4 grid gap-4">
         <Select label="Milestone I want to be reviewed for" value={milestoneId} onChange={(value) => { setMilestoneId(value); setAnswers({}); }} options={milestones.map((item) => [item.id, item.name + (item.minimum_months ? " — " + item.minimum_months + "+ months" : "")])} />
         {selected ? <div className="grid gap-4 rounded-md bg-iron-50 p-4">
@@ -551,13 +585,13 @@ function TimeEntryForm({ data, mode, onSaved, onError }: { data: FieldOperations
   );
 }
 
-function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBootstrap; mode: "foreman" | "operator" | "employee"; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
+function RecordForm({ data, mode, initialType, onSaved, onError }: { data: FieldOperationsBootstrap; mode: "foreman" | "operator" | "employee"; initialType?: string; onSaved: () => Promise<void>; onError: (value: string | null) => void }) {
   const availableTypes = mode === "foreman"
     ? [["journal", "Daily journal"], ["incident", "Incident / near miss"], ["deficiency", "Deficiency"], ["weather", "Weather"], ["material_quantity", "Material / quantity"], ["subcontractor", "Subcontractor"], ["rental_equipment", "Rental equipment"], ["expense", "Expense / receipt"], ["missing_form", "Missing form"], ["job_photo", "Production photos"]]
     : mode === "operator"
       ? [["equipment_inspection", "Machine inspection"], ["job_photo", "Job photos"], ["performance_review", "Performance review request"], ["journal", "Journal"]]
       : [["journal", "Journal"], ["job_photo", "Job photos"], ["expense", "Expense"], ["missing_form", "Missing form"], ["performance_review", "Performance review request"]];
-  const [recordType, setRecordType] = useState(availableTypes[0][0]);
+  const [recordType, setRecordType] = useState(initialType ?? availableTypes[0][0]);
   const [employeeId, setEmployeeId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -613,7 +647,7 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
         <Select label="Project / job" value={projectId} onChange={setProjectId} options={data.projects.map((item) => [item.id, item.name])} />
         <Select label="Cost code" value={costCode} onChange={setCostCode} options={data.cost_codes.map((item) => [item.code, item.code + " — " + item.name])} />
         <Select label="Vendor / subcontractor" value={supplierId} onChange={setSupplierId} options={data.suppliers.map((item) => [item.id, item.name])} />
-        <Select label="Machine / rental" value={equipmentId} onChange={setEquipmentId} options={data.equipment.map((item) => [item.id, item.name])} />
+        <Select label="Machine / rental" value={equipmentId} onChange={setEquipmentId} required={mode === "operator" && recordType === "equipment_inspection"} options={data.equipment.filter((item) => mode !== "operator" || data.operator_access.assignments.some((assignment) => assignment.resource_type === "equipment" && assignment.resource_id === item.id)).map((item) => [item.id, item.name])} />
         <Input label="Title" value={title} onChange={setTitle} required />
         <Select label="Issue severity" value={severity} onChange={setSeverity} options={[["none", "No issue"], ["low", "Low"], ["medium", "Medium — alert"], ["high", "High — alert"], ["critical", "Critical — alert"]]} />
         <Input label="Quantity / hours / amount" value={quantity} onChange={setQuantity} />
@@ -630,7 +664,7 @@ function RecordForm({ data, mode, onSaved, onError }: { data: FieldOperationsBoo
       {["daily_hazard_assessment", "toolbox_talk"].includes(recordType) ? (
         <EmployeeChecklist employees={data.employees} selected={attendees} onChange={setAttendees} />
       ) : null}
-      <PrimaryButton disabled={saving || !title || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>{saving ? "Saving and uploading…" : "Submit field record"}</PrimaryButton>
+      <PrimaryButton disabled={saving || !title || (mode === "operator" && recordType === "equipment_inspection" && !equipmentId) || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>{saving ? "Saving and uploading…" : "Submit field record"}</PrimaryButton>
     </form>
   );
 }

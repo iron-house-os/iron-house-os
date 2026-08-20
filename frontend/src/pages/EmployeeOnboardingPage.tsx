@@ -277,7 +277,7 @@ export function EmployeeOnboardingPage() {
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                 <Credential label="Username" value={credentials.username} />
                 <Credential label="Temporary password" value={credentials.temporary_password} />
-                <Credential label="Portal" value={`${credentials.portal_role} portal`} />
+                <Credential label="Portal" value={credentials.portal_role === "foreman" ? "foreman portal" : "employee portal"} />
               </dl>
             </div>
           </div>

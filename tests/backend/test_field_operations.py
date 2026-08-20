@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +11,12 @@ from app.core.errors import AppError
 from app.schemas.field_operations import SafetyRecordUpdate
 from app.services import field_operations
 from app.api.dependencies.auth import require_authenticated_user
+from app.models.employee_onboarding import EmployeeOnboarding, WorkerOrientation
+from app.models.equipment import Equipment
+from app.models.field_operations import FieldRecord
 from app.services.auth import AuthenticatedUser
+from app.schemas.employee_onboarding import REQUIRED_ORIENTATION_TOPIC_CODES
+from conftest import TestingSessionLocal
 
 
 client = TestClient(app)
@@ -58,6 +63,71 @@ def _project() -> dict:
     return response.json()
 
 
+def _grant_operator_access(employee: dict) -> str:
+    with TestingSessionLocal() as db:
+        equipment = Equipment(
+            name="Assigned excavator",
+            identifier="AUTH-EX-01",
+            status="available",
+            assigned_employee_id=UUID(employee["id"]),
+        )
+        onboarding = EmployeeOnboarding(
+            legal_first_name=employee["first_name"],
+            legal_last_name=employee["last_name"],
+            personal_email=employee["email"],
+            category="field_staff",
+            position="equipment_operator",
+            employment_type="full_time",
+            start_date=date.today(),
+            status="active",
+            employee_id=UUID(employee["id"]),
+        )
+        db.add_all([equipment, onboarding])
+        db.flush()
+        topics = [
+            {
+                "code": code,
+                "applicability": "applicable",
+                "evidence": "Supervisor recorded evidence.",
+                "not_applicable_basis": None,
+            }
+            for code in REQUIRED_ORIENTATION_TOPIC_CODES
+        ]
+        for scope in ("company", "site"):
+            db.add(WorkerOrientation(
+                onboarding_id=onboarding.id,
+                scope=scope,
+                site_name="Test site" if scope == "site" else None,
+                trigger="initial",
+                orientation_date=date.today(),
+                instructor_name="Test Instructor",
+                supervisor_name="Test Supervisor",
+                document_version="test-controlled-version",
+                topics=topics,
+                competency_result="passed",
+                ppe_verified=True,
+                qualifications_verified=True,
+                worker_acknowledged=True,
+                worker_acknowledged_at=datetime.now(UTC),
+                supporting_document_ids=[],
+                created_by="test-admin@ironhousecontracting.com",
+            ))
+        db.add(FieldRecord(
+            record_type="milestone_review",
+            employee_id=UUID(employee["id"]),
+            work_date=date.today(),
+            title="Approved operator qualification",
+            status="approved",
+            details={
+                "track": "operator",
+                "written_passed": True,
+                "practical_status": "passed",
+            },
+        ))
+        db.commit()
+        return str(equipment.id)
+
+
 def test_field_operations_links_time_to_employee_project_and_cost_code() -> None:
     employee = _employee()
     project = _project()
@@ -71,7 +141,7 @@ def test_field_operations_links_time_to_employee_project_and_cost_code() -> None
             "work_date": str(date.today()),
             "regular_hours": 8,
             "overtime_hours": 1.5,
-            "entry_type": "operator",
+            "entry_type": "employee",
         },
     )
 
@@ -906,6 +976,109 @@ def test_employee_bootstrap_is_limited_to_own_records() -> None:
     assert bootstrap.status_code == 200
     assert [item["id"] for item in bootstrap.json()["employees"]] == [own["id"]]
     assert other["id"] not in {item["id"] for item in bootstrap.json()["employees"]}
+
+
+def test_operator_profile_label_does_not_grant_operator_actions() -> None:
+    employee = _employee()
+    project = _project()
+
+    def employee_user(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000029"),
+            email=employee["email"],
+            display_name="Crew Member",
+            role="viewer",
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = employee_user
+    bootstrap = client.get("/api/v1/field-operations/bootstrap")
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["operator_access"]["authorized"] is False
+    assert "No current operational equipment or vehicle assignment is recorded." in bootstrap.json()["operator_access"]["blockers"]
+
+    response = client.post(
+        "/api/v1/field-operations/time-entries",
+        json={
+            "employee_id": employee["id"],
+            "project_id": project["id"],
+            "cost_code": "02-200",
+            "work_date": str(date.today()),
+            "regular_hours": 8,
+            "entry_type": "operator",
+        },
+    )
+    assert response.status_code == 403
+    assert "Operator access is blocked" in response.json()["error"]["message"]
+
+
+def test_assigned_qualified_employee_is_limited_to_current_equipment() -> None:
+    employee = _employee()
+    project = _project()
+    assigned_equipment_id = _grant_operator_access(employee)
+    with TestingSessionLocal() as db:
+        other = Equipment(name="Unassigned excavator", identifier="AUTH-EX-02", status="available")
+        db.add(other)
+        db.commit()
+        other_equipment_id = str(other.id)
+
+    def employee_user(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000030"),
+            email=employee["email"],
+            display_name="Crew Member",
+            role="viewer",
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = employee_user
+    bootstrap = client.get("/api/v1/field-operations/bootstrap")
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["operator_access"]["authorized"] is True
+    assert [item["resource_id"] for item in bootstrap.json()["operator_access"]["assignments"]] == [assigned_equipment_id]
+
+    allowed = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "equipment_inspection",
+            "employee_id": employee["id"],
+            "equipment_id": assigned_equipment_id,
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Assigned excavator pre-use inspection",
+            "details": {"notes": "Pre-use inspection recorded."},
+        },
+    )
+    assert allowed.status_code == 201
+
+    blocked = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "equipment_inspection",
+            "employee_id": employee["id"],
+            "equipment_id": other_equipment_id,
+            "project_id": project["id"],
+            "work_date": str(date.today()),
+            "title": "Unassigned excavator inspection",
+            "details": {"notes": "This must be rejected."},
+        },
+    )
+    assert blocked.status_code == 403
+    assert "current equipment assignments" in blocked.json()["error"]["message"]
+
+    with TestingSessionLocal() as db:
+        assigned = db.get(Equipment, UUID(assigned_equipment_id))
+        assert assigned is not None
+        assigned.status = "maintenance"
+        db.commit()
+    refreshed = client.get("/api/v1/field-operations/bootstrap")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["operator_access"]["authorized"] is False
+    assert refreshed.json()["operator_access"]["assignments"] == []
 
 
 def test_small_equipment_inspection_flags_unsafe_saw_for_management() -> None:
