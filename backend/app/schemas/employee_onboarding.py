@@ -26,8 +26,10 @@ class EmploymentPosition(StrEnum):
     ADMIN = "admin"
     CONTROLLER = "controller"
     PROJECT_MANAGER = "project_manager"
+    CFO = "cfo"
     COO = "coo"
     CEO = "ceo"
+    PRESIDENT = "president"
 
 
 FIELD_POSITIONS = {
@@ -45,8 +47,10 @@ OFFICE_POSITIONS = {
     EmploymentPosition.ADMIN,
     EmploymentPosition.CONTROLLER,
     EmploymentPosition.PROJECT_MANAGER,
+    EmploymentPosition.CFO,
     EmploymentPosition.COO,
     EmploymentPosition.CEO,
+    EmploymentPosition.PRESIDENT,
 }
 
 
@@ -286,6 +290,8 @@ POSITION_OPTIONS = [
     PositionOption(value=EmploymentPosition.ADMIN, label="Admin", category=EmploymentCategory.OFFICE_STAFF, level=1),
     PositionOption(value=EmploymentPosition.CONTROLLER, label="Controller", category=EmploymentCategory.OFFICE_STAFF, level=2),
     PositionOption(value=EmploymentPosition.PROJECT_MANAGER, label="Project Manager", category=EmploymentCategory.OFFICE_STAFF, level=3),
-    PositionOption(value=EmploymentPosition.COO, label="COO", category=EmploymentCategory.OFFICE_STAFF, level=4),
-    PositionOption(value=EmploymentPosition.CEO, label="CEO", category=EmploymentCategory.OFFICE_STAFF, level=5),
+    PositionOption(value=EmploymentPosition.CFO, label="CFO", category=EmploymentCategory.OFFICE_STAFF, level=4),
+    PositionOption(value=EmploymentPosition.COO, label="COO", category=EmploymentCategory.OFFICE_STAFF, level=5),
+    PositionOption(value=EmploymentPosition.CEO, label="CEO", category=EmploymentCategory.OFFICE_STAFF, level=6),
+    PositionOption(value=EmploymentPosition.PRESIDENT, label="President", category=EmploymentCategory.OFFICE_STAFF, level=7),
 ]
