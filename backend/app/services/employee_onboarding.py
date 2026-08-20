@@ -5,18 +5,20 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardingAudit, WorkerOrientation
-from app.models.user import Employee
+from app.models.user import Employee, UserAccount
 from app.schemas.employee_onboarding import (
     DeploymentStatusRead,
     EmployeeOnboardingCreate,
+    EmploymentPosition,
     OnboardingStatus,
     REQUIRED_ORIENTATION_TOPIC_CODES,
     WorkerOrientationCreate,
 )
+from app.services.auth import hash_password
 
 REQUIRED_ITEMS = [
     "personal_information",
@@ -30,10 +32,28 @@ REQUIRED_ITEMS = [
     "ppe_requirements",
     "electronic_signature",
 ]
+INVITABLE_STATUSES = {
+    OnboardingStatus.DRAFT.value,
+    OnboardingStatus.INVITATION_SENT.value,
+    OnboardingStatus.INVITATION_OPENED.value,
+    OnboardingStatus.IN_PROGRESS.value,
+    OnboardingStatus.CORRECTIONS_REQUIRED.value,
+    OnboardingStatus.INVITATION_EXPIRED.value,
+}
+EMPLOYEE_EDITABLE_STATUSES = {
+    OnboardingStatus.INVITATION_SENT.value,
+    OnboardingStatus.INVITATION_OPENED.value,
+    OnboardingStatus.IN_PROGRESS.value,
+    OnboardingStatus.CORRECTIONS_REQUIRED.value,
+}
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 def audit(db: Session, onboarding: EmployeeOnboarding, action: str, actor: str, metadata: dict | None = None) -> None:
@@ -157,6 +177,8 @@ def deployment_status(db: Session, record: EmployeeOnboarding) -> DeploymentStat
 
 
 def issue_invitation(db: Session, record: EmployeeOnboarding, actor: str, ttl_hours: int = 72) -> tuple[str, datetime]:
+    if record.status not in INVITABLE_STATUSES:
+        raise ValueError("Onboarding is not eligible for a new invitation.")
     token = secrets.token_urlsafe(32)
     expires_at = utcnow() + timedelta(hours=ttl_hours)
     record.invitation_token_hash = hashlib.sha256(token.encode()).hexdigest()
@@ -173,9 +195,18 @@ def issue_invitation(db: Session, record: EmployeeOnboarding, actor: str, ttl_ho
 def resolve_token(db: Session, token: str) -> EmployeeOnboarding | None:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     record = db.scalar(select(EmployeeOnboarding).where(EmployeeOnboarding.invitation_token_hash == token_hash))
-    if record is None or record.invitation_revoked_at is not None:
+    if (
+        record is None
+        or record.invitation_revoked_at is not None
+        or record.status
+        in {
+            OnboardingStatus.APPROVED.value,
+            OnboardingStatus.ACTIVE.value,
+            OnboardingStatus.CANCELLED.value,
+        }
+    ):
         return None
-    if record.invitation_expires_at is None or record.invitation_expires_at < utcnow():
+    if record.invitation_expires_at is None or as_utc(record.invitation_expires_at) < utcnow():
         record.status = OnboardingStatus.INVITATION_EXPIRED.value
         db.commit()
         return None
@@ -183,6 +214,8 @@ def resolve_token(db: Session, token: str) -> EmployeeOnboarding | None:
 
 
 def update_progress(db: Session, record: EmployeeOnboarding, completed_items: list[str]) -> EmployeeOnboarding:
+    if record.status not in EMPLOYEE_EDITABLE_STATUSES:
+        raise ValueError("Onboarding is not open for employee changes.")
     completed = sorted(set(completed_items) & set(REQUIRED_ITEMS))
     record.completed_items = completed
     record.missing_items = [item for item in REQUIRED_ITEMS if item not in completed]
@@ -195,6 +228,8 @@ def update_progress(db: Session, record: EmployeeOnboarding, completed_items: li
 
 
 def submit(db: Session, record: EmployeeOnboarding, completed_items: list[str], acknowledgement: bool) -> EmployeeOnboarding:
+    if record.status not in EMPLOYEE_EDITABLE_STATUSES:
+        raise ValueError("Onboarding is not open for submission.")
     update_progress(db, record, completed_items)
     if record.missing_items or not acknowledgement:
         raise ValueError("All required onboarding items and acknowledgement are required.")
@@ -207,19 +242,81 @@ def submit(db: Session, record: EmployeeOnboarding, completed_items: list[str], 
     return record
 
 
-def activate(db: Session, record: EmployeeOnboarding, actor: str) -> EmployeeOnboarding:
+def portal_role_for_position(position: str) -> str:
+    if position == EmploymentPosition.EQUIPMENT_OPERATOR.value:
+        return "operator"
+    if position in {
+        EmploymentPosition.FOREMAN.value,
+        EmploymentPosition.SUPERINTENDENT.value,
+    }:
+        return "foreman"
+    return "employee"
+
+
+def activate(
+    db: Session,
+    record: EmployeeOnboarding,
+    actor: str,
+) -> tuple[EmployeeOnboarding, Employee, UserAccount, str]:
     if record.status != OnboardingStatus.APPROVED.value:
         raise ValueError("Onboarding must be approved before activation.")
+    if record.employee_id is not None:
+        raise ValueError("Onboarding has already been activated.")
     readiness = deployment_status(db, record)
     if readiness.status != "Ready":
         raise ValueError(f"Worker deployment is {readiness.status}: {' '.join(readiness.blockers)}")
-    employee = Employee(first_name=record.legal_first_name, last_name=record.legal_last_name, email=record.personal_email, role=record.position, phone=record.mobile_phone, hire_date=record.start_date, status="active", portal_role="employee")
-    db.add(employee)
+
+    username = record.personal_email.strip().lower()
+    existing_employee = db.scalar(
+        select(Employee.id).where(func.lower(Employee.email) == username)
+    )
+    if existing_employee is not None:
+        raise ValueError("An employee with that email already exists.")
+    existing_account = db.scalar(
+        select(UserAccount.id).where(func.lower(UserAccount.email) == username)
+    )
+    if existing_account is not None:
+        raise ValueError("A portal account with that email already exists and requires administrator review.")
+
+    portal_role = portal_role_for_position(record.position)
+    temporary_password = secrets.token_urlsafe(18)
+    employee = Employee(
+        first_name=record.legal_first_name,
+        last_name=record.legal_last_name,
+        email=username,
+        role=record.position,
+        phone=record.mobile_phone,
+        hire_date=record.start_date,
+        status="active",
+        portal_role=portal_role,
+    )
+    account = UserAccount(
+        email=username,
+        display_name=f"{record.preferred_name or record.legal_first_name} {record.legal_last_name}",
+        role="viewer",
+        password_hash=hash_password(temporary_password),
+        is_active=True,
+        session_version=1,
+        password_reset_required=True,
+    )
+    db.add_all([employee, account])
     db.flush()
     record.employee_id = employee.id
     record.status = OnboardingStatus.ACTIVE.value
     record.activated_at = utcnow()
-    audit(db, record, "activated", actor, {"employee_id": str(employee.id)})
+    audit(
+        db,
+        record,
+        "activated",
+        actor,
+        {
+            "employee_id": str(employee.id),
+            "account_id": str(account.id),
+            "portal_role": portal_role,
+        },
+    )
     db.commit()
     db.refresh(record)
-    return record
+    db.refresh(employee)
+    db.refresh(account)
+    return record, employee, account, temporary_password

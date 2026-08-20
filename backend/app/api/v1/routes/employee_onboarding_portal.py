@@ -31,7 +31,12 @@ def portal_record(token: str, db: DBSession) -> EmployeeOnboardingRead:
 
 @router.put("/{token}/progress", response_model=EmployeeOnboardingRead)
 def save_progress(token: str, payload: PortalProgressUpdate, db: DBSession) -> EmployeeOnboardingRead:
-    return EmployeeOnboardingRead.model_validate(service.update_progress(db, _resolve_or_404(db, token), payload.completed_items))
+    try:
+        return EmployeeOnboardingRead.model_validate(
+            service.update_progress(db, _resolve_or_404(db, token), payload.completed_items)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/{token}/submit", response_model=EmployeeOnboardingRead)

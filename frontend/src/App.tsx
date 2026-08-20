@@ -1,5 +1,5 @@
 import { Profiler } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -15,6 +15,8 @@ import {
   OperatorPortalPage,
   VehicleTrackingPage,
 } from "./pages/EmployeePortalPage";
+import { EmployeeOnboardingPage } from "./pages/EmployeeOnboardingPage";
+import { EmployeeOnboardingPortalPage } from "./pages/EmployeeOnboardingPortalPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EquipmentFieldPage } from "./pages/EquipmentFieldPage";
 import { FinancialControlPage } from "./pages/FinancialControlPage";
@@ -52,6 +54,14 @@ function OperatorPortalRoute() { return <OperatorPortalPage section={useParams()
 
 function AuthenticatedApp() {
   const { user, portalRole, isLoading } = useAuth();
+  const location = useLocation();
+  if (/^\/employee-onboarding\/[^/]+$/.test(location.pathname)) {
+    return (
+      <Routes>
+        <Route path="/employee-onboarding/:token" element={<EmployeeOnboardingPortalPage />} />
+      </Routes>
+    );
+  }
   if (isLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-iron-950 text-sm font-medium text-white">
@@ -86,6 +96,7 @@ function AuthenticatedApp() {
         <Route path="/safety-program" element={<SafetyProgramPage />} />
         <Route path="/safety-operations" element={<SafetyOperationsPage />} />
         <Route path="/worker-orientations" element={<WorkerOrientationsPage />} />
+        <Route path="/employee-onboarding" element={<EmployeeOnboardingPage />} />
         <Route path="/iron-house-chat" element={<IronHouseChatPage />} />
         <Route path="/meeting-minutes" element={<MeetingMinutesPage />} />
         <Route path="/google-calendar" element={<GoogleCalendarPage />} />

@@ -12,6 +12,7 @@ import {
   FolderKanban,
   Gauge,
   HardHat,
+  UserPlus,
   UserRoundCog,
   Landmark,
   Mic2,
@@ -95,6 +96,13 @@ export const modules: AppModule[] = [
     icon: ShieldCheck,
     description: "Controlled company and site orientation evidence with deployment status.",
     status: "Phase 3 review",
+  },
+  {
+    label: "Employee Onboarding",
+    path: "/employee-onboarding",
+    icon: UserPlus,
+    description: "New-hire intake, secure invitations, review, activation, and portal credentials.",
+    status: "Admin controlled",
   },
   {
     label: "Meeting Minutes",

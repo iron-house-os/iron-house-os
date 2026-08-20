@@ -20,6 +20,7 @@ class EmploymentPosition(StrEnum):
     JUNIOR_PIPELAYER = "junior_pipelayer"
     SENIOR_PIPELAYER = "senior_pipelayer"
     GRADEMAN_TOP_MAN = "grademan_top_man"
+    EQUIPMENT_OPERATOR = "equipment_operator"
     FOREMAN = "foreman"
     SUPERINTENDENT = "superintendent"
     ADMIN = "admin"
@@ -36,6 +37,7 @@ FIELD_POSITIONS = {
     EmploymentPosition.JUNIOR_PIPELAYER,
     EmploymentPosition.SENIOR_PIPELAYER,
     EmploymentPosition.GRADEMAN_TOP_MAN,
+    EmploymentPosition.EQUIPMENT_OPERATOR,
     EmploymentPosition.FOREMAN,
     EmploymentPosition.SUPERINTENDENT,
 }
@@ -130,6 +132,15 @@ class InvitationRead(BaseModel):
     onboarding_id: UUID
     invite_url: str
     expires_at: datetime
+
+
+class PortalActivationRead(BaseModel):
+    onboarding: EmployeeOnboardingRead
+    employee_id: UUID
+    account_id: UUID
+    username: EmailStr
+    temporary_password: str
+    portal_role: Literal["employee", "operator", "foreman"]
 
 
 class CorrectionRequest(BaseModel):
@@ -269,8 +280,9 @@ POSITION_OPTIONS = [
     PositionOption(value=EmploymentPosition.JUNIOR_PIPELAYER, label="Junior Pipelayer", category=EmploymentCategory.FIELD_STAFF, level=4),
     PositionOption(value=EmploymentPosition.SENIOR_PIPELAYER, label="Senior Pipelayer", category=EmploymentCategory.FIELD_STAFF, level=5),
     PositionOption(value=EmploymentPosition.GRADEMAN_TOP_MAN, label="Grademan / Top Man", category=EmploymentCategory.FIELD_STAFF, level=6),
-    PositionOption(value=EmploymentPosition.FOREMAN, label="Foreman", category=EmploymentCategory.FIELD_STAFF, level=7),
-    PositionOption(value=EmploymentPosition.SUPERINTENDENT, label="Superintendent", category=EmploymentCategory.FIELD_STAFF, level=8),
+    PositionOption(value=EmploymentPosition.EQUIPMENT_OPERATOR, label="Equipment Operator", category=EmploymentCategory.FIELD_STAFF, level=7),
+    PositionOption(value=EmploymentPosition.FOREMAN, label="Foreman", category=EmploymentCategory.FIELD_STAFF, level=8),
+    PositionOption(value=EmploymentPosition.SUPERINTENDENT, label="Superintendent", category=EmploymentCategory.FIELD_STAFF, level=9),
     PositionOption(value=EmploymentPosition.ADMIN, label="Admin", category=EmploymentCategory.OFFICE_STAFF, level=1),
     PositionOption(value=EmploymentPosition.CONTROLLER, label="Controller", category=EmploymentCategory.OFFICE_STAFF, level=2),
     PositionOption(value=EmploymentPosition.PROJECT_MANAGER, label="Project Manager", category=EmploymentCategory.OFFICE_STAFF, level=3),
