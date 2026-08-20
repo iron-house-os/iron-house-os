@@ -185,10 +185,10 @@ export function EmployeeOnboardingPage() {
       } catch (reason) {
         if (reason instanceof DOMException && reason.name === "AbortError") {
           setMessage("Sharing cancelled. The current invitation and QR remain available.");
+          return;
         } else {
-          setError("The device could not share the QR. Download it or use the email link instead.");
+          setError("The device could not attach the QR. Opening an email with the secure link instead.");
         }
-        return;
       }
     }
     window.location.href = `mailto:${encodeURIComponent(invitationRecipient.personal_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;

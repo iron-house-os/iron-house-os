@@ -7,6 +7,7 @@ import hashlib
 import json
 
 from cryptography.fernet import Fernet, InvalidToken
+from pydantic import ValidationError
 
 from app.core.config import get_settings
 from app.schemas.employee_onboarding import PortalPacket
@@ -28,7 +29,7 @@ def decrypt_packet(encrypted: str | None) -> PortalPacket:
     try:
         decoded = _cipher().decrypt(encrypted.encode("ascii"))
         return PortalPacket.model_validate_json(decoded)
-    except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
+    except (InvalidToken, UnicodeDecodeError, ValidationError) as exc:
         raise OnboardingDataUnavailable(
             "The restricted onboarding packet cannot be decrypted. Administrator review is required."
         ) from exc

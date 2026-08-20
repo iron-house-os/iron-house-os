@@ -3,6 +3,7 @@ from datetime import date
 from urllib.parse import urlparse
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -15,6 +16,7 @@ from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardin
 from app.models.user import UserAccount
 from app.services.auth import hash_password
 from app.services.employee_onboarding import REQUIRED_ITEMS
+from app.services.onboarding_data import OnboardingDataUnavailable, decrypt_packet
 
 
 def _client() -> tuple[TestClient, sessionmaker[Session], str]:
@@ -246,3 +248,14 @@ def test_resend_invalidates_the_previous_invitation_token() -> None:
     assert first_token != second_token
     assert client.get(f"/api/v1/employee-onboarding/portal/{first_token}").status_code == 404
     assert client.get(f"/api/v1/employee-onboarding/portal/{second_token}").status_code == 200
+
+
+def test_invalid_decrypted_packet_is_reported_as_unavailable(monkeypatch) -> None:
+    class InvalidPacketCipher:
+        def decrypt(self, _: bytes) -> bytes:
+            return b'{"personal_information":{"mobile_phone":"short"}}'
+
+    monkeypatch.setattr("app.services.onboarding_data._cipher", lambda: InvalidPacketCipher())
+
+    with pytest.raises(OnboardingDataUnavailable):
+        decrypt_packet("encrypted-packet")
