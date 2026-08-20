@@ -14,16 +14,18 @@ const user = {
 };
 
 const mediaId = "00000000-0000-0000-0000-000000000155";
+const secondMediaId = "00000000-0000-0000-0000-000000000158";
 const intakeId = "00000000-0000-0000-0000-000000000156";
+const secondIntakeId = "00000000-0000-0000-0000-000000000159";
 const image = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
 
-function intake() {
+function intake(id = intakeId, selectedMediaId = mediaId) {
   return {
-    id: intakeId,
-    media_id: mediaId,
+    id,
+    media_id: selectedMediaId,
     media_hash: "a".repeat(64),
     uploader_id: user.id,
     uploader_email: user.email,
@@ -69,8 +71,11 @@ async function mockBackupsApi(page: Page) {
       return;
     }
     if (path.endsWith("/media") && request.method() === "POST") {
-      expect(request.postData() ?? "").toContain('name="files"');
-      await route.fulfill({ status: 201, json: [{ id: mediaId }] });
+      const payload = request.postData() ?? "";
+      expect(payload).toContain('name="files"');
+      expect(payload).toContain('filename="receipt-front.png"');
+      expect(payload).toContain('filename="receipt-back.png"');
+      await route.fulfill({ status: 201, json: [{ id: mediaId }, { id: secondMediaId }] });
       return;
     }
     if (path.endsWith("/backups/controller/daily") && request.method() === "POST") {
@@ -95,20 +100,22 @@ async function mockBackupsApi(page: Page) {
       return;
     }
     if (path.endsWith("/backups") && request.method() === "POST") {
-      expect(request.postDataJSON()).toMatchObject({
-        media_id: mediaId,
+      const payload = request.postDataJSON();
+      expect(payload).toMatchObject({
         note: "Fuel receipt",
         project_hint: "Main Street",
       });
-      items = [intake()];
-      await route.fulfill({ status: 201, json: items[0] });
+      expect([mediaId, secondMediaId]).toContain(payload.media_id);
+      const created = payload.media_id === mediaId ? intake() : intake(secondIntakeId, secondMediaId);
+      items = [...items, created];
+      await route.fulfill({ status: 201, json: created });
       return;
     }
     if (path.endsWith("/backups")) {
       await route.fulfill({ status: 200, json: { items, total: items.length } });
       return;
     }
-    if (path.endsWith(`/${mediaId}/content`)) {
+    if ([mediaId, secondMediaId].some((id) => path.endsWith(`/${id}/content`))) {
       await route.fulfill({ status: 200, body: image, contentType: "image/png" });
       return;
     }
@@ -116,25 +123,28 @@ async function mockBackupsApi(page: Page) {
   });
 }
 
-test("single-photo Backups intake is responsive, private, and accessible", async ({ page }) => {
+test("multi-photo Backups intake is responsive, private, and accessible", async ({ page }) => {
   await mockBackupsApi(page);
   await page.goto("/backups");
 
   await expect(page.getByRole("heading", { name: "Backups", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Company queue" })).toBeVisible();
-  const photo = page.getByLabel("Photo");
+  const photo = page.getByLabel("Take photos or choose multiple", { exact: true });
   await expect(photo).toHaveAttribute("accept", "image/*");
   await expect(photo).toHaveAttribute("capture", "environment");
-  await expect(photo).not.toHaveAttribute("multiple", "");
-  await photo.setInputFiles({ name: "receipt.png", mimeType: "image/png", buffer: image });
+  await expect(photo).toHaveAttribute("multiple", "");
+  await photo.setInputFiles([
+    { name: "receipt-front.png", mimeType: "image/png", buffer: image },
+    { name: "receipt-back.png", mimeType: "image/png", buffer: image },
+  ]);
   await page.getByLabel("Optional note").fill("Fuel receipt");
   await page.getByLabel("Optional project hint").fill("Main Street");
-  await page.getByRole("button", { name: "Store photo in Backups" }).click();
+  await page.getByRole("button", { name: "Store 2 photos in Backups" }).click();
 
-  await expect(page.getByRole("status")).toContainText("Photo stored");
-  await expect(page.getByText("Fuel receipt", { exact: true })).toBeVisible();
-  await expect(page.getByAltText("Private Backups original")).toBeVisible();
-  await expect(page.getByText("1 audit event(s) · 0 controller attempt(s)")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("2 photos stored");
+  await expect(page.getByText("Fuel receipt", { exact: true })).toHaveCount(2);
+  await expect(page.getByAltText("Private Backups original")).toHaveCount(2);
+  await expect(page.getByText("1 audit event(s) · 0 controller attempt(s)")).toHaveCount(2);
   await page.getByRole("button", { name: "Run daily controller" }).click();
   const destination = page.getByRole("combobox", { name: `Destination for ${intakeId}` });
   await expect(destination).toHaveValue("finance_intake");
