@@ -1,4 +1,4 @@
-"""Interactive, staging-only employee onboarding draft creator."""
+"""Interactive, staging-only employee onboarding operator helper."""
 
 from __future__ import annotations
 
@@ -6,12 +6,15 @@ import argparse
 from dataclasses import dataclass
 from datetime import date
 from getpass import getpass
+from http.cookiejar import CookieJar
 import json
+import os
+from pathlib import Path
+import tempfile
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
-from http.cookiejar import CookieJar
 
 
 STAGING_BASE_URL = "https://staging.os.ironhousecivil.com"
@@ -53,11 +56,37 @@ class DraftResult:
     position: str
 
 
+@dataclass(frozen=True)
+class RosterRecord:
+    onboarding_id: str
+    legal_first_name: str
+    legal_last_name: str
+    position: str
+    label: str
+    status: str
+
+
+@dataclass(frozen=True)
+class InvitationLink:
+    worker_name: str
+    label: str
+    invite_url: str
+    expires_at: str
+
+
 EXECUTIVE_STAGING_ROSTER = (
     ("Mack", "Warren", "ceo", "CEO"),
     ("Jeremie", "Peters", "president", "President"),
     ("Stefani", "Warren", "cfo", "CFO"),
 )
+INVITABLE_STATUSES = {
+    "draft",
+    "invitation_sent",
+    "invitation_opened",
+    "in_progress",
+    "corrections_required",
+    "invitation_expired",
+}
 
 
 def validate_staging_base_url(base_url: str) -> str:
@@ -167,6 +196,63 @@ class StagingOnboardingClient:
             raise StagingOnboardingError("Staging created a draft but did not return its record ID.")
         return DraftResult(outcome="created", onboarding_id=onboarding_id, position=draft.position)
 
+    def executive_roster_records(self) -> list[RosterRecord]:
+        response = self._request("GET", "/employee-onboarding")
+        items = response.get("items", []) if isinstance(response, dict) else []
+        records: list[RosterRecord] = []
+        for first_name, last_name, position, label in EXECUTIVE_STAGING_ROSTER:
+            matches = [
+                item
+                for item in items
+                if isinstance(item, dict)
+                and str(item.get("legal_first_name", "")).strip().casefold() == first_name.casefold()
+                and str(item.get("legal_last_name", "")).strip().casefold() == last_name.casefold()
+                and item.get("position") == position
+            ]
+            if len(matches) != 1:
+                reason = "missing" if not matches else "ambiguous"
+                raise StagingOnboardingError(
+                    f"The {label} staging onboarding record is {reason}; invitation generation stopped."
+                )
+            item = matches[0]
+            onboarding_id = item.get("id")
+            status = item.get("status")
+            if not isinstance(onboarding_id, str) or not isinstance(status, str):
+                raise StagingOnboardingError(f"The {label} staging onboarding record is incomplete.")
+            if status not in INVITABLE_STATUSES:
+                raise StagingOnboardingError(
+                    f"The {label} staging onboarding record cannot receive an invitation while {status}."
+                )
+            records.append(
+                RosterRecord(
+                    onboarding_id=onboarding_id,
+                    legal_first_name=first_name,
+                    legal_last_name=last_name,
+                    position=position,
+                    label=label,
+                    status=status,
+                )
+            )
+        return records
+
+    def issue_invitation(self, record: RosterRecord) -> InvitationLink:
+        response = self._request(
+            "POST",
+            f"/employee-onboarding/{record.onboarding_id}/invite",
+        )
+        invite_url = response.get("invite_url") if isinstance(response, dict) else None
+        expires_at = response.get("expires_at") if isinstance(response, dict) else None
+        if not isinstance(invite_url, str) or not isinstance(expires_at, str):
+            raise StagingOnboardingError(
+                f"Staging issued the {record.label} invitation without a complete handoff response."
+            )
+        return InvitationLink(
+            worker_name=f"{record.legal_first_name} {record.legal_last_name}",
+            label=record.label,
+            invite_url=invite_url,
+            expires_at=expires_at,
+        )
+
     def logout(self) -> None:
         self._request("POST", "/auth/logout")
 
@@ -181,15 +267,44 @@ def _prompt_date(prompt: str, default: date) -> date:
         raise StagingOnboardingError("Start date must use YYYY-MM-DD format.") from exc
 
 
-def run_interactive(client: StagingOnboardingClient) -> int:
-    print("Iron House OS staging onboarding helper")
-    print("Creates drafts only. It does not invite, approve, orient, activate, or generate passwords.")
+def _login_interactively(client: StagingOnboardingClient) -> None:
     admin_email = input("Staging administrator email: ").strip()
     admin_password = getpass("Staging administrator password (hidden): ")
     try:
         client.login(admin_email, admin_password)
     finally:
         del admin_password
+
+
+def write_invitation_handoff(
+    invitations: list[InvitationLink],
+    *,
+    directory: Path | None = None,
+) -> Path:
+    if not invitations:
+        raise StagingOnboardingError("No invitation links were generated.")
+    file_descriptor, raw_path = tempfile.mkstemp(
+        prefix="ihos-staging-invitations-",
+        suffix=".txt",
+        dir=str(directory) if directory else None,
+        text=True,
+    )
+    path = Path(raw_path)
+    with os.fdopen(file_descriptor, "w", encoding="utf-8") as handle:
+        handle.write("Iron House OS staging invitation handoff\n")
+        handle.write("These links are confidential, expire, and are replaced by a later handoff.\n\n")
+        for invitation in invitations:
+            handle.write(f"{invitation.worker_name} — {invitation.label}\n")
+            handle.write(f"Expires: {invitation.expires_at}\n")
+            handle.write(f"{invitation.invite_url}\n\n")
+    path.chmod(0o600)
+    return path
+
+
+def run_interactive(client: StagingOnboardingClient) -> int:
+    print("Iron House OS staging onboarding helper")
+    print("Creates drafts only. It does not invite, approve, orient, activate, or generate passwords.")
+    _login_interactively(client)
 
     client.verify_positions({"ceo", "president", "cfo"})
     start_date = _prompt_date("Start date for these staging records", date.today())
@@ -228,12 +343,49 @@ def run_interactive(client: StagingOnboardingClient) -> int:
     return 0
 
 
+def run_invitation_handoff(client: StagingOnboardingClient) -> int:
+    print("Iron House OS staging invitation handoff")
+    print("Issues fresh links only. It does not complete, acknowledge, approve, orient, or activate records.")
+    _login_interactively(client)
+    invitations: list[InvitationLink] = []
+    handoff_path: Path | None = None
+    try:
+        records = client.executive_roster_records()
+        for record in records:
+            invitations.append(client.issue_invitation(record))
+            print(f"Fresh {record.label} invitation issued.")
+        handoff_path = write_invitation_handoff(invitations)
+    except StagingOnboardingError as exc:
+        if invitations:
+            handoff_path = write_invitation_handoff(invitations)
+            raise StagingOnboardingError(
+                f"{exc} {len(invitations)} current link(s) were saved to {handoff_path}."
+            ) from exc
+        raise
+    finally:
+        client.logout()
+
+    print(f"Invitation handoff saved to: {handoff_path}")
+    print("Open the file, share each link only with its named employee, then delete the file.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "action",
+        nargs="?",
+        choices=("create", "invite"),
+        default="create",
+        help="create staging drafts or issue secure invitation links",
+    )
     parser.add_argument("--base-url", default=STAGING_BASE_URL, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
-        return run_interactive(StagingOnboardingClient(base_url=args.base_url))
+        client = StagingOnboardingClient(base_url=args.base_url)
+        if args.action == "invite":
+            return run_invitation_handoff(client)
+        return run_interactive(client)
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled. No further records were created.")
         return 130
