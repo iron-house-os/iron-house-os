@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 15
     env:
       IMPORT_FILE: ops/production-project-imports/2026-08-20-ab-tech-bennett-option-3.json
-      EVIDENCE_FILE: ${{ runner.temp }}/production-project-import-evidence.json
+      EVIDENCE_FILE: production-project-import-evidence.json
     steps:
       - name: Check out owner-approved import
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -168,14 +168,14 @@ jobs:
             echo '~~~json'
             cat "$EVIDENCE_FILE"
             echo '~~~'
-          } > "${{ runner.temp }}/production-project-import-comment.md"
-          gh pr comment "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" --body-file "${{ runner.temp }}/production-project-import-comment.md"
+          } > "$RUNNER_TEMP/production-project-import-comment.md"
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/production-project-import-comment.md"
 
       - name: Upload immutable import evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: production-project-import-${{ github.run_id }}
-          path: ${{ runner.temp }}/production-project-import-evidence.json
+          path: production-project-import-evidence.json
           if-no-files-found: warn
           retention-days: 90
