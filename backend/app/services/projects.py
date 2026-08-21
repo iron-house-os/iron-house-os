@@ -4,6 +4,8 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -33,30 +35,60 @@ JOB_NUMBER_WIDTH = 3
 JOB_NUMBER_RETRY_LIMIT = 20
 IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
 PROJECT_START_CHECKLIST: tuple[tuple[str, str, str], ...] = (
-    ("award_contract", "Contract", "Award notice or executed contract and the client scope record are saved."),
+    (
+        "award_contract",
+        "Contract",
+        "Award notice or executed contract and the client scope record are saved.",
+    ),
     ("scope_review", "Contract", "Scope, exclusions, allowances, and alternates are reviewed."),
-    ("current_documents", "Documents", "Current drawings, specifications, and addenda are confirmed."),
+    (
+        "current_documents",
+        "Documents",
+        "Current drawings, specifications, and addenda are confirmed.",
+    ),
     (
         "contacts_authority",
         "Administration",
         "Project contacts, authority limits, and communication path are confirmed.",
     ),
-    ("budget_cost_codes", "Cost control", "Baseline budget and project cost codes are established."),
-    ("schedule_milestones", "Schedule", "Baseline schedule, milestones, and notice periods are established."),
-    ("procurement_plan", "Procurement", "Subcontractor, material, equipment, and procurement plans are established."),
-    ("permits_insurance_bonding", "Administration", "Permit, insurance, and bonding requirements are assigned."),
+    (
+        "budget_cost_codes",
+        "Cost control",
+        "Baseline budget and project cost codes are established.",
+    ),
+    (
+        "schedule_milestones",
+        "Schedule",
+        "Baseline schedule, milestones, and notice periods are established.",
+    ),
+    (
+        "procurement_plan",
+        "Procurement",
+        "Subcontractor, material, equipment, and procurement plans are established.",
+    ),
+    (
+        "permits_insurance_bonding",
+        "Administration",
+        "Permit, insurance, and bonding requirements are assigned.",
+    ),
     (
         "safety_mobilization",
         "Safety",
         "Project-specific safety and mobilization requirements are assigned for verification.",
     ),
-    ("quality_testing_asbuilts", "Quality", "Quality, inspection, testing, and as-built requirements are assigned."),
+    (
+        "quality_testing_asbuilts",
+        "Quality",
+        "Quality, inspection, testing, and as-built requirements are assigned.",
+    ),
 )
 
 
 def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     values = _project_values(payload)
-    if values.get("status") == ProjectStatus.awarded.value and not _has_job_number(values.get("project_number")):
+    if values.get("status") == ProjectStatus.awarded.value and not _has_job_number(
+        values.get("project_number")
+    ):
         return _create_awarded_project(db, values, payload.supplier_ids)
 
     project = Project(**values)
@@ -70,7 +102,11 @@ def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
 
 
 def list_projects(db: Session, status: str | None = None) -> ProjectList:
-    statement = select(Project).options(selectinload(Project.supplier_links)).order_by(Project.created_at.desc())
+    statement = (
+        select(Project)
+        .options(selectinload(Project.supplier_links))
+        .order_by(Project.created_at.desc())
+    )
     if status:
         statement = statement.where(Project.status == status)
     items = [_to_schema(project) for project in db.scalars(statement).all()]
@@ -148,9 +184,13 @@ def _update_awarded_project(
 def _next_job_number(db: Session, award_year: int | None = None) -> str:
     year = award_year or datetime.now(IRON_HOUSE_TIME_ZONE).year
     prefix = f"{JOB_NUMBER_PREFIX}-{year}-"
-    existing = db.scalars(select(Project.project_number).where(Project.project_number.like(f"{prefix}%"))).all()
+    existing = db.scalars(
+        select(Project.project_number).where(Project.project_number.like(f"{prefix}%"))
+    ).all()
     pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
-    sequences = [int(match.group(1)) for number in existing if number and (match := pattern.match(number))]
+    sequences = [
+        int(match.group(1)) for number in existing if number and (match := pattern.match(number))
+    ]
     return f"{prefix}{max(sequences, default=0) + 1:0{JOB_NUMBER_WIDTH}d}"
 
 
@@ -160,7 +200,9 @@ def _has_job_number(value: object) -> bool:
 
 def _provision_awarded_workspace(db: Session, project: Project) -> None:
     if not _has_job_number(project.project_number):
-        raise AppError("A permanent job number is required before workspace provisioning", status_code=409)
+        raise AppError(
+            "A permanent job number is required before workspace provisioning", status_code=409
+        )
     if not project.workspace_root:
         manifest = project_folders.build_awarded_project_folder_manifest(
             job_number=str(project.project_number),
@@ -177,23 +219,34 @@ def _provision_awarded_workspace(db: Session, project: Project) -> None:
 
 
 def _provision_project_start_checklist(db: Session, project_id: UUID) -> None:
-    existing_codes = set(
-        db.scalars(
-            select(ProjectStartChecklistItem.code).where(ProjectStartChecklistItem.project_id == project_id)
-        ).all()
-    )
-    db.add_all(
-        ProjectStartChecklistItem(
-            project_id=project_id,
-            code=code,
-            category=category,
-            label=label,
-            sort_order=sort_order,
-            completed=False,
-        )
+    values = [
+        {
+            "project_id": project_id,
+            "code": code,
+            "category": category,
+            "label": label,
+            "sort_order": sort_order,
+            "completed": False,
+        }
         for sort_order, (code, category, label) in enumerate(PROJECT_START_CHECKLIST, start=1)
-        if code not in existing_codes
-    )
+    ]
+    dialect_name = db.get_bind().dialect.name
+    if dialect_name == "postgresql":
+        statement = postgresql_insert(ProjectStartChecklistItem).values(values)
+        db.execute(statement.on_conflict_do_nothing(index_elements=["project_id", "code"]))
+        return
+    if dialect_name == "sqlite":
+        statement = sqlite_insert(ProjectStartChecklistItem).values(values)
+        db.execute(statement.on_conflict_do_nothing(index_elements=["project_id", "code"]))
+        return
+
+    for value in values:
+        try:
+            with db.begin_nested():
+                db.add(ProjectStartChecklistItem(**value))
+                db.flush()
+        except IntegrityError:
+            continue
 
 
 def archive_project(db: Session, project_id: UUID) -> ProjectRead:
@@ -283,12 +336,26 @@ def _project_start_checklist_schema(
 
 def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
     project = _load_project(db, project_id)
-    rfq_count = db.scalar(select(func.count()).select_from(RFQPackage).where(RFQPackage.project_id == project_id)) or 0
-    supplier_count = (
-        db.scalar(select(func.count()).select_from(ProjectSupplier).where(ProjectSupplier.project_id == project_id))
+    rfq_count = (
+        db.scalar(
+            select(func.count()).select_from(RFQPackage).where(RFQPackage.project_id == project_id)
+        )
         or 0
     )
-    document_count = db.scalar(select(func.count()).select_from(Document).where(Document.project_id == project_id)) or 0
+    supplier_count = (
+        db.scalar(
+            select(func.count())
+            .select_from(ProjectSupplier)
+            .where(ProjectSupplier.project_id == project_id)
+        )
+        or 0
+    )
+    document_count = (
+        db.scalar(
+            select(func.count()).select_from(Document).where(Document.project_id == project_id)
+        )
+        or 0
+    )
     drawing_count = (
         db.scalar(
             select(func.count())
@@ -300,7 +367,10 @@ def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
         )
         or 0
     )
-    drawing_count += db.scalar(select(func.count()).select_from(Drawing).where(Drawing.project_id == project_id)) or 0
+    drawing_count += (
+        db.scalar(select(func.count()).select_from(Drawing).where(Drawing.project_id == project_id))
+        or 0
+    )
     bid_status = _bid_status(db, project_id)
     readiness_percentage = _readiness_percentage(
         rfq_count=rfq_count,
@@ -321,7 +391,11 @@ def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
 
 
 def _load_project(db: Session, project_id: UUID) -> Project:
-    project = db.scalar(select(Project).where(Project.id == project_id).options(selectinload(Project.supplier_links)))
+    project = db.scalar(
+        select(Project)
+        .where(Project.id == project_id)
+        .options(selectinload(Project.supplier_links))
+    )
     if project is None:
         raise AppError("Project not found", status_code=404)
     return project
@@ -343,7 +417,10 @@ def _project_values(payload: ProjectCreate | ProjectUpdate) -> dict:
 
 def _replace_suppliers(db: Session, project_id: UUID, supplier_ids: list[UUID]) -> None:
     db.execute(delete(ProjectSupplier).where(ProjectSupplier.project_id == project_id))
-    db.add_all(ProjectSupplier(project_id=project_id, supplier_id=supplier_id) for supplier_id in supplier_ids)
+    db.add_all(
+        ProjectSupplier(project_id=project_id, supplier_id=supplier_id)
+        for supplier_id in supplier_ids
+    )
 
 
 def _bid_status(db: Session, project_id: UUID) -> str:
@@ -384,7 +461,9 @@ def _to_schema(project: Project) -> ProjectRead:
         project_address=project.project_address,
         latitude=project.latitude,
         longitude=project.longitude,
-        contract_value=(float(project.contract_value) if project.contract_value is not None else None),
+        contract_value=(
+            float(project.contract_value) if project.contract_value is not None else None
+        ),
         status=workflow_enum(
             ProjectStatus,
             project.status,
