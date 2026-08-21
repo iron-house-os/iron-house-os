@@ -88,12 +88,15 @@ export function CustomerQuotesPage() {
     siteAddress.trim() || scopeSummary.trim() || notes.trim() || assumptions.trim() || exclusions.trim() ||
     lineItems.some((line) => line.description.trim() || Number(line.unit_price) > 0),
   );
+  const targetParams = new URLSearchParams(location.search);
+  const targetedQuoteEdit = Boolean(targetParams.get("quoteId") && targetParams.get("action") === "edit");
   const draft = useWorkflowDraft({
     workflowType: "customer_quote",
     title: customerName.trim() ? `Customer quote — ${customerName.trim()}` : "Customer quote",
     payload: draftPayload,
     ready: registerReady,
     enabled: draftEnabled && !editing,
+    recoverLocal: !targetedQuoteEdit,
     onRestore: (saved) => {
       setProjectName(text(saved.projectName));
       setCustomerName(text(saved.customerName));
@@ -266,7 +269,7 @@ export function CustomerQuotesPage() {
 
       <form onSubmit={submit} className="space-y-5 rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `Edit ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form.</p></div>
+          <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `${editing.status === "declined" || editing.status === "expired" ? "New revision" : "Edit"} ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form.</p></div>
           {editing ? <button type="button" onClick={reset} className="rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold">Cancel edit</button> : null}
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -318,7 +321,8 @@ export function CustomerQuotesPage() {
         <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500"><tr><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Customer / project</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>
           {quotes.map((quote) => {
             const targeted = new URLSearchParams(location.search).get("quoteId") === quote.id;
-            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}</td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" && quote.status !== "declined" && quote.status !== "expired" ? <><button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">Edit</button>{quote.status === "draft" ? <button type="button" onClick={() => void markSent(quote)} className="font-semibold text-iron-700">Mark sent</button> : null}{user?.role === "admin" || user?.role === "operations_manager" ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}<button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Open PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
+            const closed = quote.status === "declined" || quote.status === "expired";
+            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}</td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" ? <><button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">{closed ? "Start new revision" : "Edit"}</button>{!closed && quote.status === "draft" ? <button type="button" onClick={() => void markSent(quote)} className="font-semibold text-iron-700">Mark sent</button> : null}{!closed && (user?.role === "admin" || user?.role === "operations_manager") ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}{!closed ? <><button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}</> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Open PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
           })}
           {!quotes.length ? <tr><td colSpan={6} className="px-3 py-8 text-center text-iron-500">No customer quotes yet.</td></tr> : null}
         </tbody></table></div>

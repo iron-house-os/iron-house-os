@@ -13,7 +13,7 @@ function jsonResponse(payload: unknown, status = 200) {
   });
 }
 
-function Harness() {
+function Harness({ recoverLocal = true }: { recoverLocal?: boolean }) {
   const [value, setValue] = useState("");
   const draft = useWorkflowDraft({
     workflowType: "purchase_order_request",
@@ -21,6 +21,7 @@ function Harness() {
     payload: { value },
     ready: true,
     enabled: Boolean(value),
+    recoverLocal,
     onRestore: (saved) => setValue(typeof saved.value === "string" ? saved.value : ""),
   });
   return (
@@ -34,6 +35,7 @@ function Harness() {
 describe("useWorkflowDraft", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
       return jsonResponse({
@@ -80,5 +82,17 @@ describe("useWorkflowDraft", () => {
 
     expect(await screen.findByDisplayValue("Recovered valves")).toBeInTheDocument();
     expect(screen.getByText("Recovered unsaved work from this device")).toBeInTheDocument();
+  });
+
+  it("can preserve an explicitly targeted record instead of restoring a device buffer", async () => {
+    window.localStorage.setItem(
+      "ihos:draft-recovery:purchase_order_request",
+      JSON.stringify({ payload: { value: "Unrelated recovered valves" }, savedAt: "2026-08-21T06:25:00Z" }),
+    );
+
+    render(<Harness recoverLocal={false} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Purpose")).toHaveValue(""));
+    expect(screen.queryByText("Recovered unsaved work from this device")).not.toBeInTheDocument();
   });
 });

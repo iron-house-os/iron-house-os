@@ -184,7 +184,7 @@ export const projectsApi = {
     }),
   dashboard: (id: string) => request<ProjectDashboard>(`/projects/${id}/dashboard`),
   workspace: (id: string) => request<AwardedProjectWorkspace>(`/projects/${id}/workspace`),
-  launchDashboard: (id: string) => request<ProjectLaunchDashboard>(`/projects/${id}/launch-dashboard`),
+  launchDashboard: (id: string, options?: RequestInit) => request<ProjectLaunchDashboard>(`/projects/${id}/launch-dashboard`, options),
   startChecklist: (id: string) => requestOptional<ProjectStartChecklist>(`/projects/${id}/start-checklist`),
   updateStartChecklistItem: (id: string, code: string, completed: boolean) =>
     request<ProjectStartChecklist>(`/projects/${id}/start-checklist/${encodeURIComponent(code)}`, {

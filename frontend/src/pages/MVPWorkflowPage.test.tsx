@@ -123,7 +123,7 @@ describe("MVPWorkflowPage", () => {
     );
 
     const launchCard = within(queue).getByText("Awarded launch job").closest("article");
-    expect(launchCard).toHaveTextContent("3 of 10 start controls");
+    await waitFor(() => expect(launchCard).toHaveTextContent("3 of 10 start controls"));
     expect(within(launchCard as HTMLElement).getByRole("link", { name: "Complete launch controls" })).toHaveAttribute(
       "href",
       `/projects/${launchJob.id}`,
@@ -145,7 +145,64 @@ describe("MVPWorkflowPage", () => {
       "href",
       expect.stringContaining(`projectId=${constructionJob.id}`),
     );
+    expect(within(constructionCard as HTMLElement).getByRole("link", { name: "PO requests" })).toHaveAttribute(
+      "href",
+      expect.stringContaining(`/request-po?projectId=${constructionJob.id}`),
+    );
+    expect(within(constructionCard as HTMLElement).getByRole("link", { name: "Documents" })).toHaveAttribute(
+      "href",
+      expect.stringContaining(`/documents?projectId=${constructionJob.id}`),
+    );
     expect(within(queue).getAllByRole("article")).toHaveLength(5);
+  });
+
+  it("shows awarded and construction records even if a stale active quote references them", async () => {
+    mockApi({
+      quotes: [customerQuote({ project_id: constructionJob.id, status: "draft" })],
+      projects: [constructionJob],
+    });
+
+    renderWorkflow();
+
+    const queue = await screen.findByLabelText("Active quote-to-job work queue");
+    expect(within(queue).getByText("Quote draft")).toBeInTheDocument();
+    expect(within(queue).getByText("Active delivery")).toBeInTheDocument();
+    expect(within(queue).getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("renders awarded jobs before bounded launch summaries finish and includes legacy jobs", async () => {
+    let maxConcurrentLaunches = 0;
+    const jobs = Array.from({ length: 5 }, (_, index) => project({
+      id: `legacy-awarded-${index + 1}`,
+      name: `Legacy awarded ${index + 1}`,
+      status: "awarded",
+      project_number: `IH-2026-${30 + index}`,
+      workspace_root: null,
+    }));
+    const launches = Object.fromEntries(jobs.map((job) => [job.id, launchDashboard(job, "not_ready")]));
+    const fetchMock = mockApi({
+      projects: jobs,
+      launches,
+      launchDelay: 40,
+      onLaunchActivity: (active) => { maxConcurrentLaunches = Math.max(maxConcurrentLaunches, active); },
+    });
+
+    renderWorkflow();
+
+    expect(await screen.findByText("Legacy awarded 1")).toBeInTheDocument();
+    expect(screen.getByText("5 active")).toBeInTheDocument();
+    expect(screen.getAllByText(/launch summary is temporarily unavailable/i)).toHaveLength(5);
+
+    await waitFor(() => expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).includes("/launch-dashboard")),
+    ).toHaveLength(5));
+    expect(maxConcurrentLaunches).toBe(3);
+    for (const job of jobs) {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/projects/${job.id}/launch-dashboard`),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    }
   });
 
   it("keeps available work usable when one source fails", async () => {
@@ -170,13 +227,18 @@ function mockApi({
   projects = [],
   launches = {},
   failQuotes = false,
+  launchDelay = 0,
+  onLaunchActivity,
 }: {
   drafts?: (typeof draft)[];
   quotes?: CustomerQuote[];
   projects?: Project[];
   launches?: Record<string, ProjectLaunchDashboard>;
   failQuotes?: boolean;
+  launchDelay?: number;
+  onLaunchActivity?: (active: number) => void;
 } = {}) {
+  let activeLaunches = 0;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
     if (url.includes("/workflow-drafts/") && url.endsWith("/cancel") && init?.method === "POST") {
@@ -188,8 +250,16 @@ function mockApi({
     }
     const launchMatch = url.match(/\/projects\/([^/]+)\/launch-dashboard$/);
     if (launchMatch) {
-      const launch = launches[launchMatch[1]];
-      return launch ? response(launch) : response({ detail: "Unavailable" }, 503);
+      activeLaunches += 1;
+      onLaunchActivity?.(activeLaunches);
+      try {
+        if (launchDelay) await new Promise((resolve) => window.setTimeout(resolve, launchDelay));
+        const launch = launches[launchMatch[1]];
+        return launch ? response(launch) : response({ detail: "Unavailable" }, 503);
+      } finally {
+        activeLaunches -= 1;
+        onLaunchActivity?.(activeLaunches);
+      }
     }
     if (url.endsWith("/projects")) return response({ items: projects, total: projects.length });
     return response({ detail: "Not found" }, 404);

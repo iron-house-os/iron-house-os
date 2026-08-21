@@ -16,6 +16,7 @@ type UseWorkflowDraftOptions<T extends Record<string, unknown>> = {
   projectId?: string | null;
   ready: boolean;
   enabled: boolean;
+  recoverLocal?: boolean;
   onRestore: (payload: T) => void;
   schemaVersion?: number;
 };
@@ -38,6 +39,7 @@ export function useWorkflowDraft<T extends Record<string, unknown>>({
   projectId = null,
   ready,
   enabled,
+  recoverLocal = true,
   onRestore,
   schemaVersion = 1,
 }: UseWorkflowDraftOptions<T>) {
@@ -79,7 +81,7 @@ export function useWorkflowDraft<T extends Record<string, unknown>>({
           replaceDraftId(null);
           setStatus("offline");
         }
-      } else {
+      } else if (recoverLocal) {
         try {
           const raw = window.localStorage.getItem(localKey);
           if (raw) {
@@ -97,7 +99,7 @@ export function useWorkflowDraft<T extends Record<string, unknown>>({
 
     void initialize();
     return () => { active = false; };
-  }, [localKey, ready, workflowType]);
+  }, [localKey, ready, recoverLocal, workflowType]);
 
   useEffect(() => {
     if (!ready || !initialized || !enabled) return;
