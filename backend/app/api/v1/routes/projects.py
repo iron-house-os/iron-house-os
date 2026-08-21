@@ -12,7 +12,7 @@ from app.schemas.project import (
     ProjectRead,
     ProjectUpdate,
 )
-from app.schemas.project_folder import ProjectFolderManifest, ProjectFolderRequest
+from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest, ProjectFolderRequest
 from app.schemas.project_readiness import ProjectReadinessResponse
 from app.services import project_folders, project_readiness, projects
 
@@ -59,3 +59,8 @@ def read_project_dashboard(project_id: UUID, db: DBSession) -> ProjectDashboard:
 @router.get("/{project_id}/readiness", response_model=ProjectReadinessResponse)
 def read_project_readiness(project_id: UUID, db: DBSession) -> ProjectReadinessResponse:
     return project_readiness.get_project_readiness(db, project_id)
+
+
+@router.get("/{project_id}/workspace", response_model=AwardedProjectWorkspace)
+def read_awarded_project_workspace(project_id: UUID, db: DBSession) -> AwardedProjectWorkspace:
+    return projects.get_awarded_workspace(db, project_id)

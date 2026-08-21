@@ -49,6 +49,7 @@ def test_create_project() -> None:
     assert project["name"] == "King George Utility Upgrade"
     assert project["municipality"] == "Surrey"
     assert project["status"] == "opportunity"
+    assert project["workspace_root"] is None
 
 
 def test_awarded_project_creation_generates_sequential_job_numbers() -> None:
@@ -61,6 +62,8 @@ def test_awarded_project_creation_generates_sequential_job_numbers() -> None:
     assert second.status_code == 201
     assert first.json()["project_number"] == f"IH-{year}-001"
     assert second.json()["project_number"] == f"IH-{year}-002"
+    assert first.json()["workspace_root"] == f"IH-{year}-001_FirstAward"
+    assert second.json()["workspace_root"] == f"IH-{year}-002_SecondAward"
 
 
 def test_transition_to_awarded_generates_job_number() -> None:
@@ -72,6 +75,12 @@ def test_transition_to_awarded_generates_job_number() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "awarded"
     assert response.json()["project_number"] == f"IH-{year}-001"
+    assert response.json()["workspace_root"] == f"IH-{year}-001_TenderWithoutNumber"
+
+    workspace = client.get(f"/api/v1/projects/{project['id']}/workspace")
+    assert workspace.status_code == 200
+    assert workspace.json()["job_number"] == f"IH-{year}-001"
+    assert any(entry["path"].endswith("/13_Award_Handoff") for entry in workspace.json()["entries"])
 
 
 def test_award_generation_skips_existing_numbers_and_preserves_explicit_number() -> None:
@@ -84,6 +93,7 @@ def test_award_generation_skips_existing_numbers_and_preserves_explicit_number()
 
     assert explicit.status_code == 201
     assert explicit.json()["project_number"] == f"IH-{year}-009"
+    assert explicit.json()["workspace_root"] == f"IH-{year}-009_ExistingAward"
     assert generated.status_code == 201
     assert generated.json()["project_number"] == f"IH-{year}-010"
 
@@ -118,6 +128,37 @@ def test_assigned_job_number_is_not_removed_or_replaced_by_project_update() -> N
     assert response.status_code == 200
     assert response.json()["project_number"] == "CLIENT-JOB-77"
     assert response.json()["status"] == "construction"
+
+
+def test_awarded_workspace_is_provisioned_once_and_keeps_its_original_root() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Original Tender Name", "status": "tendering"},
+    ).json()
+    awarded = client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"}).json()
+    original_root = awarded["workspace_root"]
+    original_provisioned_at = awarded["workspace_provisioned_at"]
+
+    updated = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"name": "Renamed During Construction", "status": "construction"},
+    ).json()
+    workspace = client.get(f"/api/v1/projects/{project['id']}/workspace").json()
+
+    assert updated["workspace_root"] == original_root
+    assert updated["workspace_provisioned_at"] == original_provisioned_at
+    assert workspace["root_folder"] == original_root
+    assert workspace["project_index"].startswith("# Project Index\n\nJob Number:")
+
+
+def test_non_awarded_project_has_no_provisioned_workspace() -> None:
+    project = client.post("/api/v1/projects", json={"name": "Open Tender"}).json()
+
+    response = client.get(f"/api/v1/projects/{project['id']}/workspace")
+
+    assert project["workspace_root"] is None
+    assert project["workspace_provisioned_at"] is None
+    assert response.status_code == 404
 
 
 def test_list_project_and_detail() -> None:

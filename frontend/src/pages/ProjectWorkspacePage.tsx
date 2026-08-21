@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import {
+  AwardedProjectWorkspace,
   Project,
   ProjectCreatePayload,
   ProjectDashboard,
@@ -33,6 +34,7 @@ export function ProjectWorkspacePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
+  const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [activeTab, setActiveTab] = useState("Overview");
@@ -50,15 +52,18 @@ export function ProjectWorkspacePage() {
       );
       setDashboardByProjectId(Object.fromEntries(summaries));
       if (projectId) {
-        const [detail, summary] = await Promise.all([
-          projectsApi.detail(projectId),
+        const detail = await projectsApi.detail(projectId);
+        const [summary, provisionedWorkspace] = await Promise.all([
           projectsApi.dashboard(projectId),
+          detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
         ]);
         setSelectedProject(detail);
         setDashboard(summary);
+        setWorkspace(provisionedWorkspace);
       } else {
         setSelectedProject(null);
         setDashboard(null);
+        setWorkspace(null);
       }
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load projects");
@@ -126,6 +131,7 @@ export function ProjectWorkspacePage() {
           <ProjectDetail
             project={selectedProject}
             dashboard={dashboard}
+            workspace={workspace}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onStatusChange={(value) => void updateStatus(value)}
@@ -309,6 +315,7 @@ function ProjectList({
 function ProjectDetail({
   project,
   dashboard,
+  workspace,
   activeTab,
   onTabChange,
   onStatusChange,
@@ -316,6 +323,7 @@ function ProjectDetail({
 }: {
   project: Project;
   dashboard: ProjectDashboard;
+  workspace: AwardedProjectWorkspace | null;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onStatusChange: (status: ProjectStatus) => void;
@@ -355,6 +363,7 @@ function ProjectDetail({
         </div>
       </div>
 
+      {workspace ? <AwardedWorkspaceCard workspace={workspace} /> : null}
       <DashboardWidgets dashboard={dashboard} project={project} />
       <CommandCenter project={project} dashboard={dashboard} />
 
@@ -378,6 +387,41 @@ function ProjectDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+function AwardedWorkspaceCard({ workspace }: { workspace: AwardedProjectWorkspace }) {
+  const topLevelFolders = workspace.entries.filter((entry) => {
+    if (entry.kind !== "folder") return false;
+    const relativePath = entry.path.slice(workspace.root_folder.length + 1);
+    return !relativePath.includes("/");
+  });
+  return (
+    <section aria-label="Awarded project workspace" className="rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <FolderKanban className="h-5 w-5 text-brand-gold" />
+            <h2 className="text-base font-semibold text-iron-950">Awarded job workspace prepared</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-iron-500">
+            IHOS prepared the standard project structure once for job {workspace.job_number}. Later project edits will not rename it.
+          </p>
+        </div>
+        <div className="rounded-md bg-iron-50 px-3 py-2 text-xs font-semibold text-iron-800">{workspace.entries.length} entries</div>
+      </div>
+      <div className="mt-4 rounded-md border border-iron-100 bg-iron-50 px-3 py-2 font-mono text-xs text-iron-800">
+        {workspace.root_folder}
+      </div>
+      <ul className="mt-4 grid gap-2 md:grid-cols-2" aria-label="Prepared workspace checklist">
+        {topLevelFolders.map((entry) => (
+          <li key={entry.path} className="flex items-center gap-2 text-sm text-iron-700">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-signal-green" aria-hidden="true" />
+            <span>{entry.path.slice(workspace.root_folder.length + 1)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

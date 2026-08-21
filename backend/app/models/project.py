@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import Date, Float, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -31,6 +31,9 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict)
+    workspace_root: Mapped[str | None] = mapped_column(String(500))
+    workspace_manifest_json: Mapped[dict | None] = mapped_column(JSONType)
+    workspace_provisioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     municipality_ref = relationship("Municipality", back_populates="projects")
     tenders = relationship("Tender", back_populates="project")

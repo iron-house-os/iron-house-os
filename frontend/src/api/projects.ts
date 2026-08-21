@@ -27,6 +27,8 @@ export type Project = {
   status: ProjectStatus;
   notes: string | null;
   metadata: Record<string, unknown>;
+  workspace_root?: string | null;
+  workspace_provisioned_at?: string | null;
   supplier_ids: string[];
   created_at: string;
   updated_at: string;
@@ -66,6 +68,21 @@ export type ProjectDashboard = {
   drawing_count: number;
   bid_status: string;
   readiness_percentage: number;
+};
+
+export type ProjectWorkspaceEntry = {
+  path: string;
+  kind: "folder" | "file";
+  description: string;
+};
+
+export type AwardedProjectWorkspace = {
+  project_id: string;
+  job_number: string;
+  root_folder: string;
+  entries: ProjectWorkspaceEntry[];
+  project_index: string;
+  provisioned_at: string;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -114,4 +131,5 @@ export const projectsApi = {
       method: "POST",
     }),
   dashboard: (id: string) => request<ProjectDashboard>(`/projects/${id}/dashboard`),
+  workspace: (id: string) => request<AwardedProjectWorkspace>(`/projects/${id}/workspace`),
 };

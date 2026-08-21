@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Project, ProjectDashboard } from "../api/projects";
+import { AwardedProjectWorkspace, Project, ProjectDashboard } from "../api/projects";
 import { ProjectWorkspacePage } from "./ProjectWorkspacePage";
 
 const project: Project = {
@@ -38,6 +38,28 @@ const dashboard: ProjectDashboard = {
   drawing_count: 5,
   bid_status: "draft",
   readiness_percentage: 80,
+};
+
+const awardedProject: Project = {
+  ...project,
+  name: "Awarded Culvert Replacement",
+  project_number: "IH-2026-014",
+  status: "awarded",
+  workspace_root: "IH-2026-014_AwardedCulvertReplacement",
+  workspace_provisioned_at: "2026-08-21T08:30:00Z",
+};
+
+const awardedWorkspace: AwardedProjectWorkspace = {
+  project_id: awardedProject.id,
+  job_number: "IH-2026-014",
+  root_folder: "IH-2026-014_AwardedCulvertReplacement",
+  entries: [
+    { path: "IH-2026-014_AwardedCulvertReplacement/00_Admin", kind: "folder", description: "Administration" },
+    { path: "IH-2026-014_AwardedCulvertReplacement/13_Award_Handoff", kind: "folder", description: "Award handoff" },
+    { path: "IH-2026-014_AwardedCulvertReplacement/PROJECT_INDEX.md", kind: "file", description: "Index" },
+  ],
+  project_index: "# Project Index",
+  provisioned_at: "2026-08-21T08:30:00Z",
 };
 
 afterEach(() => {
@@ -90,6 +112,19 @@ describe("ProjectWorkspacePage", () => {
     expect(await screen.findByRole("heading", { name: project.name })).toBeInTheDocument();
     expect(screen.getByText("City of Surrey - Surrey")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Awarded project workspace" })).not.toBeInTheDocument();
+  });
+
+  it("shows the stable prepared workspace for an awarded job", async () => {
+    mockProjectApi(awardedProject, awardedWorkspace);
+
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const workspace = await screen.findByRole("region", { name: "Awarded project workspace" });
+    expect(workspace).toHaveTextContent("Awarded job workspace prepared");
+    expect(workspace).toHaveTextContent("IH-2026-014_AwardedCulvertReplacement");
+    expect(within(workspace).getByText("00_Admin")).toBeInTheDocument();
+    expect(within(workspace).getByText("13_Award_Handoff")).toBeInTheDocument();
   });
 
   it("renders dashboard widgets for project readiness", async () => {
@@ -155,14 +190,14 @@ function renderWorkspace(path: string) {
   );
 }
 
-function mockProjectApi() {
+function mockProjectApi(currentProject: Project = project, workspace?: AwardedProjectWorkspace) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
     const url = input.toString();
 
     if (url.endsWith("/projects") && options?.method === "POST") {
       const payload = JSON.parse(String(options.body));
       return jsonResponse({
-        ...project,
+        ...currentProject,
         ...payload,
         id: "22222222-2222-4222-8222-222222222222",
         project_number: "IH-2026-001",
@@ -170,15 +205,19 @@ function mockProjectApi() {
     }
 
     if (url.endsWith("/projects")) {
-      return jsonResponse({ items: [project], total: 1 });
+      return jsonResponse({ items: [currentProject], total: 1 });
     }
 
-    if (url.endsWith(`/projects/${project.id}/dashboard`)) {
+    if (url.endsWith(`/projects/${currentProject.id}/dashboard`)) {
       return jsonResponse(dashboard);
     }
 
-    if (url.endsWith(`/projects/${project.id}`)) {
-      return jsonResponse(project);
+    if (url.endsWith(`/projects/${currentProject.id}/workspace`) && workspace) {
+      return jsonResponse(workspace);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}`)) {
+      return jsonResponse(currentProject);
     }
 
     return jsonResponse({ detail: "Not found" }, 404);

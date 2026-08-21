@@ -75,6 +75,8 @@ class ProjectRead(BaseModel):
     status: ProjectStatus
     notes: str | None
     metadata: dict
+    workspace_root: str | None
+    workspace_provisioned_at: datetime | None
     supplier_ids: list[UUID]
     created_at: datetime
     updated_at: datetime
