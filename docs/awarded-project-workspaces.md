@@ -1,6 +1,6 @@
 # Awarded project workspaces
 
-When a project first becomes `awarded`, IHOS assigns its permanent job number and prepares one internal standard workspace manifest in the same database transaction.
+When a project first becomes `awarded`, IHOS assigns its permanent job number and prepares one internal standard workspace manifest and one [awarded project start checklist](awarded-project-start-checklist.md) in the same database transaction.
 
 ## Rules
 
@@ -11,4 +11,4 @@ When a project first becomes `awarded`, IHOS assigns its permanent job number an
 5. Existing legacy projects are not backfilled automatically.
 6. The manifest prepares IHOS project organization only. It does not create Google Drive folders, overwrite documents, or make external storage changes.
 
-The authenticated project endpoint `GET /api/v1/projects/{project_id}/workspace` returns the saved manifest for a provisioned job. Project Workspace shows its stable root and prepared top-level checklist.
+The authenticated project endpoint `GET /api/v1/projects/{project_id}/workspace` returns the saved manifest for a provisioned job. Project Workspace shows its stable root and prepared top-level folder list separately from the interactive job-start checklist.

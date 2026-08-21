@@ -11,7 +11,7 @@ from app.core.errors import AppError
 from app.core.workflow_values import workflow_enum
 from app.models.bid import Bid
 from app.models.document import Document, Drawing
-from app.models.project import Project, ProjectSupplier
+from app.models.project import Project, ProjectStartChecklistItem, ProjectSupplier
 from app.models.rfq import RFQPackage
 from app.schemas.project import (
     ProjectCreate,
@@ -22,12 +22,36 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest
+from app.schemas.project_start import (
+    ProjectStartChecklistItemRead,
+    ProjectStartChecklistRead,
+)
 from app.services import project_folders
 
 JOB_NUMBER_PREFIX = "IH"
 JOB_NUMBER_WIDTH = 3
 JOB_NUMBER_RETRY_LIMIT = 20
 IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
+PROJECT_START_CHECKLIST: tuple[tuple[str, str, str], ...] = (
+    ("award_contract", "Contract", "Award notice or executed contract and the client scope record are saved."),
+    ("scope_review", "Contract", "Scope, exclusions, allowances, and alternates are reviewed."),
+    ("current_documents", "Documents", "Current drawings, specifications, and addenda are confirmed."),
+    (
+        "contacts_authority",
+        "Administration",
+        "Project contacts, authority limits, and communication path are confirmed.",
+    ),
+    ("budget_cost_codes", "Cost control", "Baseline budget and project cost codes are established."),
+    ("schedule_milestones", "Schedule", "Baseline schedule, milestones, and notice periods are established."),
+    ("procurement_plan", "Procurement", "Subcontractor, material, equipment, and procurement plans are established."),
+    ("permits_insurance_bonding", "Administration", "Permit, insurance, and bonding requirements are assigned."),
+    (
+        "safety_mobilization",
+        "Safety",
+        "Project-specific safety and mobilization requirements are assigned for verification.",
+    ),
+    ("quality_testing_asbuilts", "Quality", "Quality, inspection, testing, and as-built requirements are assigned."),
+)
 
 
 def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
@@ -39,7 +63,7 @@ def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     db.add(project)
     db.flush()
     if project.status == ProjectStatus.awarded.value:
-        _provision_awarded_workspace(project)
+        _provision_awarded_workspace(db, project)
     _replace_suppliers(db, project.id, payload.supplier_ids)
     db.commit()
     return _to_schema(_load_project(db, project.id))
@@ -72,7 +96,7 @@ def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> Pro
     for key, value in update_data.items():
         setattr(project, key, value)
     if not was_awarded and project.status == ProjectStatus.awarded.value:
-        _provision_awarded_workspace(project)
+        _provision_awarded_workspace(db, project)
     if supplier_ids is not None:
         _replace_suppliers(db, project.id, supplier_ids)
     db.commit()
@@ -88,7 +112,7 @@ def _create_awarded_project(db: Session, values: dict, supplier_ids: list[UUID])
         except IntegrityError:
             db.rollback()
             continue
-        _provision_awarded_workspace(project)
+        _provision_awarded_workspace(db, project)
         _replace_suppliers(db, project.id, supplier_ids)
         db.commit()
         return _to_schema(_load_project(db, project.id))
@@ -113,7 +137,7 @@ def _update_awarded_project(
         except IntegrityError:
             db.rollback()
             continue
-        _provision_awarded_workspace(project)
+        _provision_awarded_workspace(db, project)
         if supplier_ids is not None:
             _replace_suppliers(db, project.id, supplier_ids)
         db.commit()
@@ -134,22 +158,42 @@ def _has_job_number(value: object) -> bool:
     return bool(str(value or "").strip())
 
 
-def _provision_awarded_workspace(project: Project) -> None:
-    if project.workspace_root:
-        return
+def _provision_awarded_workspace(db: Session, project: Project) -> None:
     if not _has_job_number(project.project_number):
         raise AppError("A permanent job number is required before workspace provisioning", status_code=409)
-    manifest = project_folders.build_awarded_project_folder_manifest(
-        job_number=str(project.project_number),
-        project_name=project.name,
-        client_owner=project.client_owner,
-        municipality=project.municipality_name,
-        tender_number=project.tender_number,
-        tender_closing_date=project.tender_closing_date,
+    if not project.workspace_root:
+        manifest = project_folders.build_awarded_project_folder_manifest(
+            job_number=str(project.project_number),
+            project_name=project.name,
+            client_owner=project.client_owner,
+            municipality=project.municipality_name,
+            tender_number=project.tender_number,
+            tender_closing_date=project.tender_closing_date,
+        )
+        project.workspace_root = manifest.root_folder
+        project.workspace_manifest_json = manifest.model_dump(mode="json")
+        project.workspace_provisioned_at = datetime.now(UTC)
+    _provision_project_start_checklist(db, project.id)
+
+
+def _provision_project_start_checklist(db: Session, project_id: UUID) -> None:
+    existing_codes = set(
+        db.scalars(
+            select(ProjectStartChecklistItem.code).where(ProjectStartChecklistItem.project_id == project_id)
+        ).all()
     )
-    project.workspace_root = manifest.root_folder
-    project.workspace_manifest_json = manifest.model_dump(mode="json")
-    project.workspace_provisioned_at = datetime.now(UTC)
+    db.add_all(
+        ProjectStartChecklistItem(
+            project_id=project_id,
+            code=code,
+            category=category,
+            label=label,
+            sort_order=sort_order,
+            completed=False,
+        )
+        for sort_order, (code, category, label) in enumerate(PROJECT_START_CHECKLIST, start=1)
+        if code not in existing_codes
+    )
 
 
 def archive_project(db: Session, project_id: UUID) -> ProjectRead:
@@ -174,6 +218,66 @@ def get_awarded_workspace(db: Session, project_id: UUID) -> AwardedProjectWorksp
         job_number=project.project_number,
         provisioned_at=project.workspace_provisioned_at,
         **manifest.model_dump(),
+    )
+
+
+def get_project_start_checklist(db: Session, project_id: UUID) -> ProjectStartChecklistRead:
+    _load_project(db, project_id)
+    items = db.scalars(
+        select(ProjectStartChecklistItem)
+        .where(ProjectStartChecklistItem.project_id == project_id)
+        .order_by(ProjectStartChecklistItem.sort_order)
+    ).all()
+    if not items:
+        raise AppError("Awarded project start checklist not found", status_code=404)
+    return _project_start_checklist_schema(project_id, items)
+
+
+def update_project_start_checklist_item(
+    db: Session,
+    project_id: UUID,
+    code: str,
+    completed: bool,
+    actor: str,
+) -> ProjectStartChecklistRead:
+    _load_project(db, project_id)
+    item = db.scalar(
+        select(ProjectStartChecklistItem).where(
+            ProjectStartChecklistItem.project_id == project_id,
+            ProjectStartChecklistItem.code == code,
+        )
+    )
+    if item is None:
+        raise AppError("Project start checklist item not found", status_code=404)
+    item.completed = completed
+    item.changed_by = actor
+    item.changed_at = datetime.now(UTC)
+    db.commit()
+    return get_project_start_checklist(db, project_id)
+
+
+def _project_start_checklist_schema(
+    project_id: UUID,
+    items: list[ProjectStartChecklistItem],
+) -> ProjectStartChecklistRead:
+    completed_count = sum(1 for item in items if item.completed)
+    return ProjectStartChecklistRead(
+        project_id=project_id,
+        status="ready" if completed_count == len(items) else "not_ready",
+        completed_count=completed_count,
+        total_count=len(items),
+        items=[
+            ProjectStartChecklistItemRead(
+                code=item.code,
+                category=item.category,
+                label=item.label,
+                sort_order=item.sort_order,
+                completed=item.completed,
+                changed_by=item.changed_by,
+                changed_at=item.changed_at,
+            )
+            for item in items
+        ],
     )
 
 

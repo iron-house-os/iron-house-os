@@ -85,6 +85,24 @@ export type AwardedProjectWorkspace = {
   provisioned_at: string;
 };
 
+export type ProjectStartChecklistItem = {
+  code: string;
+  category: string;
+  label: string;
+  sort_order: number;
+  completed: boolean;
+  changed_by: string | null;
+  changed_at: string | null;
+};
+
+export type ProjectStartChecklist = {
+  project_id: string;
+  status: "ready" | "not_ready";
+  completed_count: number;
+  total_count: number;
+  items: ProjectStartChecklistItem[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -95,6 +113,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     },
     ...options,
   });
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function requestOptional<T>(path: string): Promise<T | null> {
+  const response = await apiFetch(`${API_BASE_URL}${path}`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status}`);
   }
@@ -132,4 +161,10 @@ export const projectsApi = {
     }),
   dashboard: (id: string) => request<ProjectDashboard>(`/projects/${id}/dashboard`),
   workspace: (id: string) => request<AwardedProjectWorkspace>(`/projects/${id}/workspace`),
+  startChecklist: (id: string) => requestOptional<ProjectStartChecklist>(`/projects/${id}/start-checklist`),
+  updateStartChecklistItem: (id: string, code: string, completed: boolean) =>
+    request<ProjectStartChecklist>(`/projects/${id}/start-checklist/${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ completed }),
+    }),
 };

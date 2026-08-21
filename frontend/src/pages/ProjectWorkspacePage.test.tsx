@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AwardedProjectWorkspace, Project, ProjectDashboard } from "../api/projects";
+import { AwardedProjectWorkspace, Project, ProjectDashboard, ProjectStartChecklist } from "../api/projects";
 import { ProjectWorkspacePage } from "./ProjectWorkspacePage";
 
 const project: Project = {
@@ -60,6 +60,24 @@ const awardedWorkspace: AwardedProjectWorkspace = {
   ],
   project_index: "# Project Index",
   provisioned_at: "2026-08-21T08:30:00Z",
+};
+
+const awardedStartChecklist: ProjectStartChecklist = {
+  project_id: awardedProject.id,
+  status: "not_ready",
+  completed_count: 0,
+  total_count: 1,
+  items: [
+    {
+      code: "award_contract",
+      category: "Contract",
+      label: "Award notice or executed contract and the client scope record are saved.",
+      sort_order: 1,
+      completed: false,
+      changed_by: null,
+      changed_at: null,
+    },
+  ],
 };
 
 afterEach(() => {
@@ -127,6 +145,29 @@ describe("ProjectWorkspacePage", () => {
     expect(within(workspace).getByText("13_Award_Handoff")).toBeInTheDocument();
   });
 
+  it("updates awarded-job readiness by selecting a pre-populated checklist item", async () => {
+    const fetchMock = mockProjectApi(awardedProject, awardedWorkspace, awardedStartChecklist);
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const checklist = await screen.findByRole("region", { name: "Awarded job start checklist" });
+    expect(checklist).toHaveTextContent("Not ready");
+    expect(checklist).toHaveTextContent("0 of 1");
+
+    await user.click(within(checklist).getByRole("checkbox", { name: /Award notice or executed contract/ }));
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(
+        ([url, options]) => url.toString().endsWith("/start-checklist/award_contract") && options?.method === "PATCH",
+      );
+      expect(updateCall).toBeDefined();
+      expect(JSON.parse(String(updateCall?.[1]?.body))).toEqual({ completed: true });
+      expect(checklist).toHaveTextContent("Ready");
+      expect(checklist).toHaveTextContent("1 of 1");
+      expect(checklist).toHaveTextContent("Recorded by test-admin@ironhousecontracting.com");
+    });
+  });
+
   it("renders dashboard widgets for project readiness", async () => {
     mockProjectApi();
 
@@ -190,7 +231,12 @@ function renderWorkspace(path: string) {
   );
 }
 
-function mockProjectApi(currentProject: Project = project, workspace?: AwardedProjectWorkspace) {
+function mockProjectApi(
+  currentProject: Project = project,
+  workspace?: AwardedProjectWorkspace,
+  startChecklist?: ProjectStartChecklist,
+) {
+  let currentStartChecklist = startChecklist;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
     const url = input.toString();
 
@@ -214,6 +260,26 @@ function mockProjectApi(currentProject: Project = project, workspace?: AwardedPr
 
     if (url.endsWith(`/projects/${currentProject.id}/workspace`) && workspace) {
       return jsonResponse(workspace);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/start-checklist`) && currentStartChecklist) {
+      return jsonResponse(currentStartChecklist);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/start-checklist/award_contract`) && currentStartChecklist) {
+      const payload = JSON.parse(String(options?.body));
+      currentStartChecklist = {
+        ...currentStartChecklist,
+        status: payload.completed ? "ready" : "not_ready",
+        completed_count: payload.completed ? 1 : 0,
+        items: currentStartChecklist.items.map((item) => ({
+          ...item,
+          completed: payload.completed,
+          changed_by: "test-admin@ironhousecontracting.com",
+          changed_at: "2026-08-21T10:00:00Z",
+        })),
+      };
+      return jsonResponse(currentStartChecklist);
     }
 
     if (url.endsWith(`/projects/${currentProject.id}`)) {

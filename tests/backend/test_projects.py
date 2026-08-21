@@ -82,6 +82,91 @@ def test_transition_to_awarded_generates_job_number() -> None:
     assert workspace.json()["job_number"] == f"IH-{year}-001"
     assert any(entry["path"].endswith("/13_Award_Handoff") for entry in workspace.json()["entries"])
 
+    checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist")
+    assert checklist.status_code == 200
+    assert checklist.json()["status"] == "not_ready"
+    assert checklist.json()["completed_count"] == 0
+    assert checklist.json()["total_count"] == 10
+
+
+def test_awarded_job_start_checklist_records_checkbox_state_and_actor() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Checklist Award", "status": "awarded"},
+    ).json()
+
+    checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist")
+
+    assert checklist.status_code == 200
+    assert [item["code"] for item in checklist.json()["items"]] == [
+        "award_contract",
+        "scope_review",
+        "current_documents",
+        "contacts_authority",
+        "budget_cost_codes",
+        "schedule_milestones",
+        "procurement_plan",
+        "permits_insurance_bonding",
+        "safety_mobilization",
+        "quality_testing_asbuilts",
+    ]
+
+    completed = client.patch(
+        f"/api/v1/projects/{project['id']}/start-checklist/award_contract",
+        json={"completed": True},
+    )
+
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "not_ready"
+    assert completed.json()["completed_count"] == 1
+    first_item = completed.json()["items"][0]
+    assert first_item["completed"] is True
+    assert first_item["changed_by"] == "test-admin@ironhousecontracting.com"
+    assert first_item["changed_at"] is not None
+
+    reopened = client.patch(
+        f"/api/v1/projects/{project['id']}/start-checklist/award_contract",
+        json={"completed": False},
+    )
+
+    assert reopened.status_code == 200
+    assert reopened.json()["completed_count"] == 0
+    assert reopened.json()["items"][0]["completed"] is False
+
+
+def test_awarded_job_start_readiness_is_derived_and_provisioning_is_idempotent() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Ready Award", "status": "awarded"},
+    ).json()
+    checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist").json()
+
+    for item in checklist["items"]:
+        response = client.patch(
+            f"/api/v1/projects/{project['id']}/start-checklist/{item['code']}",
+            json={"completed": True},
+        )
+        assert response.status_code == 200
+
+    completed = response.json()
+    assert completed["status"] == "ready"
+    assert completed["completed_count"] == completed["total_count"] == 10
+
+    client.patch(f"/api/v1/projects/{project['id']}", json={"status": "construction"})
+    client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"})
+    reprovisioned = client.get(f"/api/v1/projects/{project['id']}/start-checklist").json()
+
+    assert reprovisioned["total_count"] == 10
+    assert reprovisioned["completed_count"] == 10
+
+
+def test_non_awarded_project_has_no_start_checklist() -> None:
+    project = client.post("/api/v1/projects", json={"name": "Open Tender"}).json()
+
+    response = client.get(f"/api/v1/projects/{project['id']}/start-checklist")
+
+    assert response.status_code == 404
+
 
 def test_award_generation_skips_existing_numbers_and_preserves_explicit_number() -> None:
     year = datetime.now(IRON_HOUSE_TIME_ZONE).year
@@ -108,7 +193,9 @@ def test_award_generation_retries_a_unique_collision() -> None:
     )
 
     with patch("app.services.projects._next_job_number", side_effect=[duplicate, available]):
-        response = client.post("/api/v1/projects", json={"name": "Concurrent Award", "status": "awarded"})
+        response = client.post(
+            "/api/v1/projects", json={"name": "Concurrent Award", "status": "awarded"}
+        )
 
     assert response.status_code == 201
     assert response.json()["project_number"] == available
@@ -117,7 +204,11 @@ def test_award_generation_retries_a_unique_collision() -> None:
 def test_assigned_job_number_is_not_removed_or_replaced_by_project_update() -> None:
     project = client.post(
         "/api/v1/projects",
-        json={"name": "Award With Custom Number", "status": "awarded", "project_number": "CLIENT-JOB-77"},
+        json={
+            "name": "Award With Custom Number",
+            "status": "awarded",
+            "project_number": "CLIENT-JOB-77",
+        },
     ).json()
 
     response = client.patch(
