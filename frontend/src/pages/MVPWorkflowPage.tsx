@@ -5,12 +5,13 @@ import { WorkflowDraft, workflowDraftsApi } from "../api/workflowDrafts";
 import { modulePathWithProjectContext, readEffectiveProjectContext } from "../utils/projectContext";
 
 const steps = [
-  { label: "1. Create project", path: "/projects", detail: "Open the project workspace and create or select a bid project." },
-  { label: "2. Register documents", path: "/documents", detail: "Add drawings, specs, addenda, and source documents." },
-  { label: "3. Run takeoff", path: "/quantity-takeoff", detail: "Generate BOQ items, readiness checks, and estimating handoff items." },
-  { label: "4. Build estimate", path: "/estimating", detail: "Convert scope into estimate lines, calculate pricing, and export workbooks." },
-  { label: "5. Build RFQs", path: "/rfq-automation", detail: "Create supplier package drafts from takeoff and estimate categories." },
-  { label: "6. Final bid package", path: "/bid-package", detail: "Review assumptions, exclusions, risks, and final bid readiness." },
+  { label: "1. Capture customer quote", path: "/customer-quotes", detail: "Turn verbal customer information into a durable IHOS opportunity and quote." },
+  { label: "2. Create or select project", path: "/projects", detail: "Open the project workspace for tender, estimate, or awarded-job work." },
+  { label: "3. Register documents", path: "/documents", detail: "Add drawings, specs, addenda, and source documents." },
+  { label: "4. Run takeoff", path: "/quantity-takeoff", detail: "Generate BOQ items, readiness checks, and estimating handoff items." },
+  { label: "5. Build estimate", path: "/estimating", detail: "Convert scope into estimate lines, calculate pricing, and export workbooks." },
+  { label: "6. Build RFQs", path: "/rfq-automation", detail: "Create supplier package drafts from takeoff and estimate categories." },
+  { label: "7. Final bid package", path: "/bid-package", detail: "Review assumptions, exclusions, risks, and final bid readiness." },
 ];
 
 export function MVPWorkflowPage() {
@@ -91,7 +92,7 @@ export function MVPWorkflowPage() {
 
 function resumePath(draft: WorkflowDraft) {
   const paths: Record<WorkflowDraft["workflow_type"], string> = {
-    customer_quote: "/estimating",
+    customer_quote: "/customer-quotes",
     estimate: "/estimating",
     purchase_order_request: "/request-po",
     supplier_quote_comparison: "/quotes",

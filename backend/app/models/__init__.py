@@ -3,6 +3,7 @@ from app.models.backups import BackupsAuditEvent, BackupsIntake, BackupsRoute
 from app.models.assistant import AssistantConversation, AssistantMessage, MeetingMinute, ProjectMemory
 from app.models.calendar import GoogleCalendarConnection, GoogleCalendarOAuthState
 from app.models.contact import Contact
+from app.models.customer_quote import CustomerQuote
 from app.models.document import Document, Drawing, Takeoff
 from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardingAudit, WorkerOrientation
 from app.models.equipment import Equipment
@@ -44,6 +45,7 @@ __all__ = [
     "BackupsIntake",
     "BackupsRoute",
     "Contact",
+    "CustomerQuote",
     "Document",
     "Drawing",
     "Employee",
