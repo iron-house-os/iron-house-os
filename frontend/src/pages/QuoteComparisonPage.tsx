@@ -10,6 +10,8 @@ import {
   SupplierQuoteRecord,
 } from "../api/quotes";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
+import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
+import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const moneyFormatter = new Intl.NumberFormat("en-CA", {
@@ -47,6 +49,8 @@ export function QuoteComparisonPage() {
   const [selection, setSelection] = useState<QuoteEstimateSelectionResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quotesReady, setQuotesReady] = useState(false);
+  const [hasEdited, setHasEdited] = useState(false);
 
   const validQuoteCount = useMemo(
     () => quotes.filter((quote) => quote.supplier_name && quote.scope && quote.amount > 0).length,
@@ -54,7 +58,12 @@ export function QuoteComparisonPage() {
   );
 
   useEffect(() => {
-    if (!projectContext.projectId) return;
+    setQuotesReady(false);
+    setHasEdited(false);
+    if (!projectContext.projectId) {
+      setQuotesReady(true);
+      return;
+    }
     let active = true;
     setIsLoading(true);
     setError(null);
@@ -69,12 +78,32 @@ export function QuoteComparisonPage() {
         }
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+          setQuotesReady(true);
+        }
       });
     return () => {
       active = false;
     };
   }, [projectContext.projectId]);
+
+  const draft = useWorkflowDraft({
+    workflowType: "supplier_quote_comparison",
+    title: projectContext.projectName
+      ? `Supplier quotes — ${projectContext.projectName}`
+      : "Supplier quote comparison",
+    payload: { quotes },
+    projectId: projectContext.projectId,
+    ready: quotesReady,
+    enabled: hasEdited,
+    onRestore: (saved) => {
+      if (Array.isArray(saved.quotes) && saved.quotes.length) {
+        setQuotes(saved.quotes as SupplierQuoteDraft[]);
+        setHasEdited(true);
+      }
+    },
+  });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,6 +141,8 @@ export function QuoteComparisonPage() {
       ]);
       setResult(comparisonResult);
       setSelection(selectionResult);
+      await draft.completeDraft();
+      setHasEdited(false);
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to compare quotes");
     } finally {
@@ -120,10 +151,12 @@ export function QuoteComparisonPage() {
   }
 
   function updateQuote(index: number, patch: Partial<SupplierQuoteDraft>) {
+    setHasEdited(true);
     setQuotes((current) => current.map((quote, quoteIndex) => (quoteIndex === index ? { ...quote, ...patch } : quote)));
   }
 
   function removeQuote(index: number) {
+    setHasEdited(true);
     setQuotes((current) => current.filter((_, quoteIndex) => quoteIndex !== index));
   }
 
@@ -152,12 +185,17 @@ export function QuoteComparisonPage() {
 
       <ProjectScopeNotice name={projectContext.projectName} />
 
+      <DraftSaveIndicator status={draft.status} lastSavedAt={draft.lastSavedAt} />
+
       <form className="space-y-4" onSubmit={submit}>
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-iron-500">Complete positive quotes: {validQuoteCount}</div>
           <button
             type="button"
-            onClick={() => setQuotes((current) => [...current, blankQuote()])}
+            onClick={() => {
+              setHasEdited(true);
+              setQuotes((current) => [...current, blankQuote()]);
+            }}
             className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-medium text-iron-800"
           >
             <Plus className="h-4 w-4" />
