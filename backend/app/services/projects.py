@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -21,6 +21,8 @@ from app.schemas.project import (
     ProjectStatus,
     ProjectUpdate,
 )
+from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest
+from app.services import project_folders
 
 JOB_NUMBER_PREFIX = "IH"
 JOB_NUMBER_WIDTH = 3
@@ -36,6 +38,8 @@ def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     project = Project(**values)
     db.add(project)
     db.flush()
+    if project.status == ProjectStatus.awarded.value:
+        _provision_awarded_workspace(project)
     _replace_suppliers(db, project.id, payload.supplier_ids)
     db.commit()
     return _to_schema(_load_project(db, project.id))
@@ -55,6 +59,7 @@ def get_project(db: Session, project_id: UUID) -> ProjectRead:
 
 def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> ProjectRead:
     project = _load_project(db, project_id)
+    was_awarded = project.status == ProjectStatus.awarded.value
     update_data = _project_values(payload)
     if project.project_number:
         update_data.pop("project_number", None)
@@ -66,6 +71,8 @@ def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> Pro
 
     for key, value in update_data.items():
         setattr(project, key, value)
+    if not was_awarded and project.status == ProjectStatus.awarded.value:
+        _provision_awarded_workspace(project)
     if supplier_ids is not None:
         _replace_suppliers(db, project.id, supplier_ids)
     db.commit()
@@ -81,6 +88,7 @@ def _create_awarded_project(db: Session, values: dict, supplier_ids: list[UUID])
         except IntegrityError:
             db.rollback()
             continue
+        _provision_awarded_workspace(project)
         _replace_suppliers(db, project.id, supplier_ids)
         db.commit()
         return _to_schema(_load_project(db, project.id))
@@ -105,6 +113,7 @@ def _update_awarded_project(
         except IntegrityError:
             db.rollback()
             continue
+        _provision_awarded_workspace(project)
         if supplier_ids is not None:
             _replace_suppliers(db, project.id, supplier_ids)
         db.commit()
@@ -125,11 +134,47 @@ def _has_job_number(value: object) -> bool:
     return bool(str(value or "").strip())
 
 
+def _provision_awarded_workspace(project: Project) -> None:
+    if project.workspace_root:
+        return
+    if not _has_job_number(project.project_number):
+        raise AppError("A permanent job number is required before workspace provisioning", status_code=409)
+    manifest = project_folders.build_awarded_project_folder_manifest(
+        job_number=str(project.project_number),
+        project_name=project.name,
+        client_owner=project.client_owner,
+        municipality=project.municipality_name,
+        tender_number=project.tender_number,
+        tender_closing_date=project.tender_closing_date,
+    )
+    project.workspace_root = manifest.root_folder
+    project.workspace_manifest_json = manifest.model_dump(mode="json")
+    project.workspace_provisioned_at = datetime.now(UTC)
+
+
 def archive_project(db: Session, project_id: UUID) -> ProjectRead:
     project = _load_project(db, project_id)
     project.status = ProjectStatus.archived.value
     db.commit()
     return _to_schema(_load_project(db, project_id))
+
+
+def get_awarded_workspace(db: Session, project_id: UUID) -> AwardedProjectWorkspace:
+    project = _load_project(db, project_id)
+    if (
+        not project.workspace_root
+        or not project.workspace_manifest_json
+        or not project.workspace_provisioned_at
+        or not project.project_number
+    ):
+        raise AppError("Awarded project workspace not found", status_code=404)
+    manifest = ProjectFolderManifest.model_validate(project.workspace_manifest_json)
+    return AwardedProjectWorkspace(
+        project_id=project.id,
+        job_number=project.project_number,
+        provisioned_at=project.workspace_provisioned_at,
+        **manifest.model_dump(),
+    )
 
 
 def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
@@ -251,6 +296,8 @@ def _to_schema(project: Project) -> ProjectRead:
         ),
         notes=project.notes,
         metadata=project.metadata_json or {},
+        workspace_root=project.workspace_root,
+        workspace_provisioned_at=project.workspace_provisioned_at,
         supplier_ids=[link.supplier_id for link in project.supplier_links],
         created_at=project.created_at,
         updated_at=project.updated_at,

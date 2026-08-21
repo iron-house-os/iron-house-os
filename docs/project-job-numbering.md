@@ -16,5 +16,6 @@ IHOS assigns a permanent job number when a project first becomes `awarded`.
 4. An existing or explicitly supplied project number is preserved.
 5. Later status changes do not remove or replace the assigned number.
 6. The database uniqueness constraint and allocation retry prevent two awarded projects from retaining the same number.
+7. After the permanent number is assigned, IHOS prepares one stable awarded-project workspace manifest using that number.
 
 Existing legacy projects are not renumbered automatically. Any controlled legacy cleanup must be reviewed separately before changing company records.

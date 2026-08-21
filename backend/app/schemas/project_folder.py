@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -22,3 +23,9 @@ class ProjectFolderManifest(BaseModel):
     root_folder: str
     entries: list[ProjectFolderEntry]
     project_index: str
+
+
+class AwardedProjectWorkspace(ProjectFolderManifest):
+    project_id: UUID
+    job_number: str
+    provisioned_at: datetime

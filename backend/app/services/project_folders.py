@@ -92,6 +92,54 @@ def build_project_folder_manifest(payload: ProjectFolderRequest) -> ProjectFolde
         project_code=payload.project_code,
         project_name=payload.project_name,
     )
+    return _build_manifest(root_folder, build_project_index(payload, root_folder))
+
+
+def build_awarded_project_folder_manifest(
+    *,
+    job_number: str,
+    project_name: str,
+    client_owner: str | None,
+    municipality: str | None,
+    tender_number: str | None,
+    tender_closing_date: date | None,
+) -> ProjectFolderManifest:
+    safe_job_number = re.sub(r"[^A-Za-z0-9-]+", "", job_number.strip()) or "AwardedJob"
+    root_folder = f"{safe_job_number}_{_slug(project_name)}"
+    project_index = f"""# Project Index
+
+Job Number: {job_number}
+Project: {project_name}
+Client / Owner: {client_owner or ""}
+Municipality: {municipality or ""}
+Tender Number: {tender_number or ""}
+Tender Closing Date: {tender_closing_date.isoformat() if tender_closing_date else ""}
+Project Status: Awarded
+Root Folder: {root_folder}
+
+## Key Files
+Tender Documents:
+Current Drawings:
+Addenda:
+Takeoff:
+Estimate:
+RFQ Log:
+Submission:
+Award Handoff:
+
+## Key Risks
+-
+
+## Open RFIs
+-
+
+## Project Qualifications
+-
+"""
+    return _build_manifest(root_folder, project_index)
+
+
+def _build_manifest(root_folder: str, project_index: str) -> ProjectFolderManifest:
     entries = [
         ProjectFolderEntry(path=f"{root_folder}/{path}", kind="folder", description=description)
         for path, description in PROJECT_FOLDER_STRUCTURE
@@ -103,8 +151,4 @@ def build_project_folder_manifest(payload: ProjectFolderRequest) -> ProjectFolde
             description="Project index template.",
         )
     )
-    return ProjectFolderManifest(
-        root_folder=root_folder,
-        entries=entries,
-        project_index=build_project_index(payload, root_folder),
-    )
+    return ProjectFolderManifest(root_folder=root_folder, entries=entries, project_index=project_index)
