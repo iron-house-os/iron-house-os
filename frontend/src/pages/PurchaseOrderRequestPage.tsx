@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { fieldOperationsApi, FieldOperationsBootstrap, FieldRecord } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
+import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
+import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -21,6 +23,7 @@ export function PurchaseOrderRequestPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdPo, setCreatedPo] = useState<string | null>(null);
+  const [bootstrapReady, setBootstrapReady] = useState(false);
 
   async function refresh() {
     setError(null);
@@ -31,7 +34,33 @@ export function PurchaseOrderRequestPage() {
     }
   }
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    void refresh().finally(() => setBootstrapReady(true));
+  }, []);
+
+  const draftPayload = useMemo(() => ({
+    projectId,
+    supplierId,
+    costCode,
+    purpose,
+    amount,
+  }), [amount, costCode, projectId, purpose, supplierId]);
+  const draftEnabled = Boolean(projectId || supplierId || costCode || purpose.trim() || amount);
+  const draft = useWorkflowDraft({
+    workflowType: "purchase_order_request",
+    title: purpose.trim() ? `PO request — ${purpose.trim().slice(0, 80)}` : "Purchase order request",
+    payload: draftPayload,
+    projectId: projectId || null,
+    ready: bootstrapReady,
+    enabled: draftEnabled,
+    onRestore: (saved) => {
+      setProjectId(typeof saved.projectId === "string" ? saved.projectId : "");
+      setSupplierId(typeof saved.supplierId === "string" ? saved.supplierId : "");
+      setCostCode(typeof saved.costCode === "string" ? saved.costCode : "");
+      setPurpose(typeof saved.purpose === "string" ? saved.purpose : "");
+      setAmount(typeof saved.amount === "string" ? saved.amount : "");
+    },
+  });
 
   const selectedProject = data?.projects.find((project) => project.id === projectId);
   const selectedSupplier = data?.suppliers.find((supplier) => supplier.id === supplierId);
@@ -67,6 +96,7 @@ export function PurchaseOrderRequestPage() {
           requested_at: new Date().toISOString(),
         },
       });
+      await draft.completeDraft();
       setCreatedPo(poNumber);
       setPurpose("");
       setAmount("");
@@ -92,6 +122,8 @@ export function PurchaseOrderRequestPage() {
 
       {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {createdPo ? <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-800">Created {createdPo} and sent for approval.</div> : null}
+
+      <DraftSaveIndicator status={draft.status} lastSavedAt={draft.lastSavedAt} />
 
       <form onSubmit={submit} className="grid gap-4 rounded-xl border border-iron-100 bg-white p-5 shadow-sm md:grid-cols-2">
         <label className="grid gap-2 text-sm font-medium text-iron-800">

@@ -36,6 +36,7 @@ BUSINESS_MODULES = (
     "employee-onboarding",
     "finance",
     "media",
+    "workflow-drafts",
 )
 ALL_MODULES = (*BUSINESS_MODULES, "users", "operations")
 
@@ -58,6 +59,7 @@ ESTIMATOR_WRITE_MODULES = frozenset(
         "takeoff",
         "municipality",
         "tenders",
+        "workflow-drafts",
     }
 )
 
@@ -95,7 +97,7 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
         permissions = {ModulePermission.READ}
         if module in {"field-operations", "daily-timesheets"}:
             permissions.add(ModulePermission.WRITE)
-        if module in {"media", "backups"}:
+        if module in {"media", "backups", "workflow-drafts"}:
             permissions.add(ModulePermission.WRITE)
         return frozenset(permissions)
     return frozenset()

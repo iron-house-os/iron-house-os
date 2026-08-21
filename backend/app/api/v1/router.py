@@ -32,6 +32,7 @@ from app.api.v1.routes import (
     takeoff,
     tenders,
     users,
+    workflow_drafts,
 )
 
 api_router = APIRouter()
@@ -84,4 +85,9 @@ protected_router.include_router(
 protected_router.include_router(employee_onboarding.router, prefix="/employee-onboarding", tags=["employee-onboarding"])
 protected_router.include_router(users.router, prefix="/users", tags=["users"])
 protected_router.include_router(operations.router, prefix="/operations", tags=["operations"])
+protected_router.include_router(
+    workflow_drafts.router,
+    prefix="/workflow-drafts",
+    tags=["workflow-drafts"],
+)
 api_router.include_router(protected_router)

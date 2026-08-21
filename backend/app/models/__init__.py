@@ -30,6 +30,7 @@ from app.models.rfq import (
 from app.models.supplier import Supplier
 from app.models.tender import Tender
 from app.models.user import Employee, LoginThrottle, UserAccount
+from app.models.workflow_draft import WorkflowDraft
 
 __all__ = [
     "AssistantConversation",
@@ -80,4 +81,5 @@ __all__ = [
     "UserAccount",
     "Vehicle",
     "VehicleLog",
+    "WorkflowDraft",
 ]
