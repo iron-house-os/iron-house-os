@@ -150,6 +150,7 @@ jobs:
           STAGING_EMAIL: ${{ env.BOOTSTRAP_ADMIN_EMAIL }}
           STAGING_PASSWORD: ${{ env.BOOTSTRAP_ADMIN_PASSWORD }}
           STAGING_SYNTHETIC_DATA: "true"
+          STAGING_MVP_SYNTHETIC_DATA: "true"
           STAGING_SYNTHETIC_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
         run: scripts/staging-smoke-test.sh
       - name: Create pre-backup recovery sentinel
