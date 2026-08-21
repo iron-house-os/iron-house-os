@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from io import StringIO
 import secrets
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -60,6 +61,7 @@ SAFETY_AUDIT_EXPORT_TYPES = {
     "small_equipment_inspection",
     "toolbox_talk",
 }
+IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
 FIRST_AID_DETAIL_FIELDS = {
     "occurred_at",
     "location",
@@ -412,13 +414,18 @@ def build_paperwork_recognitions(db: Session, employees: list[Employee]) -> list
     entries = db.scalars(select(TimeEntry).order_by(TimeEntry.work_date))
     days: dict[UUID, set[date]] = {}
     for item in entries:
-        if item.created_at.date() <= item.work_date:
+        if _iron_house_date(item.created_at) <= item.work_date:
             days.setdefault(item.employee_id, set()).add(item.work_date)
     records = db.scalars(select(FieldRecord).where(FieldRecord.employee_id.is_not(None)).order_by(FieldRecord.work_date))
     for item in records:
-        if item.employee_id and item.created_at.date() <= item.work_date:
+        if item.employee_id and _iron_house_date(item.created_at) <= item.work_date:
             days.setdefault(item.employee_id, set()).add(item.work_date)
     return [{"employee_id": str(employee_id), "employee_name": names.get(employee_id, "Employee"), "on_time_days": len(work_days)} for employee_id, work_days in days.items() if work_days]
+
+
+def _iron_house_date(value: datetime) -> date:
+    timestamp = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return timestamp.astimezone(IRON_HOUSE_TIME_ZONE).date()
 
 
 def build_material_movement_summary(db: Session) -> list[dict]:

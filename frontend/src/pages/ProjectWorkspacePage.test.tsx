@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,8 +53,33 @@ describe("ProjectWorkspacePage", () => {
     expect(await screen.findByText(project.name)).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Ready" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Docs" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Job #" })).toBeInTheDocument();
+    expect(screen.getByText("IHO-1001")).toBeInTheDocument();
     expect(await screen.findByText("80%")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  it("creates an awarded project and delegates job-number generation to IHOS", async () => {
+    const fetchMock = mockProjectApi();
+    const user = userEvent.setup();
+    renderWorkspace("/projects");
+    await screen.findByText(project.name);
+
+    await user.type(screen.getByLabelText("Project name"), "Awarded Culvert Replacement");
+    await user.selectOptions(screen.getByLabelText("Project stage"), "awarded");
+
+    expect(screen.getByRole("status")).toHaveTextContent("generate the next unique job number");
+    await user.click(screen.getByRole("button", { name: "Create awarded job" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([, options]) => options?.method === "POST");
+      expect(createCall).toBeDefined();
+      expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+        name: "Awarded Culvert Replacement",
+        status: "awarded",
+      });
+      expect(JSON.parse(String(createCall?.[1]?.body))).not.toHaveProperty("project_number");
+    });
   });
 
   it("loads project detail from the route", async () => {
@@ -130,8 +156,18 @@ function renderWorkspace(path: string) {
 }
 
 function mockProjectApi() {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
     const url = input.toString();
+
+    if (url.endsWith("/projects") && options?.method === "POST") {
+      const payload = JSON.parse(String(options.body));
+      return jsonResponse({
+        ...project,
+        ...payload,
+        id: "22222222-2222-4222-8222-222222222222",
+        project_number: "IH-2026-001",
+      }, 201);
+    }
 
     if (url.endsWith("/projects")) {
       return jsonResponse({ items: [project], total: 1 });
@@ -149,6 +185,7 @@ function mockProjectApi() {
   });
 
   vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 function jsonResponse(body: unknown, status = 200) {

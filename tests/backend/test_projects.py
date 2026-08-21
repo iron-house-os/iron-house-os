@@ -1,9 +1,14 @@
+from datetime import datetime
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
 client = TestClient(app)
+IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
 
 
 def create_project(name: str = "King George Utility Upgrade") -> dict:
@@ -44,6 +49,75 @@ def test_create_project() -> None:
     assert project["name"] == "King George Utility Upgrade"
     assert project["municipality"] == "Surrey"
     assert project["status"] == "opportunity"
+
+
+def test_awarded_project_creation_generates_sequential_job_numbers() -> None:
+    year = datetime.now(IRON_HOUSE_TIME_ZONE).year
+
+    first = client.post("/api/v1/projects", json={"name": "First Award", "status": "awarded"})
+    second = client.post("/api/v1/projects", json={"name": "Second Award", "status": "awarded"})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["project_number"] == f"IH-{year}-001"
+    assert second.json()["project_number"] == f"IH-{year}-002"
+
+
+def test_transition_to_awarded_generates_job_number() -> None:
+    year = datetime.now(IRON_HOUSE_TIME_ZONE).year
+    project = client.post("/api/v1/projects", json={"name": "Tender Without Number"}).json()
+
+    response = client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "awarded"
+    assert response.json()["project_number"] == f"IH-{year}-001"
+
+
+def test_award_generation_skips_existing_numbers_and_preserves_explicit_number() -> None:
+    year = datetime.now(IRON_HOUSE_TIME_ZONE).year
+    explicit = client.post(
+        "/api/v1/projects",
+        json={"name": "Existing Award", "status": "awarded", "project_number": f"IH-{year}-009"},
+    )
+    generated = client.post("/api/v1/projects", json={"name": "Next Award", "status": "awarded"})
+
+    assert explicit.status_code == 201
+    assert explicit.json()["project_number"] == f"IH-{year}-009"
+    assert generated.status_code == 201
+    assert generated.json()["project_number"] == f"IH-{year}-010"
+
+
+def test_award_generation_retries_a_unique_collision() -> None:
+    year = datetime.now(IRON_HOUSE_TIME_ZONE).year
+    duplicate = f"IH-{year}-001"
+    available = f"IH-{year}-002"
+    client.post(
+        "/api/v1/projects",
+        json={"name": "Existing Number", "status": "awarded", "project_number": duplicate},
+    )
+
+    with patch("app.services.projects._next_job_number", side_effect=[duplicate, available]):
+        response = client.post("/api/v1/projects", json={"name": "Concurrent Award", "status": "awarded"})
+
+    assert response.status_code == 201
+    assert response.json()["project_number"] == available
+
+
+def test_assigned_job_number_is_not_removed_or_replaced_by_project_update() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Award With Custom Number", "status": "awarded", "project_number": "CLIENT-JOB-77"},
+    ).json()
+
+    response = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"project_number": None, "status": "construction"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["project_number"] == "CLIENT-JOB-77"
+    assert response.json()["status"] == "construction"
 
 
 def test_list_project_and_detail() -> None:

@@ -1,0 +1,21 @@
+{
+  "name": "AB Tech - Bennett Road Concrete - Option 3",
+  "client_owner": "AB-Tech Plumbing & Heating Ltd.",
+  "municipality": "Richmond",
+  "project_address": "8640 Bennett Road, Unit 10, Richmond, BC V6Y 3T9",
+  "contract_value": 2750.00,
+  "status": "awarded",
+  "notes": "Awarded Quote Option 3: place and finish one concrete job during one continuous placement. Excavation, backfill, base preparation and forming are by others. Work area must be fully ready before the Iron House crew arrives. Price is $2,750.00 before GST.",
+  "metadata": {
+    "source_quote_number": "BEN-CQ-2026-0818-C",
+    "source_quote_option": 3,
+    "awarded_date": "2026-08-20",
+    "currency": "CAD",
+    "gst_rate": 0.05,
+    "contract_value_before_gst": 2750.00,
+    "contract_value_including_gst": 2887.50,
+    "scope_status": "awarded",
+    "import_operator": "Owner-approved GitHub production import workflow",
+    "import_request_id": "2026-08-20-ab-tech-bennett-option-3-run-1"
+  }
+}
