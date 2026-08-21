@@ -1,6 +1,10 @@
+import re
+from datetime import datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import AppError
@@ -18,9 +22,18 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 
+JOB_NUMBER_PREFIX = "IH"
+JOB_NUMBER_WIDTH = 3
+JOB_NUMBER_RETRY_LIMIT = 20
+IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
+
 
 def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
-    project = Project(**_project_values(payload))
+    values = _project_values(payload)
+    if values.get("status") == ProjectStatus.awarded.value and not _has_job_number(values.get("project_number")):
+        return _create_awarded_project(db, values, payload.supplier_ids)
+
+    project = Project(**values)
     db.add(project)
     db.flush()
     _replace_suppliers(db, project.id, payload.supplier_ids)
@@ -43,13 +56,73 @@ def get_project(db: Session, project_id: UUID) -> ProjectRead:
 def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> ProjectRead:
     project = _load_project(db, project_id)
     update_data = _project_values(payload)
+    if project.project_number:
+        update_data.pop("project_number", None)
     supplier_ids = payload.supplier_ids if "supplier_ids" in payload.model_fields_set else None
+    resulting_status = update_data.get("status", project.status)
+    resulting_number = update_data.get("project_number", project.project_number)
+    if resulting_status == ProjectStatus.awarded.value and not _has_job_number(resulting_number):
+        return _update_awarded_project(db, project_id, update_data, supplier_ids)
+
     for key, value in update_data.items():
         setattr(project, key, value)
     if supplier_ids is not None:
         _replace_suppliers(db, project.id, supplier_ids)
     db.commit()
     return _to_schema(_load_project(db, project_id))
+
+
+def _create_awarded_project(db: Session, values: dict, supplier_ids: list[UUID]) -> ProjectRead:
+    for _ in range(JOB_NUMBER_RETRY_LIMIT):
+        project = Project(**{**values, "project_number": _next_job_number(db)})
+        db.add(project)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            continue
+        _replace_suppliers(db, project.id, supplier_ids)
+        db.commit()
+        return _to_schema(_load_project(db, project.id))
+    raise AppError("Unable to allocate a unique job number. Try again.", status_code=409)
+
+
+def _update_awarded_project(
+    db: Session,
+    project_id: UUID,
+    update_data: dict,
+    supplier_ids: list[UUID] | None,
+) -> ProjectRead:
+    for _ in range(JOB_NUMBER_RETRY_LIMIT):
+        project = _load_project(db, project_id)
+        for key, value in update_data.items():
+            if key != "project_number" or not project.project_number:
+                setattr(project, key, value)
+        if not _has_job_number(project.project_number):
+            project.project_number = _next_job_number(db)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            continue
+        if supplier_ids is not None:
+            _replace_suppliers(db, project.id, supplier_ids)
+        db.commit()
+        return _to_schema(_load_project(db, project_id))
+    raise AppError("Unable to allocate a unique job number. Try again.", status_code=409)
+
+
+def _next_job_number(db: Session, award_year: int | None = None) -> str:
+    year = award_year or datetime.now(IRON_HOUSE_TIME_ZONE).year
+    prefix = f"{JOB_NUMBER_PREFIX}-{year}-"
+    existing = db.scalars(select(Project.project_number).where(Project.project_number.like(f"{prefix}%"))).all()
+    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+    sequences = [int(match.group(1)) for number in existing if number and (match := pattern.match(number))]
+    return f"{prefix}{max(sequences, default=0) + 1:0{JOB_NUMBER_WIDTH}d}"
+
+
+def _has_job_number(value: object) -> bool:
+    return bool(str(value or "").strip())
 
 
 def archive_project(db: Session, project_id: UUID) -> ProjectRead:
