@@ -1,6 +1,6 @@
 import { ArrowRight, CheckCircle2, Plus, Trash2 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
 import {
   CustomerQuote,
@@ -18,6 +18,8 @@ const blankLine = (): CustomerQuoteLineItem => ({ description: "", quantity: "1"
 
 export function CustomerQuotesPage() {
   const { user } = useAuth();
+  const location = useLocation();
+  const openedTarget = useRef<string | null>(null);
   const [quotes, setQuotes] = useState<CustomerQuote[]>([]);
   const [registerReady, setRegisterReady] = useState(false);
   const [editing, setEditing] = useState<CustomerQuote | null>(null);
@@ -53,6 +55,18 @@ export function CustomerQuotesPage() {
   }
 
   useEffect(() => { void refresh(); }, []);
+
+  useEffect(() => {
+    if (!registerReady) return;
+    const params = new URLSearchParams(location.search);
+    const quoteId = params.get("quoteId");
+    if (!quoteId || openedTarget.current === `${quoteId}:${params.get("action")}`) return;
+    const quote = quotes.find((item) => item.id === quoteId);
+    if (!quote) return;
+    openedTarget.current = `${quoteId}:${params.get("action")}`;
+    if (params.get("action") === "edit" && quote.status !== "accepted") edit(quote);
+    else document.getElementById(`quote-${quoteId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [location.search, quotes, registerReady]);
 
   const draftPayload = useMemo(() => ({
     projectName,
@@ -193,6 +207,22 @@ export function CustomerQuotesPage() {
     }
   }
 
+  async function closeQuote(quote: CustomerQuote, status: "declined" | "expired") {
+    const confirmed = window.confirm(
+      status === "declined"
+        ? `Record ${quote.quote_number} as declined? A new revision is required to reopen it.`
+        : `Record ${quote.quote_number} as expired? A new revision is required to reopen it.`,
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      const result = await customerQuotesApi.status(quote.id, quote.record_revision, status);
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to close the quote.");
+    }
+  }
+
   async function accept() {
     if (!accepting || !acceptanceReference.trim()) return;
     setSaving(true);
@@ -286,7 +316,10 @@ export function CustomerQuotesPage() {
         <h2 className="text-xl font-semibold text-iron-950">Customer quote register</h2>
         <p className="mt-1 text-sm text-iron-500">Draft and sent quotes have no job number. Only management acceptance creates an awarded job.</p>
         <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500"><tr><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Customer / project</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>
-          {quotes.map((quote) => <tr key={quote.id} className="border-t border-iron-100"><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}</td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" && quote.status !== "declined" && quote.status !== "expired" ? <><button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">Edit</button>{quote.status === "draft" ? <button type="button" onClick={() => void markSent(quote)} className="font-semibold text-iron-700">Mark sent</button> : null}{user?.role === "admin" || user?.role === "operations_manager" ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}</> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Open PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>)}
+          {quotes.map((quote) => {
+            const targeted = new URLSearchParams(location.search).get("quoteId") === quote.id;
+            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}</td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" && quote.status !== "declined" && quote.status !== "expired" ? <><button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">Edit</button>{quote.status === "draft" ? <button type="button" onClick={() => void markSent(quote)} className="font-semibold text-iron-700">Mark sent</button> : null}{user?.role === "admin" || user?.role === "operations_manager" ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}<button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Open PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
+          })}
           {!quotes.length ? <tr><td colSpan={6} className="px-3 py-8 text-center text-iron-500">No customer quotes yet.</td></tr> : null}
         </tbody></table></div>
       </section>
