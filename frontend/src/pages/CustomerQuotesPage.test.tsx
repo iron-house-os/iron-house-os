@@ -138,9 +138,15 @@ describe("CustomerQuotesPage", () => {
     await screen.findByText("No customer quotes yet.");
     await user.type(screen.getByLabelText("Project / work name"), "Smith drainage repair");
     await user.type(screen.getByLabelText("Customer / company"), "Alex Smith");
+    await user.click(screen.getByRole("button", { name: "Continue to Scope" }));
     await user.type(screen.getByLabelText("Scope summary"), "Replace failed storm service");
+    await user.click(screen.getByRole("button", { name: "Continue to Pricing" }));
     await user.type(screen.getByLabelText("Item 1"), "Pipe replacement");
     await user.type(screen.getByLabelText("Unit price 1"), "10000");
+    await user.click(screen.getByRole("button", { name: "Continue to Terms and review" }));
+
+    expect(screen.getByRole("heading", { name: "Review before saving" })).toBeInTheDocument();
+    expect(screen.getByText("Alex Smith — Smith drainage repair")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save draft quote in IHOS" }));
 
@@ -211,9 +217,39 @@ describe("CustomerQuotesPage", () => {
     expect(screen.queryByRole("button", { name: "Mark declined" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark expired" })).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Continue to Scope" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Pricing" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Terms and review" }));
     await user.click(screen.getByRole("button", { name: "Save quote revision" }));
 
     expect(await screen.findByText("Q-2026-001 saved in IHOS as draft.")).toBeInTheDocument();
     expect(quoteBodies.at(-1)).toEqual(expect.objectContaining({ expected_revision: 1 }));
+  });
+
+  it("restores the saved intake stage and lets the user move back without losing data", async () => {
+    window.localStorage.setItem(
+      "ihos:draft-recovery:customer_quote",
+      JSON.stringify({
+        payload: {
+          projectName: "Creek crossing",
+          customerName: "Valley Developments",
+          scopeSummary: "Install culvert and restore channel",
+          lineItems: [{ description: "Culvert installation", quantity: "1", unit: "LS", unit_price: "25000" }],
+          intakeStage: 2,
+        },
+        savedAt: "2026-08-21T10:00:00Z",
+      }),
+    );
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><CustomerQuotesPage /></MemoryRouter>);
+
+    expect(await screen.findByLabelText("Item 1")).toHaveValue("Culvert installation");
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Pricing");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("Scope summary")).toHaveValue("Install culvert and restore channel");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByLabelText("Project / work name")).toHaveValue("Creek crossing");
+    expect(screen.getByLabelText("Customer / company")).toHaveValue("Valley Developments");
   });
 });

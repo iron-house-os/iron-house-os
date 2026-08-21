@@ -15,6 +15,7 @@ import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const today = () => new Date().toISOString().slice(0, 10);
 const blankLine = (): CustomerQuoteLineItem => ({ description: "", quantity: "1", unit: "LS", unit_price: "" });
+const intakeStages = ["Customer and job", "Scope", "Pricing", "Terms and review"] as const;
 
 export function CustomerQuotesPage() {
   const { user } = useAuth();
@@ -42,6 +43,7 @@ export function CustomerQuotesPage() {
   const [accepting, setAccepting] = useState<CustomerQuote | null>(null);
   const [acceptanceReference, setAcceptanceReference] = useState("");
   const [acceptanceNote, setAcceptanceNote] = useState("");
+  const [intakeStage, setIntakeStage] = useState(0);
 
   async function refresh() {
     try {
@@ -82,7 +84,8 @@ export function CustomerQuotesPage() {
     quoteDate,
     validUntil,
     notes,
-  }), [assumptions, customerEmail, customerName, customerPhone, exclusions, gstRate, lineItems, notes, projectName, quoteDate, scopeSummary, siteAddress, validUntil]);
+    intakeStage,
+  }), [assumptions, customerEmail, customerName, customerPhone, exclusions, gstRate, intakeStage, lineItems, notes, projectName, quoteDate, scopeSummary, siteAddress, validUntil]);
   const draftEnabled = Boolean(
     projectName.trim() || customerName.trim() || customerEmail.trim() || customerPhone.trim() ||
     siteAddress.trim() || scopeSummary.trim() || notes.trim() || assumptions.trim() || exclusions.trim() ||
@@ -111,6 +114,7 @@ export function CustomerQuotesPage() {
       setQuoteDate(text(saved.quoteDate) || today());
       setValidUntil(text(saved.validUntil));
       setNotes(text(saved.notes));
+      setIntakeStage(stage(saved.intakeStage));
     },
   });
 
@@ -180,6 +184,7 @@ export function CustomerQuotesPage() {
     setQuoteDate(quote.quote_date);
     setValidUntil(quote.valid_until ?? "");
     setNotes(quote.notes ?? "");
+    setIntakeStage(0);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -198,6 +203,20 @@ export function CustomerQuotesPage() {
     setQuoteDate(today());
     setValidUntil("");
     setNotes("");
+    setIntakeStage(0);
+  }
+
+  function continueIntake() {
+    if (!stageComplete(intakeStage)) return;
+    setIntakeStage((current) => Math.min(current + 1, intakeStages.length - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function stageComplete(current: number) {
+    if (current === 0) return Boolean(projectName.trim() && customerName.trim());
+    if (current === 1) return Boolean(scopeSummary.trim());
+    if (current === 2) return lineItems.every((line) => line.description.trim() && Number(line.quantity) > 0);
+    return true;
   }
 
   async function markSent(quote: CustomerQuote) {
@@ -272,16 +291,25 @@ export function CustomerQuotesPage() {
           <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `${editing.status === "declined" || editing.status === "expired" ? "New revision" : "Edit"} ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form.</p></div>
           {editing ? <button type="button" onClick={reset} className="rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold">Cancel edit</button> : null}
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <ol aria-label="Quote intake stages" className="grid gap-2 sm:grid-cols-4">
+          {intakeStages.map((label, index) => (
+            <li key={label} aria-current={index === intakeStage ? "step" : undefined} className={["rounded-md border p-3 text-sm font-semibold", index === intakeStage ? "border-brand-gold bg-brand-gold/10 text-iron-950" : index < intakeStage ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-iron-100 bg-iron-50 text-iron-500"].join(" ")}>
+              <span className="mr-2">{index + 1}</span>{label}
+            </li>
+          ))}
+        </ol>
+
+        {intakeStage === 0 ? <div className="grid gap-4 md:grid-cols-2">
           <Field label="Project / work name" value={projectName} onChange={setProjectName} required />
           <Field label="Customer / company" value={customerName} onChange={setCustomerName} required />
           <Field label="Customer email" type="email" value={customerEmail} onChange={setCustomerEmail} />
           <Field label="Customer phone" value={customerPhone} onChange={setCustomerPhone} />
           <div className="md:col-span-2"><Field label="Site address" value={siteAddress} onChange={setSiteAddress} /></div>
-          <label className="grid gap-1 text-sm font-medium text-iron-700 md:col-span-2">Scope summary<textarea required value={scopeSummary} onChange={(event) => setScopeSummary(event.target.value)} className="min-h-28 rounded-md border border-iron-200 px-3 py-2" /></label>
-        </div>
+        </div> : null}
 
-        <div className="space-y-3">
+        {intakeStage === 1 ? <label className="grid gap-1 text-sm font-medium text-iron-700">Scope summary<textarea required value={scopeSummary} onChange={(event) => setScopeSummary(event.target.value)} className="min-h-40 rounded-md border border-iron-200 px-3 py-2" placeholder="Describe what the customer asked Iron House to complete, including known limits and site conditions." /></label> : null}
+
+        {intakeStage === 2 ? <div className="space-y-3">
           <div className="flex items-center justify-between"><h3 className="font-semibold text-iron-950">Quote line items</h3><button type="button" onClick={() => setLineItems((current) => [...current, blankLine()])} className="inline-flex items-center gap-2 rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold"><Plus className="h-4 w-4" /> Add line</button></div>
           {lineItems.map((line, index) => (
             <div key={index} className="grid gap-3 rounded-md border border-iron-100 p-3 md:grid-cols-[1fr_100px_100px_140px_44px]">
@@ -292,9 +320,9 @@ export function CustomerQuotesPage() {
               <button type="button" aria-label={`Remove item ${index + 1}`} disabled={lineItems.length === 1} onClick={() => setLineItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="mt-6 grid h-10 place-items-center rounded-md border border-iron-200 text-red-700 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
-        </div>
+        </div> : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        {intakeStage === 3 ? <><div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium text-iron-700">Assumptions, one per line<textarea value={assumptions} onChange={(event) => setAssumptions(event.target.value)} className="min-h-24 rounded-md border border-iron-200 px-3 py-2" /></label>
           <label className="grid gap-1 text-sm font-medium text-iron-700">Exclusions, one per line<textarea value={exclusions} onChange={(event) => setExclusions(event.target.value)} className="min-h-24 rounded-md border border-iron-200 px-3 py-2" /></label>
           <Field label="GST rate %" type="number" value={gstRate} onChange={setGstRate} required />
@@ -302,8 +330,13 @@ export function CustomerQuotesPage() {
           <Field label="Valid until" type="date" value={validUntil} onChange={setValidUntil} />
           <Field label="Internal / customer notes" value={notes} onChange={setNotes} />
         </div>
-        <div className="grid gap-3 rounded-md bg-iron-50 p-4 text-sm sm:grid-cols-3"><Total label="Subtotal" value={totals.subtotal} /><Total label="GST" value={totals.gst} /><Total label="Quote total" value={totals.total} strong /></div>
-        <button disabled={saving || !projectName.trim() || !customerName.trim() || !scopeSummary.trim() || lineItems.some((line) => !line.description.trim() || Number(line.quantity) <= 0)} className="rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black disabled:opacity-50">{saving ? "Saving…" : editing ? "Save quote revision" : "Save draft quote in IHOS"}</button>
+        <section className="rounded-md border border-iron-100 bg-iron-50 p-4" aria-labelledby="quote-review-title"><h3 id="quote-review-title" className="font-semibold text-iron-950">Review before saving</h3><dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-iron-500">Customer / project</dt><dd className="font-semibold text-iron-900">{customerName} — {projectName}</dd></div><div><dt className="text-iron-500">Site</dt><dd className="font-semibold text-iron-900">{siteAddress || "Not provided"}</dd></div><div className="sm:col-span-2"><dt className="text-iron-500">Scope</dt><dd className="text-iron-900">{scopeSummary}</dd></div></dl></section>
+        <div className="grid gap-3 rounded-md bg-iron-50 p-4 text-sm sm:grid-cols-3"><Total label="Subtotal" value={totals.subtotal} /><Total label="GST" value={totals.gst} /><Total label="Quote total" value={totals.total} strong /></div></> : null}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          {intakeStage > 0 ? <button type="button" onClick={() => setIntakeStage((current) => Math.max(0, current - 1))} className="min-h-12 rounded-md border border-iron-200 px-4 py-3 font-semibold text-iron-700">Back</button> : <span />}
+          {intakeStage < intakeStages.length - 1 ? <button type="button" onClick={continueIntake} disabled={!stageComplete(intakeStage)} className="min-h-12 rounded-md bg-iron-950 px-4 py-3 font-semibold text-white disabled:opacity-50">Continue to {intakeStages[intakeStage + 1]}</button> : <button disabled={saving || !projectName.trim() || !customerName.trim() || !scopeSummary.trim() || lineItems.some((line) => !line.description.trim() || Number(line.quantity) <= 0)} className="min-h-12 rounded-md bg-brand-gold px-4 py-3 font-semibold text-brand-black disabled:opacity-50">{saving ? "Saving…" : editing ? "Save quote revision" : "Save draft quote in IHOS"}</button>}
+        </div>
       </form>
 
       {accepting ? (
@@ -349,4 +382,8 @@ function lines(value: string) {
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function stage(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < intakeStages.length ? value : 0;
 }
