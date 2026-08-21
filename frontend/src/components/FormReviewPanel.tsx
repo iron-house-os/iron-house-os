@@ -9,6 +9,12 @@ export type FormReviewItem = {
   value: ReactNode;
 };
 
+function displayReviewValue(value: ReactNode): ReactNode {
+  if (value === null || value === undefined || value === "") return "Not entered";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return value;
+}
+
 type Props = {
   title: string;
   destination: string;
@@ -55,7 +61,7 @@ export function FormReviewPanel({
         {items.map((item) => (
           <div key={item.label} className="rounded-md bg-iron-50 p-3">
             <dt className="text-[10px] font-semibold uppercase tracking-wide text-iron-500">{item.label}</dt>
-            <dd className="mt-1 break-words text-sm font-semibold text-iron-950">{item.value || "Not entered"}</dd>
+            <dd className="mt-1 break-words text-sm font-semibold text-iron-950">{displayReviewValue(item.value)}</dd>
           </div>
         ))}
       </dl>
@@ -63,7 +69,7 @@ export function FormReviewPanel({
       {children ? <div className="mt-4">{children}</div> : null}
 
       <div className="mt-4">
-        <UniversalPhotoField files={files} onFilesChange={onFilesChange} category={category} label={`Photos selected (${files.length})`} />
+        <UniversalPhotoField files={files} onFilesChange={onFilesChange} category={category} label={`Photos selected (${files.length})`} disabled={posting} />
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">

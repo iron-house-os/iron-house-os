@@ -49,6 +49,25 @@ export function incidentWorkDate(occurredAt: string, fallback = today()) {
     : fallback;
 }
 
+type FieldRecordReviewInput = {
+  title: string;
+  mode: "foreman" | "operator" | "employee";
+  recordType: string;
+  equipmentId: string;
+  notes: string;
+  occurredAt: string;
+  occurrenceLocation: string;
+  immediateControls: string;
+};
+
+export function fieldRecordReviewReady(input: FieldRecordReviewInput): boolean {
+  if (!input.title.trim()) return false;
+  if (input.mode === "operator" && input.recordType === "equipment_inspection" && !input.equipmentId) return false;
+  if (input.recordType !== "incident") return true;
+  return [input.notes, input.occurredAt, input.occurrenceLocation, input.immediateControls]
+    .every((value) => Boolean(value.trim()));
+}
+
 function useFieldOperations() {
   const [data, setData] = useState<FieldOperationsBootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -657,9 +676,24 @@ function RecordForm({ data, mode, initialType, onSaved, onError }: { data: Field
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
+  const reviewReady = fieldRecordReviewReady({
+    title,
+    mode,
+    recordType,
+    equipmentId,
+    notes,
+    occurredAt,
+    occurrenceLocation,
+    immediateControls,
+  });
+
   function review(event: FormEvent) {
     event.preventDefault();
     onError(null);
+    if (!reviewReady) {
+      onError("Complete the required field record details before review.");
+      return;
+    }
     setReviewing(true);
   }
 
@@ -748,7 +782,7 @@ function RecordForm({ data, mode, initialType, onSaved, onError }: { data: Field
       {["daily_hazard_assessment", "toolbox_talk"].includes(recordType) ? (
         <EmployeeChecklist employees={data.employees} selected={attendees} onChange={setAttendees} />
       ) : null}
-      <PrimaryButton disabled={!title || (mode === "operator" && recordType === "equipment_inspection" && !equipmentId) || (recordType === "incident" && (!notes || !occurredAt || !occurrenceLocation || !immediateControls))}>Review field record</PrimaryButton>
+      <PrimaryButton disabled={!reviewReady}>Review field record</PrimaryButton>
     </form>
   );
 }
