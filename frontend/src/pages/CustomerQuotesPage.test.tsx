@@ -21,7 +21,7 @@ function json(payload: unknown, status = 200) {
   });
 }
 
-function quote(status: "draft" | "accepted", revision: number) {
+function quote(status: "draft" | "sent" | "accepted" | "declined" | "expired", revision: number) {
   return {
     id: "quote-1",
     project_id: "project-1",
@@ -74,6 +74,12 @@ describe("CustomerQuotesPage", () => {
       if (url.endsWith("/accept") && init?.method === "POST") {
         quoteBodies.push(JSON.parse(String(init.body)));
         savedQuote = quote("accepted", 2);
+        return json(savedQuote);
+      }
+      if (url.endsWith("/status") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        quoteBodies.push(body);
+        savedQuote = quote(body.status, 2);
         return json(savedQuote);
       }
       if (url.endsWith("/workflow-drafts") && init?.method === "POST") {
@@ -146,5 +152,32 @@ describe("CustomerQuotesPage", () => {
     expect(screen.getByText("IH-2026-001")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Project Workspace/ })).toHaveAttribute("href", "/projects/project-1");
     await waitFor(() => expect(quoteBodies.at(-1)).toEqual(expect.objectContaining({ acceptance_reference: "Customer email" })));
+  });
+
+  it("opens a queued draft directly and records a sent quote decision", async () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    savedQuote = quote("draft", 1);
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/customer-quotes?quoteId=quote-1&action=edit"]}>
+        <CustomerQuotesPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Edit Q-2026-001" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project / work name")).toHaveValue("Smith drainage repair");
+    unmount();
+
+    savedQuote = quote("sent", 1);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/customer-quotes?quoteId=quote-1&action=decision"]}>
+        <CustomerQuotesPage />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Mark declined" }));
+    await waitFor(() => expect(screen.getByText("declined")).toBeInTheDocument());
+    expect(quoteBodies.at(-1)).toEqual({ expected_revision: 1, status: "declined", note: null });
   });
 });

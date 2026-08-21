@@ -8,13 +8,15 @@ import { ReceiptCapturePanel } from "../components/ReceiptCapturePanel";
 import { CustomerInvoicePanel } from "../components/CustomerInvoicePanel";
 import { financeApi, FinancialSummary, StartupExpenseSummary } from "../api/finance";
 import { projectsApi, Project } from "../api/projects";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const today = () => new Date().toISOString().slice(0, 10);
 
 export function FinancialControlPage() {
+  const routedProjectId = readEffectiveProjectContext(window.location.search).projectId ?? "";
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(routedProjectId);
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
   const [startup, setStartup] = useState<StartupExpenseSummary | null>(null);
   const [backupsReview, setBackupsReview] = useState<Record<string, BackupsIntake[]>>({});
@@ -22,7 +24,7 @@ export function FinancialControlPage() {
   const [startupDate, setStartupDate] = useState(today()); const [startupVendor, setStartupVendor] = useState(""); const [startupDescription, setStartupDescription] = useState(""); const [startupAmount, setStartupAmount] = useState(""); const [startupCategory, setStartupCategory] = useState("other"); const [startupReference, setStartupReference] = useState(""); const [startupOwner, setStartupOwner] = useState("");
   const [startupFiles, setStartupFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(false);
-  useEffect(() => { projectsApi.list().then((data) => setProjects(data.items)).catch(() => setError("Unable to load projects.")); void refreshStartup(); void refreshBackupsReview(); }, []);
+  useEffect(() => { projectsApi.list().then((data) => { setProjects(data.items); if (routedProjectId && data.items.some((project) => project.id === routedProjectId)) void refresh(routedProjectId); }).catch(() => setError("Unable to load projects.")); void refreshStartup(); void refreshBackupsReview(); }, []);
   async function refresh(id = projectId) { if (!id) return; setLoading(true); setError(null); try { setSummary(await financeApi.getProject(id)); } catch (current) { setError(current instanceof Error ? current.message : "Unable to load financials."); } finally { setLoading(false); } }
   async function refreshStartup() { try { setStartup(await financeApi.getStartupExpenses()); } catch (current) { setError(current instanceof Error ? current.message : "Unable to load startup costs."); } }
   async function refreshBackupsReview() { const destinations: BackupsReviewDestination[] = ["finance_intake", "finance_receipts", "finance_invoices", "finance_packing_slips"]; try { const queues = await Promise.all(destinations.map(async (destination) => [destination, (await financeApi.getBackupsReview(destination)).items] as const)); setBackupsReview(Object.fromEntries(queues)); } catch (current) { setError(current instanceof Error ? current.message : "Unable to load Backups review queues."); } }

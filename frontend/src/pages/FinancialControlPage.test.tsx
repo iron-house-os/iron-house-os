@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BackupsIntake } from "../api/backups";
 import { financeApi } from "../api/finance";
+import { projectsApi } from "../api/projects";
 import { FinancialControlPage } from "./FinancialControlPage";
 
 vi.mock("../api/finance", () => ({ financeApi: { getBackupsReview: vi.fn(), getStartupExpenses: vi.fn(), getCustomerInvoices: vi.fn(() => Promise.resolve({ items: [], total: 0 })), getProject: vi.fn(), importEstimate: vi.fn(), createEntry: vi.fn(), createStartupExpense: vi.fn(), updateStartupExpense: vi.fn(), startupQuickBooksUrl: vi.fn(() => "#"), quickBooksUrl: vi.fn(() => "#"), customerInvoicePdfUrl: vi.fn(() => "#") } }));
@@ -18,6 +19,7 @@ const item: BackupsIntake = {
 describe("FinancialControlPage Backups queues", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, "", "/finance");
     vi.mocked(financeApi.getStartupExpenses).mockResolvedValue({ total_startup_costs: 0, owner_loan_payable: 0, reimbursed_to_owner: 0, pending_review: 0, approved_unreimbursed: 0, entries: [] });
     vi.mocked(financeApi.getBackupsReview).mockImplementation(async (destination) => ({ items: destination === "finance_packing_slips" ? [item] : [], total: destination === "finance_packing_slips" ? 1 : 0 }));
   });
@@ -29,5 +31,32 @@ describe("FinancialControlPage Backups queues", () => {
     expect(screen.getByText(/quantity, quality, delivery acceptance, and project cost are not confirmed/i)).toBeInTheDocument();
     await waitFor(() => expect(financeApi.getBackupsReview).toHaveBeenCalledTimes(4));
     expect(screen.getByRole("img", { name: "Private Backups Packing Slips original" })).toHaveAttribute("src", "/private-media/media-1");
+  });
+
+  it("opens the linked project financial summary from workflow context", async () => {
+    window.history.replaceState({}, "", "/finance?projectId=project-7&projectName=Linked+Job");
+    vi.mocked(projectsApi.list).mockResolvedValue({
+      items: [{ id: "project-7", name: "Linked Job" }],
+      total: 1,
+    } as never);
+    vi.mocked(financeApi.getProject).mockResolvedValue({
+      project_id: "project-7",
+      project_name: "Linked Job",
+      contract_value: 0,
+      budget: 0,
+      committed: 0,
+      actual: 0,
+      forecast_cost: 0,
+      cost_variance: 0,
+      forecast_profit: 0,
+      forecast_margin_percent: 0,
+      entries: [],
+      cost_codes: [],
+    });
+
+    render(<FinancialControlPage />);
+
+    expect(await screen.findByRole("combobox", { name: "Project" })).toHaveValue("project-7");
+    await waitFor(() => expect(financeApi.getProject).toHaveBeenCalledWith("project-7"));
   });
 });
