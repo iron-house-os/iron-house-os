@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: iron-house-os-production-project-import
@@ -151,6 +153,20 @@ jobs:
               stream.write("\n")
           print(json.dumps(evidence, sort_keys=True))
           PY
+
+      - name: Publish verified import evidence to pull request
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Production project import verified"
+            echo
+            echo '~~~json'
+            cat "$EVIDENCE_FILE"
+            echo '~~~'
+          } > "${{ runner.temp }}/production-project-import-comment.md"
+          gh pr comment 236 --repo "$GITHUB_REPOSITORY" --body-file "${{ runner.temp }}/production-project-import-comment.md"
 
       - name: Upload immutable import evidence
         if: always()
