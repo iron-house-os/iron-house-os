@@ -40,6 +40,7 @@ export function MVPWorkflowPage() {
 
   useEffect(() => {
     let active = true;
+    const launchControllers = new Set<AbortController>();
     void (async () => {
       const errors: string[] = [];
       const [draftResult, quoteResult, projectResult] = await Promise.allSettled([
@@ -57,18 +58,35 @@ export function MVPWorkflowPage() {
       if (projectResult.status === "fulfilled") {
         setProjects(projectResult.value.items);
         const awarded = projectResult.value.items.filter(
-          (project) => project.status === "awarded" && project.workspace_root,
+          (project) => project.status === "awarded" && project.project_number,
         );
-        const launches = await Promise.allSettled(
-          awarded.map((project) => projectsApi.launchDashboard(project.id)),
-        );
-        if (!active) return;
-        const available: Record<string, ProjectLaunchDashboard> = {};
-        launches.forEach((result, index) => {
-          if (result.status === "fulfilled") available[awarded[index].id] = result.value;
-          else errors.push(`Launch status could not be loaded for ${awarded[index].name}.`);
-        });
-        setLaunchByProjectId(available);
+        setLoadErrors(errors);
+        setIsLoading(false);
+
+        let nextIndex = 0;
+        async function loadNextLaunch() {
+          while (active && nextIndex < awarded.length) {
+            const project = awarded[nextIndex];
+            nextIndex += 1;
+            const controller = new AbortController();
+            launchControllers.add(controller);
+            const timeout = window.setTimeout(() => controller.abort(), 8000);
+            try {
+              const launch = await projectsApi.launchDashboard(project.id, { signal: controller.signal });
+              if (active) setLaunchByProjectId((current) => ({ ...current, [project.id]: launch }));
+            } catch {
+              if (active) {
+                const message = `Launch status could not be loaded for ${project.name}.`;
+                setLoadErrors((current) => current.includes(message) ? current : [...current, message]);
+              }
+            } finally {
+              window.clearTimeout(timeout);
+              launchControllers.delete(controller);
+            }
+          }
+        }
+        void Promise.all(Array.from({ length: Math.min(3, awarded.length) }, () => loadNextLaunch()));
+        return;
       } else {
         errors.push("Projects could not be loaded.");
       }
@@ -76,7 +94,11 @@ export function MVPWorkflowPage() {
       setLoadErrors(errors);
       setIsLoading(false);
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+      launchControllers.forEach((controller) => controller.abort());
+      launchControllers.clear();
+    };
   }, []);
 
   const workQueue = useMemo(
@@ -253,7 +275,11 @@ export function buildMvpWorkQueue(
   }
 
   for (const project of projects) {
-    if (project.status === "archived" || project.status === "completed" || activeQuoteProjectIds.has(project.id)) continue;
+    if (
+      project.status === "archived" ||
+      project.status === "completed" ||
+      (project.status === "opportunity" && activeQuoteProjectIds.has(project.id))
+    ) continue;
     const projectContext = { id: project.id, name: project.name };
     if (project.status === "awarded") {
       const launch = launchByProjectId[project.id];
@@ -288,7 +314,9 @@ export function buildMvpWorkQueue(
         nextPath: withProjectContext("/project-operations", projectContext),
         secondaryActions: [
           { label: "Finance", path: withProjectContext("/finance", projectContext) },
+          { label: "PO requests", path: withProjectContext("/request-po", projectContext) },
           { label: "Safety", path: withProjectContext("/safety-operations", projectContext) },
+          { label: "Documents", path: withProjectContext("/documents", projectContext) },
         ],
       });
     } else {
