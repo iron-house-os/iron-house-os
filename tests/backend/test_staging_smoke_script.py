@@ -45,8 +45,25 @@ def test_staging_smoke_proves_viewer_role_denials_and_synthetic_opt_in() -> None
         '    "$API_URL$API_PREFIX/projects" \\\n'
         '    "403"'
     ) in script
-    assert "STAGING_SYNTHETIC_DATA requires STAGING_EMAIL and STAGING_PASSWORD" in script
+    assert "Synthetic staging data requires STAGING_EMAIL and STAGING_PASSWORD" in script
     assert "Set both STAGING_VIEWER_EMAIL and STAGING_VIEWER_PASSWORD" in script
+
+
+def test_disposable_mvp_smoke_proves_quote_to_job_lifecycle_and_viewer_boundary() -> None:
+    script = (ROOT / "scripts/staging-smoke-test.sh").read_text()
+
+    assert 'if [[ "${STAGING_MVP_SYNTHETIC_DATA:-false}" == "true"' in script
+    assert "STAGING_MVP_SYNTHETIC_DATA requires STAGING_SYNTHETIC_DATA=true" in script
+    assert '"$API_URL$API_PREFIX/customer-quotes"' in script
+    assert 'read_quote_state "draft" "absent"' in script
+    assert 'read_quote_state "sent" "absent"' in script
+    assert 'read_quote_state "accepted" "present"' in script
+    assert '"$API_URL$API_PREFIX/projects/$project_id/workspace"' in script
+    assert '"$API_URL$API_PREFIX/projects/$project_id/start-checklist"' in script
+    assert '"$API_URL$API_PREFIX/projects/$project_id/launch-dashboard"' in script
+    assert '"$API_URL$API_PREFIX/projects/$restricted_launch_project_id/launch-dashboard"' in script
+    assert "New awarded job does not have the expected ten unchecked start controls." in script
+    assert "Launch dashboard inferred readiness for a new job." in script
 
 
 def test_staging_rollback_probe_requires_post_restore_absence() -> None:
