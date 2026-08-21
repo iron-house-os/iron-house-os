@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CustomerQuoteStatus(StrEnum):
@@ -53,6 +53,13 @@ class CustomerQuoteUpdate(BaseModel):
     quote_date: date | None = None
     valid_until: date | None = None
     notes: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("quote_date", mode="before")
+    @classmethod
+    def reject_null_quote_date(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("quote_date cannot be null")
+        return value
 
 
 class CustomerQuoteStatusUpdate(BaseModel):

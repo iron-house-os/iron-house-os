@@ -126,7 +126,7 @@ describe("CustomerQuotesPage", () => {
     await user.type(screen.getByLabelText("Customer / company"), "Alex Smith");
     await user.type(screen.getByLabelText("Scope summary"), "Replace failed storm service");
     await user.type(screen.getByLabelText("Item 1"), "Pipe replacement");
-    await user.type(screen.getByLabelText("Unit price"), "10000");
+    await user.type(screen.getByLabelText("Unit price 1"), "10000");
 
     await user.click(screen.getByRole("button", { name: "Save draft quote in IHOS" }));
 

@@ -98,6 +98,20 @@ def test_sent_quote_remains_non_binding_and_stale_edits_are_rejected() -> None:
     assert client.get(f"/api/v1/projects/{created['project_id']}").json()["status"] == "opportunity"
 
 
+def test_quote_date_cannot_be_cleared_on_update() -> None:
+    created = _create_quote()
+
+    rejected = client.patch(
+        f"/api/v1/customer-quotes/{created['id']}",
+        json={"expected_revision": 1, "quote_date": None},
+    )
+
+    assert rejected.status_code == 422
+    unchanged = client.get(f"/api/v1/customer-quotes/{created['id']}").json()
+    assert unchanged["quote_date"] == "2026-08-21"
+    assert unchanged["record_revision"] == 1
+
+
 def test_management_acceptance_atomically_awards_project_and_is_idempotent() -> None:
     created = _create_quote()
     acceptance = {

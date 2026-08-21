@@ -68,8 +68,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail ?? `Customer quote request failed with ${response.status}`);
+    const body = await response.json().catch(() => null) as {
+      detail?: string;
+      error?: { message?: string };
+    } | null;
+    throw new Error(
+      body?.detail
+      ?? body?.error?.message
+      ?? `Customer quote request failed with ${response.status}`,
+    );
   }
   return response.json() as Promise<T>;
 }
