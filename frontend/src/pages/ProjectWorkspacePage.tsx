@@ -100,7 +100,7 @@ export function ProjectWorkspacePage() {
         <div>
           <h1 className="text-3xl font-semibold text-iron-950">Project Workspace</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
-            Command center for a live bid: tender intake, documents, RFQs, suppliers, quotes, estimate, risk, and bid package.
+            Command center for live bids and awarded jobs: tender intake, documents, RFQs, suppliers, quotes, estimate, risk, and delivery records.
           </p>
         </div>
         <button
@@ -169,6 +169,7 @@ function CreateProjectForm({ onSubmit }: { onSubmit: (payload: ProjectCreatePayl
   const [name, setName] = useState("");
   const [municipality, setMunicipality] = useState("");
   const [bidDueDate, setBidDueDate] = useState("");
+  const [status, setStatus] = useState<ProjectStatus>("opportunity");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -177,7 +178,7 @@ function CreateProjectForm({ onSubmit }: { onSubmit: (payload: ProjectCreatePayl
       name: name.trim(),
       municipality: municipality.trim() || undefined,
       bid_due_date: bidDueDate || undefined,
-      status: "opportunity",
+      status,
     });
     setName("");
     setMunicipality("");
@@ -215,13 +216,30 @@ function CreateProjectForm({ onSubmit }: { onSubmit: (payload: ProjectCreatePayl
             className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
           />
         </Field>
+        <Field label="Project stage">
+          <select
+            aria-label="Project stage"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as ProjectStatus)}
+            className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+          >
+            <option value="opportunity">Opportunity</option>
+            <option value="tendering">Tendering</option>
+            <option value="awarded">Awarded</option>
+          </select>
+        </Field>
+        {status === "awarded" ? (
+          <div role="status" className="rounded-md border border-brand-gold/40 bg-brand-gold/5 p-3 text-sm text-iron-700">
+            IHOS will generate the next unique job number when this awarded project is created.
+          </div>
+        ) : null}
       </div>
       <button
         type="submit"
         className="mt-5 inline-flex items-center gap-2 rounded-md bg-iron-950 px-3 py-2 text-sm font-semibold text-white"
       >
         <FolderKanban className="h-4 w-4" />
-        Create
+        {status === "awarded" ? "Create awarded job" : "Create"}
       </button>
     </form>
   );
@@ -243,6 +261,7 @@ function ProjectList({
         <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
+              <th className="py-2 pr-4">Job #</th>
               <th className="py-2 pr-4">Name</th>
               <th className="py-2 pr-4">Municipality</th>
               <th className="py-2 pr-4">Status</th>
@@ -261,6 +280,7 @@ function ProjectList({
                     " ",
                   )}
                 >
+                  <td className="py-3 pr-4 font-semibold text-iron-800">{project.project_number ?? "Pending award"}</td>
                   <td className="py-3 pr-4 font-medium text-iron-950">
                     <Link to={`/projects/${project.id}`}>{project.name}</Link>
                   </td>
@@ -274,7 +294,7 @@ function ProjectList({
             })}
             {projects.length === 0 ? (
               <tr>
-                <td className="py-3 text-iron-500" colSpan={6}>
+                <td className="py-3 text-iron-500" colSpan={7}>
                   No projects found.
                 </td>
               </tr>
