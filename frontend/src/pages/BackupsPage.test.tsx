@@ -71,32 +71,39 @@ describe("BackupsPage", () => {
     vi.mocked(backupsApi.create).mockResolvedValue(intake);
   });
 
-  it("accepts exactly one camera image and registers its private media ID", async () => {
+  it("accepts multiple camera images and registers each private media ID", async () => {
     const user = userEvent.setup();
+    vi.mocked(mediaApi.upload).mockResolvedValue([{ id: "media-1" }, { id: "media-2" }] as never);
     render(<BackupsPage />);
 
-    const input = screen.getByLabelText("Photo") as HTMLInputElement;
-    expect(input.multiple).toBe(false);
+    const input = screen.getByLabelText("Take photos or choose multiple") as HTMLInputElement;
+    expect(input.multiple).toBe(true);
     expect(input.accept).toBe("image/*");
     expect(input.getAttribute("capture")).toBe("environment");
 
-    const file = new File(["image"], "receipt.jpg", { type: "image/jpeg" });
-    await user.upload(input, file);
+    const first = new File(["image-1"], "receipt-1.jpg", { type: "image/jpeg" });
+    const second = new File(["image-2"], "receipt-2.jpg", { type: "image/jpeg" });
+    await user.upload(input, [first, second]);
     await user.type(screen.getByLabelText("Optional note"), "Fuel receipt");
     await user.type(screen.getByLabelText("Optional project hint"), "Main Street");
-    await user.click(screen.getByRole("button", { name: "Store photo in Backups" }));
+    await user.click(screen.getByRole("button", { name: "Store 2 photos in Backups" }));
 
     await waitFor(() => expect(mediaApi.upload).toHaveBeenCalledWith({
-      files: [file],
+      files: [first, second],
       caption: "Fuel receipt",
       category: "backup",
     }));
-    expect(backupsApi.create).toHaveBeenCalledWith({
+    expect(backupsApi.create).toHaveBeenNthCalledWith(1, {
       media_id: "media-1",
       note: "Fuel receipt",
       project_hint: "Main Street",
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("daily controller");
+    expect(backupsApi.create).toHaveBeenNthCalledWith(2, {
+      media_id: "media-2",
+      note: "Fuel receipt",
+      project_hint: "Main Street",
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("2 photos stored");
   });
 
   it("shows meaningful classification diagnostics instead of a fixed fallback confidence", async () => {

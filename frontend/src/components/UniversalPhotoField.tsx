@@ -15,9 +15,27 @@ type Props = {
   projectId?: string;
   recordType?: string;
   recordId?: string;
+  disabled?: boolean;
 };
 
 type Annotation = { type: "draw" | "arrow" | "box" | "highlight" | "text"; text?: string };
+
+function fileIdentity(file: File): string {
+  return [file.name, file.size, file.type, file.lastModified].join(":");
+}
+
+export function mergePhotoSelections(current: File[], incoming: File[]): File[] {
+  const existing = new Set(current.map(fileIdentity));
+  return [
+    ...current,
+    ...incoming.filter((file) => {
+      const identity = fileIdentity(file);
+      if (existing.has(identity)) return false;
+      existing.add(identity);
+      return true;
+    }),
+  ];
+}
 
 export function UniversalPhotoField({
   files = [],
@@ -28,6 +46,7 @@ export function UniversalPhotoField({
   projectId,
   recordType,
   recordId,
+  disabled = false,
 }: Props) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [recordFiles, setRecordFiles] = useState<File[]>([]);
@@ -70,35 +89,44 @@ export function UniversalPhotoField({
     <div className="grid gap-2 text-sm">
       <span className="font-medium text-iron-700">{label}</span>
       {(onFilesChange || recordId) ? (
-        <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-brand-gold/60 bg-brand-gold/5 px-3 py-2 font-semibold text-iron-800">
+        <label
+          aria-disabled={disabled}
+          className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-brand-gold/60 bg-brand-gold/5 px-3 py-2 font-semibold text-iron-800 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+        >
           <Camera className="h-4 w-4" />
           {selectedFiles.length ? selectedFiles.length + " ready to upload" : "Take photos or choose multiple"}
           <input
+            aria-label="Take photos or choose multiple"
             type="file"
             accept="image/*"
             multiple
             capture="environment"
             className="sr-only"
-            onChange={(event) => changeFiles(Array.from(event.target.files ?? []))}
+            disabled={disabled}
+            onChange={(event) => {
+              changeFiles(mergePhotoSelections(selectedFiles, Array.from(event.target.files ?? [])));
+              event.currentTarget.value = "";
+            }}
           />
         </label>
       ) : null}
       {previews.length ? (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {previews.map(({ file, url }, index) => (
-            <div key={file.name + file.lastModified} className="relative aspect-square overflow-hidden rounded-md border border-iron-100 bg-iron-50">
+            <div key={fileIdentity(file)} className="relative aspect-square overflow-hidden rounded-md border border-iron-100 bg-iron-50">
               <img src={url} alt={file.name} className="h-full w-full object-cover" />
               <button
                 type="button"
                 aria-label={"Remove " + file.name}
+                disabled={disabled}
                 onClick={() => changeFiles(selectedFiles.filter((_, itemIndex) => itemIndex !== index))}
-                className="absolute right-1 top-1 rounded-full bg-iron-950/80 p-1 text-white"
+                className="absolute right-1 top-1 rounded-full bg-iron-950/80 p-1 text-white disabled:cursor-not-allowed disabled:opacity-50"
               ><X className="h-3 w-3" /></button>
             </div>
           ))}
         </div>
       ) : null}
-      {recordId && selectedFiles.length ? <button type="button" disabled={uploading} onClick={() => void uploadToRecord()} className="rounded-md bg-brand-gold px-3 py-2 font-semibold text-brand-black disabled:opacity-50">{uploading ? "Uploading " + progress + "%" : error ? "Retry upload" : "Upload photos"}</button> : null}
+      {recordId && selectedFiles.length ? <button type="button" disabled={uploading || disabled} onClick={() => void uploadToRecord()} className="rounded-md bg-brand-gold px-3 py-2 font-semibold text-brand-black disabled:opacity-50">{uploading ? "Uploading " + progress + "%" : error ? "Retry upload" : "Upload photos"}</button> : null}
       {assets.length ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {assets.map((asset) => (

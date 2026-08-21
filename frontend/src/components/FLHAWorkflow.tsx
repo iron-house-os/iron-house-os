@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Employee, FieldOperationsBootstrap, FieldRecord, fieldOperationsApi } from "../api/fieldOperations";
 import { mediaApi } from "../api/media";
 import { useAuth } from "../contexts/AuthContext";
+import { FormReviewPanel } from "./FormReviewPanel";
 import { UniversalPhotoField } from "./UniversalPhotoField";
 
 const SCREENING = [
@@ -68,6 +69,7 @@ export function FLHAWorkflow({ data, canCreate, onSaved, onError }: Props) {
   const [emergency, setEmergency] = useState({ response_plan: "Call 911, provide site access details and notify the supervisor", muster_point: "", first_aid_location: "", communication: "Mobile phone / two-way radio", stop_work_triggers: "Conditions change, control fails, worker is unsure, or a new critical hazard is identified" });
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [sharedSigner, setSharedSigner] = useState<Record<string, string>>({});
 
   const selectedProject = data.projects.find((item) => item.id === projectId);
@@ -101,13 +103,24 @@ export function FLHAWorkflow({ data, canCreate, onSaved, onError }: Props) {
   }
 
   function reset() {
-    setEditing(null); setReassessment(null); setChangedConditions(["conditions"]); setSite(""); setAssessmentDateTime(localDateTime()); setCrewIds([]); setWeather("");
+    setEditing(null); setReassessment(null); setReviewing(false); setChangedConditions(["conditions"]); setSite(""); setAssessmentDateTime(localDateTime()); setCrewIds([]); setWeather("");
     setScreening({}); setHazards([emptyHazard()]); setFiles([]);
     setEmergency({ response_plan: "Call 911, provide site access details and notify the supervisor", muster_point: "", first_aid_location: "", communication: "Mobile phone / two-way radio", stop_work_triggers: "Conditions change, control fails, worker is unsure, or a new critical hazard is identified" });
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setSaving(true); onError(null);
+  function review(event: FormEvent) {
+    event.preventDefault();
+    onError(null);
+    if (!projectId) {
+      onError("Select a project / job before reviewing and posting the FLHA.");
+      return;
+    }
+    setReviewing(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function post() {
+    setSaving(true); onError(null);
     try {
       const uploaded = files.length ? await mediaApi.upload({ files, projectId: projectId || undefined, caption: "FLHA field evidence", capturedDate: assessmentDateTime.slice(0, 10), category: "flha" }) : [];
       const documentIds = [...(editing?.document_ids ?? []), ...uploaded.map((asset) => asset.original_document_id)];
@@ -147,7 +160,33 @@ export function FLHAWorkflow({ data, canCreate, onSaved, onError }: Props) {
   const localCriticalBlockers = hazards.filter((row) => row.risk === "critical" && (!row.accepted_control || !row.responsible_person || (row.evidence_required && !row.evidence))).length;
 
   return <div className="space-y-5">
-    {canCreate ? <form onSubmit={submit} className="rounded-xl border border-brand-gold/40 bg-white p-4 shadow-sm sm:p-5">
+    {canCreate ? reviewing ? <FormReviewPanel
+      title="FLHA"
+      destination={`${selectedProject?.name ?? "Selected job"} / Safety / FLHA`}
+      items={[
+        { label: "Project / job", value: selectedProject?.name ?? "" },
+        { label: "Site / location", value: site },
+        { label: "Assessment date and time", value: assessmentDateTime.replace("T", " ") },
+        { label: "Supervisor / foreperson", value: data.employees.find((item) => item.id === supervisorId) ? employeeName(data.employees.find((item) => item.id === supervisorId) as Employee) : "" },
+        { label: "First aid attendant", value: data.employees.find((item) => item.id === firstAidId) ? employeeName(data.employees.find((item) => item.id === firstAidId) as Employee) : "" },
+        { label: "Crew", value: crewIds.map((id) => data.employees.find((item) => item.id === id)).filter((item): item is Employee => Boolean(item)).map(employeeName).join(", ") },
+        { label: "Weather", value: weather },
+        { label: "Hazard screening", value: `${Object.keys(screening).length} of ${SCREENING.length} answered` },
+        { label: "Critical blockers", value: String(localCriticalBlockers) },
+      ]}
+      files={files}
+      onFilesChange={setFiles}
+      category="flha"
+      onBack={() => setReviewing(false)}
+      onPost={() => void post()}
+      posting={saving}
+      postLabel={editing ? "Post reviewed changes" : reassessment ? "Post re-assessment to job folder" : "Post FLHA to job folder"}
+    >
+      <div className="grid gap-3">
+        <div className="rounded-md border border-iron-100 p-3"><div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Emergency response</div><div className="mt-2 grid gap-1 text-sm text-iron-700">{Object.entries(emergency).map(([key, value]) => <div key={key}><strong className="capitalize">{key.replaceAll("_", " ")}:</strong> {value || "Not entered"}</div>)}</div></div>
+        <div className="rounded-md border border-iron-100 p-3"><div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Tasks, hazards and controls</div><div className="mt-2 grid gap-2">{hazards.map((row, index) => <div key={index} className="rounded bg-iron-50 p-2 text-sm"><strong>{row.task || `Row ${index + 1}`}</strong> · {row.hazard || "Hazard not entered"} · {row.control || "Control not entered"} · {row.responsible_person || "Responsible person not entered"}</div>)}</div></div>
+      </div>
+    </FormReviewPanel> : <form onSubmit={review} className="rounded-xl border border-brand-gold/40 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-brand-gold-dark" /><div><h2 className="font-semibold text-iron-950">{reassessment ? "FLHA re-assessment" : editing ? "Edit FLHA draft" : "Daily FLHA"}</h2><p className="mt-1 text-sm text-iron-500">Fast field screening, task controls, crew acknowledgement and supervisor release.</p></div></div>
       {reassessment ? <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div>New immutable version · Reason: {reassessment.reason}</div><fieldset className="mt-2"><legend className="font-semibold">Material changes</legend><div className="mt-1 flex flex-wrap gap-3">{["scope", "weather", "crew", "equipment", "conditions"].map((trigger) => <label key={trigger} className="flex min-h-11 items-center gap-2 capitalize"><input type="checkbox" checked={changedConditions.includes(trigger)} onChange={(event) => setChangedConditions(event.target.checked ? [...changedConditions, trigger] : changedConditions.filter((item) => item !== trigger))} />{trigger}</label>)}</div></fieldset></div> : null}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -166,7 +205,7 @@ export function FLHAWorkflow({ data, canCreate, onSaved, onError }: Props) {
       <section className="mt-5"><h3 className="font-semibold text-iron-950">Emergency response and stop-work</h3><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(emergency).map(([key, value]) => <TextField key={key} label={key.replaceAll("_", " ")} value={value} onChange={(next) => setEmergency((current) => ({ ...current, [key]: next }))} />)}</div></section>
       <div className="mt-5"><UniversalPhotoField files={files} onFilesChange={setFiles} category="flha" label="FLHA photos / control evidence" /></div>
       <div className={`mt-5 rounded-md p-3 text-sm ${localCriticalBlockers ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{localCriticalBlockers ? <><AlertOctagon className="mr-2 inline h-4 w-4" />Blocked: {localCriticalBlockers} critical hazard(s) still need an accepted control, responsible person or evidence.</> : <><CheckCircle2 className="mr-2 inline h-4 w-4" />No locally detected uncontrolled critical hazards. The responsible field person must still verify actual conditions.</>}</div>
-      <div className="mt-4 flex flex-wrap gap-2"><button type="submit" disabled={saving} className="min-h-11 rounded-md bg-brand-gold px-4 text-sm font-semibold text-brand-black disabled:opacity-50">{saving ? "Saving…" : reassessment ? "Create re-assessment" : editing ? "Save draft changes" : "Save FLHA draft"}</button>{editing || reassessment ? <button type="button" onClick={reset} className="min-h-11 rounded-md border border-iron-100 px-4 text-sm font-semibold">Cancel</button> : null}</div>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="submit" className="min-h-11 rounded-md bg-brand-gold px-4 text-sm font-semibold text-brand-black">Review FLHA</button>{editing || reassessment ? <button type="button" onClick={reset} className="min-h-11 rounded-md border border-iron-100 px-4 text-sm font-semibold">Cancel</button> : null}</div>
       <p className="mt-3 text-xs leading-5 text-iron-500">AI suggestions, if used, are planning aids only and never mark an FLHA safe or complete.</p>
     </form> : null}
     <section className="rounded-xl border border-iron-100 bg-white p-4 shadow-sm sm:p-5"><div className="flex items-start gap-3"><History className="mt-0.5 h-5 w-5 text-brand-gold-dark" /><div><h2 className="font-semibold text-iron-950">FLHA records and acknowledgements</h2><p className="mt-1 text-sm text-iron-500">Signed versions are frozen. Material changes require a new version and fresh crew acknowledgement.</p></div></div><div className="mt-4 space-y-3">{records.map((record) => <FLHARecordCard key={record.id} record={record} employees={data.employees} currentEmployee={currentEmployee} canCreate={canCreate} sharedSigner={sharedSigner[record.id] ?? ""} setSharedSigner={(value) => setSharedSigner((current) => ({ ...current, [record.id]: value }))} onEdit={() => loadRecord(record)} onReassess={() => loadRecord(record, true)} onSaved={onSaved} onError={onError} />)}{!records.length ? <div className="rounded-md bg-iron-50 p-4 text-sm text-iron-500">No FLHA records yet.</div> : null}</div></section>

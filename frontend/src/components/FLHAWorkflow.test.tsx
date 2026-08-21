@@ -77,4 +77,18 @@ describe("FLHAWorkflow", () => {
 
     expect(screen.getByLabelText("Date and time")).toHaveValue("2026-08-02T07:15");
   });
+
+  it("shows a complete review gate before posting the FLHA to the selected job folder", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    render(<FLHAWorkflow data={data} canCreate onSaved={vi.fn()} onError={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Review FLHA" }));
+
+    expect(screen.getByRole("heading", { name: "Review before posting" })).toBeInTheDocument();
+    expect(screen.getByText("River Road / Safety / FLHA")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Post FLHA to job folder" })).toBeInTheDocument();
+    expect(screen.getByText("0 of 10 answered")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to edit" }));
+    expect(screen.getByRole("button", { name: "Review FLHA" })).toBeInTheDocument();
+  });
 });

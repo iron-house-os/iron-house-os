@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
 import { FieldOperationsBootstrap, fieldOperationsApi } from "../api/fieldOperations";
-import { EmployeePortalPage, incidentWorkDate } from "./EmployeePortalPage";
+import { EmployeePortalPage, fieldRecordReviewReady, incidentWorkDate } from "./EmployeePortalPage";
 
 vi.mock("../api/fieldOperations", () => ({
   fieldOperationsApi: { bootstrap: vi.fn() },
@@ -74,5 +74,28 @@ describe("EmployeePortalPage", () => {
     expect(incidentWorkDate("2026-08-11T06:45", "2026-08-18")).toBe("2026-08-11");
     expect(incidentWorkDate("", "2026-08-18")).toBe("2026-08-18");
     expect(incidentWorkDate("2026-02-30T06:45", "2026-08-18")).toBe("2026-08-18");
+  });
+
+  it("blocks implicit field-record review until the same required details as the button are complete", () => {
+    const completeIncident = {
+      title: "Near miss",
+      mode: "employee" as const,
+      recordType: "incident",
+      equipmentId: "",
+      notes: "Bucket entered the exclusion zone.",
+      occurredAt: "2026-08-20T09:15",
+      occurrenceLocation: "North excavation",
+      immediateControls: "Work stopped and exclusion zone reset.",
+    };
+
+    expect(fieldRecordReviewReady(completeIncident)).toBe(true);
+    expect(fieldRecordReviewReady({ ...completeIncident, title: " " })).toBe(false);
+    expect(fieldRecordReviewReady({ ...completeIncident, immediateControls: "" })).toBe(false);
+    expect(fieldRecordReviewReady({
+      ...completeIncident,
+      mode: "operator",
+      recordType: "equipment_inspection",
+      equipmentId: "",
+    })).toBe(false);
   });
 });
