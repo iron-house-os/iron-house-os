@@ -44,8 +44,17 @@ const worker = {
   updated_at: "2026-08-20T10:00:00Z",
 };
 
+const readyWorker = {
+  ...worker,
+  id: "worker-2",
+  legal_first_name: "Ready",
+  legal_last_name: "Worker",
+  personal_email: "ready.worker@example.com",
+};
+
 describe("WorkerOrientationsPage", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [worker], total: 1 });
     vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({
       status: "Blocked",
@@ -116,5 +125,94 @@ describe("WorkerOrientationsPage", () => {
         ),
       }),
     );
+  });
+
+  it("keeps workers visible and fails closed when deployment status cannot be verified", async () => {
+    vi.mocked(employeeOnboardingApi.deploymentStatus).mockRejectedValue(
+      new Error("Onboarding request failed."),
+    );
+
+    render(<WorkerOrientationsPage />);
+
+    expect(await screen.findByRole("option", { name: "Test Worker" })).toBeInTheDocument();
+    expect(await screen.findByText("Status unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Deployment evidence is unverified. This worker is not cleared for deployment.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Required evidence is complete.")).not.toBeInTheDocument();
+    expect(employeeOnboardingApi.deploymentStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a pending status check fail-closed without showing a false failure", async () => {
+    vi.mocked(employeeOnboardingApi.deploymentStatus).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    render(<WorkerOrientationsPage />);
+
+    expect(await screen.findByText("Checking status")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Deployment evidence is being verified. This worker is not cleared for deployment.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Required evidence is complete.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry status" })).not.toBeInTheDocument();
+  });
+
+  it("preserves a verified worker status when another worker status fails", async () => {
+    vi.mocked(employeeOnboardingApi.list).mockResolvedValue({
+      items: [worker, readyWorker],
+      total: 2,
+    });
+    vi.mocked(employeeOnboardingApi.deploymentStatus).mockImplementation(async (workerId) => {
+      if (workerId === readyWorker.id) {
+        return {
+          status: "Ready",
+          blockers: [],
+          latest_company_orientation_id: "orientation-1",
+          latest_site_orientation_id: null,
+        };
+      }
+      throw new Error("Onboarding request failed.");
+    });
+
+    render(<WorkerOrientationsPage />);
+
+    expect(await screen.findByRole("option", { name: "Test Worker" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Ready Worker" })).toBeInTheDocument();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("Status unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Required evidence is complete.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Deployment evidence is unverified. This worker is not cleared for deployment.",
+      ),
+    ).toBeInTheDocument();
+    expect(employeeOnboardingApi.deploymentStatus).toHaveBeenCalledTimes(3);
+  });
+
+  it("lets management retry an unavailable deployment status", async () => {
+    const user = userEvent.setup();
+    vi.mocked(employeeOnboardingApi.deploymentStatus)
+      .mockRejectedValueOnce(new Error("Onboarding request failed."))
+      .mockRejectedValueOnce(new Error("Onboarding request failed."))
+      .mockResolvedValue({
+        status: "Blocked",
+        blockers: ["Company orientation is required."],
+        latest_company_orientation_id: null,
+        latest_site_orientation_id: null,
+      });
+
+    render(<WorkerOrientationsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Retry status" }));
+
+    expect(await screen.findByText("Company orientation is required.")).toBeInTheDocument();
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    expect(screen.queryByText("Status unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry status" })).not.toBeInTheDocument();
   });
 });

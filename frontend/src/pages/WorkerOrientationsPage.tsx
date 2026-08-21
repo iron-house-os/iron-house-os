@@ -45,6 +45,8 @@ function topicIsRecorded(topic: TopicState[OrientationTopicCode]) {
 export function WorkerOrientationsPage() {
   const [workers, setWorkers] = useState<OnboardingRecord[]>([]);
   const [statuses, setStatuses] = useState<Record<string, DeploymentStatus>>({});
+  const [checkingStatusIds, setCheckingStatusIds] = useState<Set<string>>(new Set());
+  const [unverifiedStatusIds, setUnverifiedStatusIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState("");
   const [scope, setScope] = useState<"company" | "site">("company");
   const [siteName, setSiteName] = useState("");
@@ -61,16 +63,34 @@ export function WorkerOrientationsPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    setError(null);
     try {
       const records = (await employeeOnboardingApi.list()).items;
       setWorkers(records);
-      const pairs = await Promise.all(
-        records.map(
-          async (worker) =>
-            [worker.id, await employeeOnboardingApi.deploymentStatus(worker.id)] as const,
-        ),
+      setStatuses({});
+      setCheckingStatusIds(new Set(records.map((worker) => worker.id)));
+      setUnverifiedStatusIds(new Set());
+      const results = await Promise.allSettled(
+        records.map(async (worker) => {
+          try {
+            return [worker.id, await employeeOnboardingApi.deploymentStatus(worker.id)] as const;
+          } catch {
+            return [worker.id, await employeeOnboardingApi.deploymentStatus(worker.id)] as const;
+          }
+        }),
       );
-      setStatuses(Object.fromEntries(pairs));
+      const verifiedPairs: Array<readonly [string, DeploymentStatus]> = [];
+      const unverifiedIds = new Set<string>();
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          verifiedPairs.push(result.value);
+        } else {
+          unverifiedIds.add(records[index].id);
+        }
+      });
+      setStatuses(Object.fromEntries(verifiedPairs));
+      setCheckingStatusIds(new Set());
+      setUnverifiedStatusIds(unverifiedIds);
       setSelected((current) => current || records[0]?.id || "");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load orientations.");
@@ -178,8 +198,31 @@ export function WorkerOrientationsPage() {
       </header>
 
       {error ? (
-        <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <span>{error}</span>
+          <button type="button" onClick={() => void refresh()} className="min-h-11 rounded-md border border-red-300 bg-white px-4 font-semibold">
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {checkingStatusIds.size ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          Checking deployment status for {checkingStatusIds.size} worker
+          {checkingStatusIds.size === 1 ? "" : "s"}. Workers are not cleared until verification
+          finishes.
+        </div>
+      ) : null}
+      {unverifiedStatusIds.size ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <span>
+            Deployment status could not be verified for {unverifiedStatusIds.size} worker{unverifiedStatusIds.size === 1 ? "" : "s"}. Treat affected workers as blocked until verification succeeds.
+          </span>
+          <button type="button" onClick={() => void refresh()} className="min-h-11 rounded-md border border-amber-400 bg-white px-4 font-semibold">
+            Retry status
+          </button>
         </div>
       ) : null}
       {message ? (
@@ -191,27 +234,36 @@ export function WorkerOrientationsPage() {
       <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <h2 className="font-semibold text-iron-950">Deployment board</h2>
         <div className="mt-4 grid gap-3">
-          {workers.map((worker) => (
-            <button
-              type="button"
-              onClick={() => setSelected(worker.id)}
-              key={worker.id}
-              className={`rounded-md border p-4 text-left ${selected === worker.id ? "border-brand-gold" : "border-iron-100"}`}
-            >
-              <div className="flex flex-wrap justify-between gap-2">
-                <strong>
-                  {worker.legal_first_name} {worker.legal_last_name}
-                </strong>
-                <Status value={statuses[worker.id]?.status ?? "Blocked"} />
-              </div>
-              <div className="mt-1 text-sm text-iron-500">
-                {worker.position.replaceAll("_", " ")} · {worker.primary_location ?? "Location pending"}
-              </div>
-              <div className="mt-2 text-xs text-iron-500">
-                {statuses[worker.id]?.blockers.join(" ") || "Required evidence is complete."}
-              </div>
-            </button>
-          ))}
+          {workers.map((worker) => {
+            const status = statuses[worker.id];
+            const checking = checkingStatusIds.has(worker.id);
+            return (
+              <button
+                type="button"
+                onClick={() => setSelected(worker.id)}
+                key={worker.id}
+                className={`rounded-md border p-4 text-left ${selected === worker.id ? "border-brand-gold" : "border-iron-100"}`}
+              >
+                <div className="flex flex-wrap justify-between gap-2">
+                  <strong>
+                    {worker.legal_first_name} {worker.legal_last_name}
+                  </strong>
+                  <Status value={status?.status ?? (checking ? "Checking status" : "Status unavailable")} />
+                </div>
+                <div className="mt-1 text-sm text-iron-500">
+                  {worker.position.replaceAll("_", " ")} · {worker.primary_location ?? "Location pending"}
+                </div>
+                <div className="mt-2 text-xs text-iron-500">
+                  {status?.blockers.join(" ") ||
+                    (status
+                      ? "Required evidence is complete."
+                      : checking
+                        ? "Deployment evidence is being verified. This worker is not cleared for deployment."
+                        : "Deployment evidence is unverified. This worker is not cleared for deployment.")}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -383,11 +435,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Status({ value }: { value: DeploymentStatus["status"] }) {
+function Status({
+  value,
+}: {
+  value: DeploymentStatus["status"] | "Checking status" | "Status unavailable";
+}) {
   const tone =
     value === "Ready"
       ? "bg-emerald-100 text-emerald-800"
-      : value === "Blocked"
+      : value === "Blocked" || value === "Status unavailable"
         ? "bg-red-100 text-red-800"
         : "bg-amber-100 text-amber-800";
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}</span>;
