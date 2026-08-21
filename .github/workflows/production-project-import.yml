@@ -1,13 +1,7 @@
 name: Approved production project import
 
 on:
-  push:
-    branches:
-      - ops/production-project-import-*
-    paths:
-      - "ops/production-project-imports/*.json"
-      - ".github/workflows/production-project-import.yml"
-  pull_request:
+  pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened]
     paths:
@@ -26,8 +20,8 @@ jobs:
   import-project:
     name: Validate, import, and verify approved project
     if: >-
-      startsWith(github.head_ref || github.ref_name, 'ops/production-project-import-') &&
-      github.actor == 'iron-house-os'
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'ops/production-project-import-')
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
     timeout-minutes: 15
@@ -38,6 +32,7 @@ jobs:
       - name: Check out owner-approved import
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Validate import payload
