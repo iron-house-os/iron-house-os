@@ -327,7 +327,7 @@ const tabs = [
   ["Dashboard", "Iron House Dashboard"],
   ["Meeting Minutes", "Meeting Minutes"],
   ["Google Calendar", "Google Calendar"],
-  ["MVP Workflow", "IHOS MVP Workflow"],
+  ["MVP Workflow", "IHOS Guided Workflow"],
   ["Project Operations", "Project Operations"],
   ["Document Operations", "Document Operations"],
   ["Projects", "Project Workspace"],
