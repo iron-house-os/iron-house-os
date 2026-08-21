@@ -19,7 +19,9 @@ import {
 import { EstimateWorkspaceRead, estimateWorkspaceApi } from "../api/estimateWorkspace";
 import { Project, projectsApi } from "../api/projects";
 import { EstimateWorkspacePanel } from "../components/EstimateWorkspacePanel";
+import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
 import { ProjectScopeNotice } from "../components/ProjectScopeNotice";
+import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
 import { buildProjectContextParams, readEffectiveProjectContext, storeActiveProject } from "../utils/projectContext";
 
 const blankLineItem: EstimateLineItem = {
@@ -90,6 +92,7 @@ export function EstimatingPage() {
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [baselineEstimate, setBaselineEstimate] = useState<string | null>(null);
 
   const payload = useMemo<EstimateCreate>(
     () => ({
@@ -124,6 +127,28 @@ export function EstimatingPage() {
     }),
     [assumptions, baseHourlyWage, bonding, contingency, disposal, exclusions, insurance, labourMultiplier, lineItems, mobilization, overhead, overrideReason, plannedShifts, profit, projectCode, projectName, riskAmount, riskProbability, targetMargin],
   );
+  const serializedEstimate = JSON.stringify(payload);
+
+  useEffect(() => {
+    if (!isLoadingProject && baselineEstimate === null) {
+      setBaselineEstimate(serializedEstimate);
+    }
+  }, [baselineEstimate, isLoadingProject, serializedEstimate]);
+
+  const draft = useWorkflowDraft({
+    workflowType: "estimate",
+    title: projectName ? `Estimate — ${projectName}` : "Estimate",
+    payload: { estimate: payload },
+    projectId: selectedProjectId || null,
+    ready: !isLoadingProject,
+    enabled: baselineEstimate !== null && baselineEstimate !== serializedEstimate,
+    onRestore: (saved) => {
+      if (!isRecord(saved.estimate)) return;
+      const estimate = saved.estimate as unknown as EstimateCreate;
+      if (!Array.isArray(estimate.line_items) || !isRecord(estimate.markup)) return;
+      hydrateDraftEstimate(estimate);
+    },
+  });
 
   useEffect(() => {
     async function loadRates() {
@@ -146,6 +171,7 @@ export function EstimatingPage() {
 
     async function loadProject() {
       setIsLoadingProject(true);
+      setBaselineEstimate(null);
       setError(null);
       try {
         const result = await projectsApi.list();
@@ -251,7 +277,31 @@ export function EstimatingPage() {
   function selectProject(projectId: string) {
     const project = projects.find((candidate) => candidate.id === projectId);
     if (!project) return;
+    setBaselineEstimate(null);
     navigate(`/estimating?${buildProjectContextParams(project)}`, { replace: true });
+  }
+
+  function hydrateDraftEstimate(estimate: EstimateCreate) {
+    setProjectName(estimate.project_name);
+    setProjectCode(estimate.project_code ?? "");
+    setLineItems(estimate.line_items.length ? estimate.line_items : [{ ...blankLineItem }]);
+    setContingency(estimate.markup.contingency_percent);
+    setOverhead(estimate.markup.overhead_percent);
+    setProfit(estimate.markup.profit_percent);
+    setBaseHourlyWage(estimate.base_hourly_wage ?? 0);
+    setLabourMultiplier(estimate.labour_chargeout_multiplier ?? 2.1);
+    setTargetMargin(estimate.target_margin_percent ?? 10);
+    setPlannedShifts(estimate.planned_field_shifts ?? null);
+    setOverrideReason(estimate.override_reason ?? "");
+    setBonding(estimate.markup.bonding_percent);
+    setInsurance(estimate.markup.insurance_percent);
+    setMobilization(indirectAmount(estimate, "mobilization"));
+    setDisposal(indirectAmount(estimate, "disposal"));
+    setRiskAmount(estimate.risks[0]?.amount ?? 0);
+    setRiskProbability((estimate.risks[0]?.probability ?? 1) * 100);
+    setAssumptions(estimate.assumptions);
+    setExclusions(estimate.exclusions);
+    setSummary(null);
   }
 
   function hasValidProjectName() {
@@ -347,6 +397,7 @@ export function EstimatingPage() {
       </div>
 
       <ProjectScopeNotice name={projectName || null} />
+      <DraftSaveIndicator status={draft.status} lastSavedAt={draft.lastSavedAt} />
       <div className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <label className="block space-y-1 text-sm font-medium text-iron-700">
           Active project

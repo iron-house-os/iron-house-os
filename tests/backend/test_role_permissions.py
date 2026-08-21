@@ -38,7 +38,15 @@ def _authenticate_as(role: str) -> None:
 
 @pytest.mark.parametrize("role", ["admin", "operations_manager", "estimator", "viewer"])
 def test_every_supported_role_can_read_business_modules(role: str) -> None:
-    for module in ("projects", "suppliers", "estimates", "documents", "tenders", "equipment"):
+    for module in (
+        "projects",
+        "suppliers",
+        "estimates",
+        "documents",
+        "tenders",
+        "equipment",
+        "workflow-drafts",
+    ):
         assert can_access_module(role, module, ModulePermission.READ)
 
 
@@ -53,6 +61,7 @@ def test_role_matrix_separates_administration_and_mutation() -> None:
     assert not can_access_module("viewer", "projects", ModulePermission.WRITE)
     assert can_access_module("viewer", "field-operations", ModulePermission.WRITE)
     assert can_access_module("viewer", "daily-timesheets", ModulePermission.WRITE)
+    assert can_access_module("viewer", "workflow-drafts", ModulePermission.WRITE)
 
 
 def test_employee_onboarding_permissions_are_management_only() -> None:

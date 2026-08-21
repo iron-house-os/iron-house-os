@@ -20,6 +20,22 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const DRAFT_RECOVERY_PREFIX = "ihos:draft-recovery:";
+const DRAFT_RECOVERY_OWNER_KEY = "ihos:draft-recovery-owner";
+
+function clearLocalDraftRecovery() {
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key?.startsWith(DRAFT_RECOVERY_PREFIX)) window.localStorage.removeItem(key);
+  }
+  window.localStorage.removeItem(DRAFT_RECOVERY_OWNER_KEY);
+}
+
+function bindLocalDraftRecovery(account: AuthUser) {
+  const existingOwner = window.localStorage.getItem(DRAFT_RECOVERY_OWNER_KEY);
+  if (existingOwner && existingOwner !== account.id) clearLocalDraftRecovery();
+  window.localStorage.setItem(DRAFT_RECOVERY_OWNER_KEY, account.id);
+}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -41,7 +57,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     authApi
       .me()
       .then((account) => {
-        if (active) { setUser(account); return resolvePortalRole(account); }
+        if (active) {
+          if (account) bindLocalDraftRecovery(account);
+          else clearLocalDraftRecovery();
+          setUser(account);
+          return resolvePortalRole(account);
+        }
       })
       .catch(() => {
         if (active) setUser(null);
@@ -55,19 +76,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [resolvePortalRole]);
 
   useEffect(() => {
-    const expireSession = () => setUser(null);
+    const expireSession = () => {
+      clearLocalDraftRecovery();
+      setUser(null);
+    };
     window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
     return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const account = await authApi.login(email, password); setUser(account); await resolvePortalRole(account);
+    const account = await authApi.login(email, password);
+    bindLocalDraftRecovery(account);
+    setUser(account);
+    await resolvePortalRole(account);
   }, [resolvePortalRole]);
 
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
     } finally {
+      clearLocalDraftRecovery();
       setUser(null);
       setPortalRole(null);
     }
