@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     bid_readiness,
     bids,
     cost_codes,
+    customer_quotes,
     daily_timesheets,
     documents,
     drawing_intelligence,
@@ -56,6 +57,11 @@ protected_router.include_router(bid_readiness.router, prefix="/bid-readiness", t
 protected_router.include_router(bids.router, prefix="/bids", tags=["bids"])
 protected_router.include_router(estimates.router, prefix="/estimates", tags=["estimates"])
 protected_router.include_router(cost_codes.router, prefix="/cost-codes", tags=["cost-codes"])
+protected_router.include_router(
+    customer_quotes.router,
+    prefix="/customer-quotes",
+    tags=["customer-quotes"],
+)
 protected_router.include_router(daily_timesheets.router, prefix="/daily-timesheets", tags=["daily-timesheets"])
 protected_router.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
 protected_router.include_router(documents.router, prefix="/documents", tags=["documents"])

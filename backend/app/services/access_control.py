@@ -24,6 +24,7 @@ BUSINESS_MODULES = (
     "bids",
     "estimates",
     "cost-codes",
+    "customer-quotes",
     "quotes",
     "documents",
     "drawing-intelligence",
@@ -53,6 +54,7 @@ ESTIMATOR_WRITE_MODULES = frozenset(
         "bids",
         "estimates",
         "cost-codes",
+        "customer-quotes",
         "quotes",
         "documents",
         "drawing-intelligence",
@@ -77,6 +79,12 @@ def module_permissions_for_role(role: str | None, module: str) -> frozenset[Modu
     } and normalized_role not in {
         "admin",
         "operations_manager",
+    }:
+        return frozenset()
+    if module == "customer-quotes" and normalized_role not in {
+        "admin",
+        "operations_manager",
+        "estimator",
     }:
         return frozenset()
     if normalized_role == "admin":

@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Database,
   FileSearch,
+  FileText,
   FileStack,
   FolderKanban,
   Gauge,
@@ -150,6 +151,13 @@ export const modules: AppModule[] = [
     path: "/suppliers",
     icon: Database,
     description: "Supplier profiles, contacts, categories, and service area search.",
+    status: "MVP active",
+  },
+  {
+    label: "Customer Quotes",
+    path: "/customer-quotes",
+    icon: FileText,
+    description: "Verbal quote intake, customer quote register, and accepted-work handoff to awarded jobs.",
     status: "MVP active",
   },
   {

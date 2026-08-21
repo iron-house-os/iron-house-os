@@ -198,6 +198,17 @@ def _has_job_number(value: object) -> bool:
     return bool(str(value or "").strip())
 
 
+def prepare_project_award(db: Session, project: Project) -> None:
+    """Prepare an award inside the caller's transaction without committing it."""
+    if project.status == ProjectStatus.archived.value:
+        raise AppError("Archived projects cannot be awarded.", status_code=409)
+    project.status = ProjectStatus.awarded.value
+    if not _has_job_number(project.project_number):
+        project.project_number = _next_job_number(db)
+    db.flush()
+    _provision_awarded_workspace(db, project)
+
+
 def _provision_awarded_workspace(db: Session, project: Project) -> None:
     if not _has_job_number(project.project_number):
         raise AppError(
