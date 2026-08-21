@@ -27,4 +27,4 @@ Project Workspace loads the checklist from `GET /api/v1/projects/{project_id}/st
 
 ## Control boundary
 
-A checked item records management confirmation only. It does not create or replace source documents, permits, contract approval, engineering approval, or project-specific safety evidence. Checklist provisioning does not create external folders, send notices, change contracts, or alter production data outside the normal deployment process.
+A checked item records management confirmation only. Checklist provisioning and selections persist checklist rows, actor, and timestamp state in the active IHOS database during normal application use. They do not create or replace source documents, permits, contract approval, engineering approval, or project-specific safety evidence, and they do not create external folders, send notices, change contracts, or backfill legacy projects.

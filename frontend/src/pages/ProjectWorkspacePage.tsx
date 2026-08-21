@@ -106,7 +106,7 @@ export function ProjectWorkspacePage() {
   }
 
   async function updateStartChecklistItem(code: string, completed: boolean) {
-    if (!selectedProject) return;
+    if (!selectedProject || savingChecklistCode) return;
     setSavingChecklistCode(code);
     setError(null);
     try {
@@ -506,7 +506,7 @@ function ProjectStartChecklistCard({
             <input
               type="checkbox"
               checked={item.completed}
-              disabled={savingCode === item.code}
+              disabled={savingCode !== null}
               onChange={(event) => onChange(item.code, event.target.checked)}
               className="mt-0.5 h-5 w-5 shrink-0 accent-signal-green"
             />

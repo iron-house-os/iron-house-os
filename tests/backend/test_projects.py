@@ -1,10 +1,14 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from app.main import app
+from app.models.project import Project, ProjectStartChecklistItem
+from app.services.projects import _provision_project_start_checklist
+from conftest import TestingSessionLocal
 
 
 client = TestClient(app)
@@ -160,12 +164,62 @@ def test_awarded_job_start_readiness_is_derived_and_provisioning_is_idempotent()
     assert reprovisioned["completed_count"] == 10
 
 
+def test_checklist_provisioning_is_conflict_safe_before_commit() -> None:
+    with TestingSessionLocal() as db:
+        project = Project(
+            name="Concurrent Checklist Award",
+            status="awarded",
+            project_number="IH-2026-099",
+        )
+        db.add(project)
+        db.flush()
+
+        _provision_project_start_checklist(db, project.id)
+        _provision_project_start_checklist(db, project.id)
+        db.flush()
+
+        count = db.scalar(
+            select(func.count())
+            .select_from(ProjectStartChecklistItem)
+            .where(ProjectStartChecklistItem.project_id == project.id)
+        )
+
+    assert count == 10
+
+
 def test_non_awarded_project_has_no_start_checklist() -> None:
     project = client.post("/api/v1/projects", json={"name": "Open Tender"}).json()
 
     response = client.get(f"/api/v1/projects/{project['id']}/start-checklist")
 
     assert response.status_code == 404
+
+
+def test_legacy_awarded_project_is_not_backfilled_by_an_ordinary_update() -> None:
+    with TestingSessionLocal() as db:
+        project = Project(
+            name="Legacy Award Without Checklist",
+            status="awarded",
+            project_number="LEGACY-2025-001",
+            workspace_root="LEGACY-2025-001_LegacyAwardWithoutChecklist",
+            workspace_manifest_json={"legacy": True},
+            workspace_provisioned_at=datetime.now(UTC),
+        )
+        db.add(project)
+        db.commit()
+        project_id = project.id
+
+    before_update = client.get(f"/api/v1/projects/{project_id}/start-checklist")
+    updated = client.patch(
+        f"/api/v1/projects/{project_id}",
+        json={"name": "Legacy Award Renamed"},
+    )
+    after_update = client.get(f"/api/v1/projects/{project_id}/start-checklist")
+
+    assert before_update.status_code == 404
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Legacy Award Renamed"
+    assert after_update.status_code == 404
 
 
 def test_award_generation_skips_existing_numbers_and_preserves_explicit_number() -> None:

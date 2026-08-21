@@ -62,25 +62,39 @@ const awardedWorkspace: AwardedProjectWorkspace = {
   provisioned_at: "2026-08-21T08:30:00Z",
 };
 
+const startChecklistDefinitions = [
+  ["award_contract", "Contract", "Award notice or executed contract and the client scope record are saved."],
+  ["scope_review", "Contract", "Scope, exclusions, allowances, and alternates are reviewed."],
+  ["current_documents", "Documents", "Current drawings, specifications, and addenda are confirmed."],
+  ["contacts_authority", "Administration", "Project contacts, authority limits, and communication path are confirmed."],
+  ["budget_cost_codes", "Cost control", "Baseline budget and project cost codes are established."],
+  ["schedule_milestones", "Schedule", "Baseline schedule, milestones, and notice periods are established."],
+  ["procurement_plan", "Procurement", "Subcontractor, material, equipment, and procurement plans are established."],
+  ["permits_insurance_bonding", "Administration", "Permit, insurance, and bonding requirements are assigned."],
+  ["safety_mobilization", "Safety", "Project-specific safety and mobilization requirements are assigned for verification."],
+  ["quality_testing_asbuilts", "Quality", "Quality, inspection, testing, and as-built requirements are assigned."],
+] as const;
+
 const awardedStartChecklist: ProjectStartChecklist = {
   project_id: awardedProject.id,
   status: "not_ready",
   completed_count: 0,
-  total_count: 1,
-  items: [
-    {
-      code: "award_contract",
-      category: "Contract",
-      label: "Award notice or executed contract and the client scope record are saved.",
-      sort_order: 1,
-      completed: false,
-      changed_by: null,
-      changed_at: null,
-    },
-  ],
+  total_count: startChecklistDefinitions.length,
+  items: startChecklistDefinitions.map(([code, category, label], index) => ({
+    code,
+    category,
+    label,
+    sort_order: index + 1,
+    completed: false,
+    changed_by: null,
+    changed_at: null,
+  })),
 };
 
+let releaseChecklistUpdate: (() => void) | null = null;
+
 afterEach(() => {
+  releaseChecklistUpdate = null;
   vi.restoreAllMocks();
 });
 
@@ -123,7 +137,7 @@ describe("ProjectWorkspacePage", () => {
   });
 
   it("loads project detail from the route", async () => {
-    mockProjectApi();
+    const fetchMock = mockProjectApi();
 
     renderWorkspace(`/projects/${project.id}`);
 
@@ -131,6 +145,8 @@ describe("ProjectWorkspacePage", () => {
     expect(screen.getByText("City of Surrey - Surrey")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Awarded project workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Awarded job start checklist" })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url.toString().includes("/start-checklist"))).toBe(false);
   });
 
   it("shows the stable prepared workspace for an awarded job", async () => {
@@ -152,7 +168,8 @@ describe("ProjectWorkspacePage", () => {
 
     const checklist = await screen.findByRole("region", { name: "Awarded job start checklist" });
     expect(checklist).toHaveTextContent("Not ready");
-    expect(checklist).toHaveTextContent("0 of 1");
+    expect(checklist).toHaveTextContent("0 of 10");
+    expect(within(checklist).getAllByRole("checkbox")).toHaveLength(10);
 
     await user.click(within(checklist).getByRole("checkbox", { name: /Award notice or executed contract/ }));
 
@@ -162,9 +179,48 @@ describe("ProjectWorkspacePage", () => {
       );
       expect(updateCall).toBeDefined();
       expect(JSON.parse(String(updateCall?.[1]?.body))).toEqual({ completed: true });
-      expect(checklist).toHaveTextContent("Ready");
-      expect(checklist).toHaveTextContent("1 of 1");
+      expect(checklist).toHaveTextContent("Not ready");
+      expect(checklist).toHaveTextContent("1 of 10");
       expect(checklist).toHaveTextContent("Recorded by test-admin@ironhousecontracting.com");
+    });
+
+    for (const item of awardedStartChecklist.items.slice(1)) {
+      await user.click(within(checklist).getAllByRole("checkbox")[item.sort_order - 1]);
+      await waitFor(() => {
+        expect(checklist).toHaveTextContent(`${item.sort_order} of 10`);
+      });
+    }
+
+    expect(checklist).toHaveTextContent("Ready");
+    expect(
+      within(checklist)
+        .getAllByRole("checkbox")
+        .every((checkbox) => (checkbox as HTMLInputElement).checked),
+    ).toBe(true);
+  });
+
+  it("serializes checklist updates so an older response cannot replace newer state", async () => {
+    mockProjectApi(awardedProject, awardedWorkspace, awardedStartChecklist, true);
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const checklist = await screen.findByRole("region", { name: "Awarded job start checklist" });
+    const checkboxes = within(checklist).getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+
+    await waitFor(() => {
+      expect(checkboxes.every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true);
+      expect(releaseChecklistUpdate).not.toBeNull();
+    });
+    releaseChecklistUpdate?.();
+
+    await waitFor(() => {
+      expect(
+        within(checklist)
+          .getAllByRole("checkbox")
+          .every((checkbox) => !(checkbox as HTMLInputElement).disabled),
+      ).toBe(true);
+      expect(checklist).toHaveTextContent("1 of 10");
     });
   });
 
@@ -235,6 +291,7 @@ function mockProjectApi(
   currentProject: Project = project,
   workspace?: AwardedProjectWorkspace,
   startChecklist?: ProjectStartChecklist,
+  delayChecklistUpdates = false,
 ) {
   let currentStartChecklist = startChecklist;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -266,18 +323,31 @@ function mockProjectApi(
       return jsonResponse(currentStartChecklist);
     }
 
-    if (url.endsWith(`/projects/${currentProject.id}/start-checklist/award_contract`) && currentStartChecklist) {
+    const checklistItemPath = `/projects/${currentProject.id}/start-checklist/`;
+    if (url.includes(checklistItemPath) && options?.method === "PATCH" && currentStartChecklist) {
+      if (delayChecklistUpdates) {
+        await new Promise<void>((resolve) => {
+          releaseChecklistUpdate = resolve;
+        });
+      }
       const payload = JSON.parse(String(options?.body));
+      const code = decodeURIComponent(url.slice(url.indexOf(checklistItemPath) + checklistItemPath.length));
+      const items = currentStartChecklist.items.map((item) =>
+        item.code === code
+          ? {
+              ...item,
+              completed: payload.completed,
+              changed_by: "test-admin@ironhousecontracting.com",
+              changed_at: "2026-08-21T10:00:00Z",
+            }
+          : item,
+      );
+      const completedCount = items.filter((item) => item.completed).length;
       currentStartChecklist = {
         ...currentStartChecklist,
-        status: payload.completed ? "ready" : "not_ready",
-        completed_count: payload.completed ? 1 : 0,
-        items: currentStartChecklist.items.map((item) => ({
-          ...item,
-          completed: payload.completed,
-          changed_by: "test-admin@ironhousecontracting.com",
-          changed_at: "2026-08-21T10:00:00Z",
-        })),
+        status: completedCount === currentStartChecklist.total_count ? "ready" : "not_ready",
+        completed_count: completedCount,
+        items,
       };
       return jsonResponse(currentStartChecklist);
     }
