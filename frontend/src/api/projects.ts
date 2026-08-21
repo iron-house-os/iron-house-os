@@ -103,6 +103,29 @@ export type ProjectStartChecklist = {
   items: ProjectStartChecklistItem[];
 };
 
+export type ProjectLaunchNextControl = {
+  code: string;
+  category: string;
+  label: string;
+};
+
+export type ProjectLaunchDashboard = {
+  project_id: string;
+  job_number: string;
+  mobilization_status: "ready" | "not_ready";
+  checklist_completed_count: number;
+  checklist_total_count: number;
+  next_incomplete_control: ProjectLaunchNextControl | null;
+  estimate_workspace_count: number;
+  priced_estimate_available: boolean;
+  baseline_budget_total: number;
+  budget_entry_count: number;
+  po_request_count: number;
+  pending_po_request_count: number;
+  safety_record_counts: Record<string, number>;
+  document_count: number;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -161,6 +184,7 @@ export const projectsApi = {
     }),
   dashboard: (id: string) => request<ProjectDashboard>(`/projects/${id}/dashboard`),
   workspace: (id: string) => request<AwardedProjectWorkspace>(`/projects/${id}/workspace`),
+  launchDashboard: (id: string) => request<ProjectLaunchDashboard>(`/projects/${id}/launch-dashboard`),
   startChecklist: (id: string) => requestOptional<ProjectStartChecklist>(`/projects/${id}/start-checklist`),
   updateStartChecklistItem: (id: string, code: string, completed: boolean) =>
     request<ProjectStartChecklist>(`/projects/${id}/start-checklist/${encodeURIComponent(code)}`, {

@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 import { AppLayout } from "./components/AppLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { BackupsPage } from "./pages/BackupsPage";
+import { CustomerQuotesPage } from "./pages/CustomerQuotesPage";
 import { BidPackageGeneratorPage } from "./pages/BidPackageGeneratorPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentLibraryPage } from "./pages/DocumentLibraryPage";
@@ -137,6 +138,7 @@ function AuthenticatedApp() {
         <Route path="/tenders" element={<TenderIntakePage />} />
         <Route path="/tenders/:tenderId" element={<TenderIntakePage />} />
         <Route path="/estimating" element={<EstimatingPage />} />
+        <Route path="/customer-quotes" element={<CustomerQuotesPage />} />
         <Route path="/quotes" element={<QuoteComparisonPage />} />
         <Route path="/drawing-intelligence" element={<DrawingIntelligencePage />} />
         <Route path="/quantity-takeoff" element={<QuantityTakeoffPage />} />

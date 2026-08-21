@@ -74,6 +74,14 @@ def test_employee_onboarding_permissions_are_management_only() -> None:
         assert not can_access_module(role, "employee-onboarding", ModulePermission.WRITE)
 
 
+def test_customer_quotes_are_available_to_estimating_and_management_only() -> None:
+    for role in ("admin", "operations_manager", "estimator"):
+        assert can_access_module(role, "customer-quotes", ModulePermission.READ)
+        assert can_access_module(role, "customer-quotes", ModulePermission.WRITE)
+    assert not can_access_module("viewer", "customer-quotes", ModulePermission.READ)
+    assert not can_access_module("viewer", "customer-quotes", ModulePermission.WRITE)
+
+
 @pytest.mark.parametrize("role", ["admin", "operations_manager"])
 def test_management_roles_can_load_worker_orientations(role: str) -> None:
     _authenticate_as(role)
