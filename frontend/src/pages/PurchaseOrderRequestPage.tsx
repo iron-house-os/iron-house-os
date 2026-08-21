@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { fieldOperationsApi, FieldOperationsBootstrap, FieldRecord } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
@@ -15,7 +16,9 @@ function buildPoNumber(jobNumber: string) {
 
 export function PurchaseOrderRequestPage() {
   const { user, portalRole } = useAuth();
-  const routedProjectId = readEffectiveProjectContext(window.location.search).projectId ?? "";
+  const location = useLocation();
+  const routedProjectId = readEffectiveProjectContext(location.search).projectId ?? "";
+  const requestedDraftId = new URLSearchParams(location.search).get("draftId");
   const [data, setData] = useState<FieldOperationsBootstrap | null>(null);
   const [projectId, setProjectId] = useState(routedProjectId);
   const [supplierId, setSupplierId] = useState("");
@@ -39,6 +42,11 @@ export function PurchaseOrderRequestPage() {
   useEffect(() => {
     void refresh().finally(() => setBootstrapReady(true));
   }, []);
+  useEffect(() => {
+    if (!bootstrapReady || requestedDraftId || !routedProjectId) return;
+    if (!data?.projects.some((project) => project.id === routedProjectId)) return;
+    setProjectId(routedProjectId);
+  }, [bootstrapReady, data?.projects, requestedDraftId, routedProjectId]);
 
   const draftPayload = useMemo(() => ({
     projectId,
@@ -56,8 +64,7 @@ export function PurchaseOrderRequestPage() {
     ready: bootstrapReady,
     enabled: draftEnabled,
     onRestore: (saved) => {
-      const requestedDraft = new URLSearchParams(window.location.search).has("draftId");
-      setProjectId(requestedDraft
+      setProjectId(requestedDraftId
         ? (typeof saved.projectId === "string" ? saved.projectId : "")
         : routedProjectId || (typeof saved.projectId === "string" ? saved.projectId : ""));
       setSupplierId(typeof saved.supplierId === "string" ? saved.supplierId : "");
