@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -14,9 +14,10 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest, ProjectFolderRequest
+from app.schemas.project_launch import ProjectLaunchDashboard
 from app.schemas.project_readiness import ProjectReadinessResponse
 from app.schemas.project_start import ProjectStartChecklistRead, ProjectStartChecklistUpdate
-from app.services import project_folders, project_readiness, projects
+from app.services import project_folders, project_launch, project_readiness, projects
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
@@ -71,6 +72,20 @@ def read_awarded_project_workspace(project_id: UUID, db: DBSession) -> AwardedPr
 @router.get("/{project_id}/start-checklist", response_model=ProjectStartChecklistRead)
 def read_project_start_checklist(project_id: UUID, db: DBSession) -> ProjectStartChecklistRead:
     return projects.get_project_start_checklist(db, project_id)
+
+
+@router.get("/{project_id}/launch-dashboard", response_model=ProjectLaunchDashboard)
+def read_project_launch_dashboard(
+    project_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectLaunchDashboard:
+    if user.role not in {"admin", "operations_manager", "estimator"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Management or estimating access is required for the job launch dashboard.",
+        )
+    return project_launch.get_project_launch_dashboard(db, project_id)
 
 
 @router.patch("/{project_id}/start-checklist/{code}", response_model=ProjectStartChecklistRead)
