@@ -7,6 +7,11 @@ on:
     paths:
       - "ops/production-project-imports/*.json"
       - ".github/workflows/production-project-import.yml"
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "ops/production-project-imports/*.json"
 
 permissions:
   contents: read
@@ -20,6 +25,9 @@ concurrency:
 jobs:
   import-project:
     name: Validate, import, and verify approved project
+    if: >-
+      startsWith(github.head_ref || github.ref_name, 'ops/production-project-import-') &&
+      github.actor == 'iron-house-os'
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
     timeout-minutes: 15
@@ -166,7 +174,7 @@ jobs:
             cat "$EVIDENCE_FILE"
             echo '~~~'
           } > "${{ runner.temp }}/production-project-import-comment.md"
-          gh pr comment 236 --repo "$GITHUB_REPOSITORY" --body-file "${{ runner.temp }}/production-project-import-comment.md"
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" --body-file "${{ runner.temp }}/production-project-import-comment.md"
 
       - name: Upload immutable import evidence
         if: always()
