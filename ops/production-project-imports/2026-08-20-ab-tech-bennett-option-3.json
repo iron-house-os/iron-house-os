@@ -15,6 +15,7 @@
     "contract_value_before_gst": 2750.00,
     "contract_value_including_gst": 2887.50,
     "scope_status": "awarded",
-    "import_operator": "Owner-approved GitHub production import workflow"
+    "import_operator": "Owner-approved GitHub production import workflow",
+    "import_request_id": "2026-08-20-ab-tech-bennett-option-3-run-1"
   }
 }
