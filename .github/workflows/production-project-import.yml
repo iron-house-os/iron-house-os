@@ -1,0 +1,162 @@
+name: Approved production project import
+
+on:
+  push:
+    branches:
+      - ops/production-project-import-*
+    paths:
+      - "ops/production-project-imports/*.json"
+      - ".github/workflows/production-project-import.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-production-project-import
+  cancel-in-progress: false
+
+jobs:
+  import-project:
+    name: Validate, import, and verify approved project
+    runs-on: [self-hosted, linux, ihos-production]
+    environment: production
+    timeout-minutes: 15
+    env:
+      IMPORT_FILE: ops/production-project-imports/2026-08-20-ab-tech-bennett-option-3.json
+      EVIDENCE_FILE: ${{ runner.temp }}/production-project-import-evidence.json
+    steps:
+      - name: Check out owner-approved import
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Validate import payload
+        run: |
+          set -euo pipefail
+          test -f "$IMPORT_FILE"
+          python3 -m json.tool "$IMPORT_FILE" >/dev/null
+          python3 - "$IMPORT_FILE" <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1]))
+          required = {"name", "client_owner", "municipality", "project_address", "contract_value", "status", "notes", "metadata"}
+          missing = sorted(required - payload.keys())
+          if missing:
+              raise SystemExit(f"Missing required project fields: {missing}")
+          if payload["status"] != "awarded":
+              raise SystemExit("Production project imports must enter as awarded.")
+          if payload["contract_value"] <= 0:
+              raise SystemExit("Contract value must be positive.")
+          if not payload["metadata"].get("source_quote_number"):
+              raise SystemExit("Source quote number is required.")
+          PY
+
+      - name: Import through authenticated IHOS API
+        run: |
+          set -euo pipefail
+          if [[ ! -r /etc/iron-house-os/production.env ]]; then
+            echo "Production environment is not readable by the restricted runner." >&2
+            exit 1
+          fi
+          set -a
+          source /etc/iron-house-os/production.env
+          set +a
+          python3 - "$IMPORT_FILE" "$EVIDENCE_FILE" <<'PY'
+          import http.cookiejar
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.request
+
+          source_path, evidence_path = sys.argv[1:3]
+          payload = json.load(open(source_path))
+          port = os.environ.get("IHOS_PORT", "8080")
+          base = f"http://127.0.0.1:{port}"
+          jar = http.cookiejar.CookieJar()
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+          def request(path, method="GET", body=None, expected=(200,)):
+              data = None if body is None else json.dumps(body).encode()
+              req = urllib.request.Request(
+                  base + path,
+                  data=data,
+                  method=method,
+                  headers={"Content-Type": "application/json"},
+              )
+              try:
+                  with opener.open(req, timeout=30) as response:
+                      result = json.load(response)
+                      if response.status not in expected:
+                          raise RuntimeError(f"Unexpected status {response.status}")
+                      return result
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode(errors="replace")
+                  raise RuntimeError(f"IHOS request failed: {exc.code} {detail}") from exc
+
+          session = request(
+              "/api/v1/auth/login",
+              method="POST",
+              body={
+                  "email": os.environ["BOOTSTRAP_ADMIN_EMAIL"],
+                  "password": os.environ["BOOTSTRAP_ADMIN_PASSWORD"],
+              },
+          )
+          if session.get("authentication") != "authenticated":
+              raise SystemExit("IHOS production login did not authenticate.")
+
+          listing = request("/api/v1/projects")
+          quote_number = payload["metadata"]["source_quote_number"]
+          duplicates = [
+              item for item in listing.get("items", [])
+              if item.get("metadata", {}).get("source_quote_number") == quote_number
+              or (
+                  item.get("name") == payload["name"]
+                  and item.get("project_address") == payload["project_address"]
+              )
+          ]
+          if duplicates:
+              project = duplicates[0]
+              operation = "verified_existing"
+          else:
+              year = payload["metadata"]["awarded_date"][:4]
+              pattern = re.compile(rf"^IH-{year}-(\d+)$")
+              used = []
+              for item in listing.get("items", []):
+                  match = pattern.match(item.get("project_number") or "")
+                  if match:
+                      used.append(int(match.group(1)))
+              payload["project_number"] = f"IH-{year}-{max(used, default=0) + 1:03d}"
+              project = request("/api/v1/projects", method="POST", body=payload, expected=(201,))
+              operation = "created"
+
+          verified = request(f"/api/v1/projects/{project['id']}")
+          if verified.get("status") != "awarded":
+              raise SystemExit("Imported project did not verify as awarded.")
+          if verified.get("metadata", {}).get("source_quote_number") != quote_number:
+              raise SystemExit("Imported project quote traceability did not verify.")
+          evidence = {
+              "operation": operation,
+              "project_id": verified["id"],
+              "project_number": verified.get("project_number"),
+              "name": verified["name"],
+              "client_owner": verified.get("client_owner"),
+              "status": verified["status"],
+              "contract_value": verified.get("contract_value"),
+              "source_quote_number": quote_number,
+              "verified": True,
+          }
+          with open(evidence_path, "w") as stream:
+              json.dump(evidence, stream, indent=2, sort_keys=True)
+              stream.write("\n")
+          print(json.dumps(evidence, sort_keys=True))
+          PY
+
+      - name: Upload immutable import evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-project-import-${{ github.run_id }}
+          path: ${{ runner.temp }}/production-project-import-evidence.json
+          if-no-files-found: warn
+          retention-days: 90
