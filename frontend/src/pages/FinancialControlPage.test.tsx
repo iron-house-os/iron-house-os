@@ -1,4 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BackupsIntake } from "../api/backups";
@@ -19,13 +21,14 @@ const item: BackupsIntake = {
 describe("FinancialControlPage Backups queues", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     window.history.replaceState({}, "", "/finance");
     vi.mocked(financeApi.getStartupExpenses).mockResolvedValue({ total_startup_costs: 0, owner_loan_payable: 0, reimbursed_to_owner: 0, pending_review: 0, approved_unreimbursed: 0, entries: [] });
     vi.mocked(financeApi.getBackupsReview).mockImplementation(async (destination) => ({ items: destination === "finance_packing_slips" ? [item] : [], total: destination === "finance_packing_slips" ? 1 : 0 }));
   });
 
   it("shows separate review-only intake, receipt, invoice, and packing-slip sections", async () => {
-    render(<FinancialControlPage />);
+    renderFinancial("/finance");
     expect(await screen.findByRole("heading", { name: "Backups review queues" })).toBeInTheDocument();
     for (const name of ["Finance intake", "Receipts", "Invoices", "Packing Slips"]) expect(screen.getByRole("heading", { name })).toBeInTheDocument();
     expect(screen.getByText(/quantity, quality, delivery acceptance, and project cost are not confirmed/i)).toBeInTheDocument();
@@ -54,9 +57,58 @@ describe("FinancialControlPage Backups queues", () => {
       cost_codes: [],
     });
 
-    render(<FinancialControlPage />);
+    renderFinancial("/finance?projectId=project-7&projectName=Linked+Job");
 
     expect(await screen.findByRole("combobox", { name: "Project" })).toHaveValue("project-7");
     await waitFor(() => expect(financeApi.getProject).toHaveBeenCalledWith("project-7"));
   });
+
+  it("updates the financial summary when the routed project changes without unmounting", async () => {
+    const user = userEvent.setup();
+    vi.mocked(projectsApi.list).mockResolvedValue({
+      items: [
+        { id: "project-7", name: "Linked Job" },
+        { id: "project-8", name: "Second Job" },
+      ],
+      total: 2,
+    } as never);
+    vi.mocked(financeApi.getProject).mockImplementation(async (projectId) => ({
+      project_id: projectId,
+      project_name: projectId === "project-7" ? "Linked Job" : "Second Job",
+      contract_value: 0,
+      budget: 0,
+      committed: 0,
+      actual: 0,
+      forecast_cost: 0,
+      cost_variance: 0,
+      forecast_profit: 0,
+      forecast_margin_percent: 0,
+      entries: [],
+      cost_codes: [],
+    }));
+
+    render(
+      <MemoryRouter initialEntries={["/finance?projectId=project-7&projectName=Linked+Job"]}>
+        <FinancialRouteHarness />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("combobox", { name: "Project" })).toHaveValue("project-7");
+    await user.click(screen.getByRole("button", { name: "Open second project" }));
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue("project-8"));
+    await waitFor(() => expect(financeApi.getProject).toHaveBeenCalledWith("project-8"));
+  });
 });
+
+function renderFinancial(path: string) {
+  return render(<MemoryRouter initialEntries={[path]}><FinancialControlPage /></MemoryRouter>);
+}
+
+function FinancialRouteHarness() {
+  const navigate = useNavigate();
+  return <>
+    <button type="button" onClick={() => navigate("/finance?projectId=project-8&projectName=Second+Job")}>Open second project</button>
+    <FinancialControlPage />
+  </>;
+}

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fieldOperationsApi } from "../api/fieldOperations";
@@ -43,7 +44,10 @@ describe("SafetyOperationsPage", () => {
     });
     vi.mocked(fieldOperationsApi.bootstrap).mockResolvedValue({
       employees: [{ id: "worker-1", first_name: "Crew", last_name: "Member", email: "crew@example.com" }],
-      projects: [{ id: "project-1", name: "River Road", project_number: "IH-2026-001" }],
+      projects: [
+        { id: "project-1", name: "River Road", project_number: "IH-2026-001" },
+        { id: "project-2", name: "Mountain Road", project_number: "IH-2026-002" },
+      ],
       records: [{
         id: "incident-1",
         record_type: "incident",
@@ -98,7 +102,7 @@ describe("SafetyOperationsPage", () => {
 
   it("shows durable incident review and management-only first-aid workflows", async () => {
     const user = userEvent.setup();
-    render(<SafetyOperationsPage />);
+    renderSafety("/safety-operations");
 
     expect(await screen.findByText("Open incidents")).toBeInTheDocument();
     expect(screen.getByText("Management safety analytics")).toBeInTheDocument();
@@ -125,7 +129,7 @@ describe("SafetyOperationsPage", () => {
     window.history.replaceState({}, "", "/safety-operations?projectId=project-1&projectName=River+Road");
     const user = userEvent.setup();
 
-    render(<SafetyOperationsPage />);
+    renderSafety("/safety-operations?projectId=project-1&projectName=River+Road");
 
     expect(await screen.findByText("New safety records will be linked to River Road.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Project / location")).toHaveValue("River Road");
@@ -142,4 +146,42 @@ describe("SafetyOperationsPage", () => {
       }),
     ));
   });
+
+  it("updates safety project context and form defaults without unmounting", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/safety-operations?projectId=project-1&projectName=River+Road"]}>
+        <SafetyRouteHarness />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("New safety records will be linked to River Road.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Mountain Road" }));
+
+    expect(await screen.findByText("New safety records will be linked to Mountain Road.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Project / location")).toHaveValue("Mountain Road");
+    await user.type(screen.getByPlaceholderText("Task and work limits"), "Install drainage crossing");
+    await user.type(screen.getByPlaceholderText("Responsible supervisor"), "Site supervisor");
+    await user.type(screen.getByPlaceholderText("Controls and verification evidence required"), "Confirm locates and shoring");
+    await user.click(screen.getByRole("button", { name: "Save blocked permit" }));
+
+    await waitFor(() => expect(fieldOperationsApi.createRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_id: "project-2",
+        details: expect.objectContaining({ project: "Mountain Road" }),
+      }),
+    ));
+  });
 });
+
+function renderSafety(path: string) {
+  return render(<MemoryRouter initialEntries={[path]}><SafetyOperationsPage /></MemoryRouter>);
+}
+
+function SafetyRouteHarness() {
+  const navigate = useNavigate();
+  return <>
+    <button type="button" onClick={() => navigate("/safety-operations?projectId=project-2&projectName=Mountain+Road")}>Open Mountain Road</button>
+    <SafetyOperationsPage />
+  </>;
+}

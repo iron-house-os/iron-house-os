@@ -61,6 +61,8 @@ describe("CustomerQuotesPage", () => {
   beforeEach(() => {
     quoteBodies.length = 0;
     savedQuote = null;
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/customer-quotes");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/customer-quotes") && !init?.method) {
@@ -70,6 +72,12 @@ describe("CustomerQuotesPage", () => {
         quoteBodies.push(JSON.parse(String(init.body)));
         savedQuote = quote("draft", 1);
         return json(savedQuote, 201);
+      }
+      if (url.endsWith("/customer-quotes/quote-1") && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body));
+        quoteBodies.push(body);
+        savedQuote = { ...quote("draft", 2), ...body, record_revision: 2 };
+        return json(savedQuote);
       }
       if (url.endsWith("/accept") && init?.method === "POST") {
         quoteBodies.push(JSON.parse(String(init.body)));
@@ -157,6 +165,13 @@ describe("CustomerQuotesPage", () => {
   it("opens a queued draft directly and records a sent quote decision", async () => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     savedQuote = quote("draft", 1);
+    window.localStorage.setItem(
+      "ihos:draft-recovery:customer_quote",
+      JSON.stringify({
+        payload: { projectName: "Unrelated device recovery", customerName: "Wrong customer" },
+        savedAt: "2026-08-21T10:00:00Z",
+      }),
+    );
     const { unmount } = render(
       <MemoryRouter initialEntries={["/customer-quotes?quoteId=quote-1&action=edit"]}>
         <CustomerQuotesPage />
@@ -165,6 +180,7 @@ describe("CustomerQuotesPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Edit Q-2026-001" })).toBeInTheDocument();
     expect(screen.getByLabelText("Project / work name")).toHaveValue("Smith drainage repair");
+    expect(screen.getByLabelText("Customer / company")).toHaveValue("Alex Smith");
     unmount();
 
     savedQuote = quote("sent", 1);
@@ -179,5 +195,25 @@ describe("CustomerQuotesPage", () => {
     await user.click(await screen.findByRole("button", { name: "Mark declined" }));
     await waitFor(() => expect(screen.getByText("declined")).toBeInTheDocument());
     expect(quoteBodies.at(-1)).toEqual({ expected_revision: 1, status: "declined", note: null });
+  });
+
+  it.each(["declined", "expired"] as const)("starts a controlled revision from a %s quote", async (status) => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    savedQuote = quote(status, 1);
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><CustomerQuotesPage /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Start new revision" }));
+    expect(screen.getByRole("heading", { name: "New revision Q-2026-001" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Accept / award" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark sent" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark declined" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark expired" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save quote revision" }));
+
+    expect(await screen.findByText("Q-2026-001 saved in IHOS as draft.")).toBeInTheDocument();
+    expect(quoteBodies.at(-1)).toEqual(expect.objectContaining({ expected_revision: 1 }));
   });
 });

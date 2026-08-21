@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ClipboardList, Copy, Download, FileWarning, HeartPulse, QrCode, Radio, ShieldAlert, Siren } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 import { Employee, FieldOperationsBootstrap, FieldRecord, SafetyAnalytics, fieldOperationsApi } from "../api/fieldOperations";
 import { useAuth } from "../contexts/AuthContext";
@@ -9,15 +10,17 @@ const TYPES = ["safety_permit", "corrective_action", "emergency_action_card", "i
 
 export function SafetyOperationsPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const [records, setRecords] = useState<FieldRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [projects, setProjects] = useState<FieldOperationsBootstrap["projects"]>([]);
   const [analytics, setAnalytics] = useState<SafetyAnalytics | null>(null);
-  const fieldLink = useMemo(() => new URLSearchParams(window.location.search), []);
+  const fieldLink = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const linkedRecordId = fieldLink.get("record");
   const linkedProjectId = fieldLink.get("projectId");
   const linkedProjectName = fieldLink.get("projectName") ?? projects.find((project) => project.id === linkedProjectId)?.name ?? "";
-  const [view, setView] = useState<View>(fieldLink.get("view") === "emergency" ? "emergency" : "permits");
+  const routedView = readView(fieldLink.get("view"));
+  const [view, setView] = useState<View>(routedView);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canManageOccurrences = user?.role === "admin" || user?.role === "operations_manager";
@@ -39,6 +42,7 @@ export function SafetyOperationsPage() {
   }
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => { setView(routedView); }, [routedView]);
   useEffect(() => {
     if (!loading && view === "emergency" && linkedRecordId) {
       document.getElementById(`emergency-card-${linkedRecordId}`)?.scrollIntoView({ block: "start" });
@@ -147,7 +151,7 @@ type Create = (event: FormEvent<HTMLFormElement>, recordType: string, titleField
 type Transition = (record: FieldRecord, status: string, prompt: string) => Promise<void>;
 
 function PermitView({ records, create, transition, projectName }: { records: FieldRecord[]; create: Create; transition: Transition; projectName: string }) {
-  return <Grid><form onSubmit={(event) => void create(event, "safety_permit", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create permit readiness record</h2><select name="type" className="control"><option>Ground Disturbance</option><option>Confined Space</option><option>Lockout / Energy Isolation</option><option>Critical Lift</option><option>Traffic Control</option></select><Input name="project" placeholder="Project / location" defaultValue={projectName} /><Area name="task" placeholder="Task and work limits" /><Input name="supervisor" placeholder="Responsible supervisor" /><Area name="controls" placeholder="Controls and verification evidence required" /><label className="block text-xs font-semibold text-iron-500">Permit expiry<input name="expires" type="datetime-local" className="mt-1 w-full rounded-md border p-2 text-sm" /></label><Save>Save blocked permit</Save></form><Register empty="No permit readiness records." items={records.map((record) => <article key={record.id} className="rounded-lg border p-4"><div className="flex justify-between gap-3"><div><div className="text-xs font-semibold text-brand-gold-dark">{detail(record, "type")} · {record.work_date}</div><h3 className="font-semibold">{detail(record, "project")}</h3><p className="text-sm text-iron-600">{detail(record, "task")}</p><p className="mt-2 text-xs text-iron-500">Supervisor: {detail(record, "supervisor")} · Expires: {detail(record, "expires") || "Not set"}</p></div><Status value={record.status} /></div><p className="mt-3 rounded-md bg-iron-50 p-3 text-sm">{detail(record, "controls")}</p><div className="mt-3 flex gap-2"><Small onClick={() => void transition(record, "at_risk", "Record the review evidence and remaining risk.")}>Mark at risk</Small><Small dark onClick={() => void transition(record, "ready", "Record the field verification that supports release.")}>Verify ready</Small></div></article>)} /></Grid>;
+  return <Grid><form key={projectName || "unlinked"} onSubmit={(event) => void create(event, "safety_permit", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create permit readiness record</h2><select name="type" className="control"><option>Ground Disturbance</option><option>Confined Space</option><option>Lockout / Energy Isolation</option><option>Critical Lift</option><option>Traffic Control</option></select><Input name="project" placeholder="Project / location" defaultValue={projectName} /><Area name="task" placeholder="Task and work limits" /><Input name="supervisor" placeholder="Responsible supervisor" /><Area name="controls" placeholder="Controls and verification evidence required" /><label className="block text-xs font-semibold text-iron-500">Permit expiry<input name="expires" type="datetime-local" className="mt-1 w-full rounded-md border p-2 text-sm" /></label><Save>Save blocked permit</Save></form><Register empty="No permit readiness records." items={records.map((record) => <article key={record.id} className="rounded-lg border p-4"><div className="flex justify-between gap-3"><div><div className="text-xs font-semibold text-brand-gold-dark">{detail(record, "type")} · {record.work_date}</div><h3 className="font-semibold">{detail(record, "project")}</h3><p className="text-sm text-iron-600">{detail(record, "task")}</p><p className="mt-2 text-xs text-iron-500">Supervisor: {detail(record, "supervisor")} · Expires: {detail(record, "expires") || "Not set"}</p></div><Status value={record.status} /></div><p className="mt-3 rounded-md bg-iron-50 p-3 text-sm">{detail(record, "controls")}</p><div className="mt-3 flex gap-2"><Small onClick={() => void transition(record, "at_risk", "Record the review evidence and remaining risk.")}>Mark at risk</Small><Small dark onClick={() => void transition(record, "ready", "Record the field verification that supports release.")}>Verify ready</Small></div></article>)} /></Grid>;
 }
 
 function ActionView({ records, create, transition }: { records: FieldRecord[]; create: Create; transition: Transition }) {
@@ -155,7 +159,7 @@ function ActionView({ records, create, transition }: { records: FieldRecord[]; c
 }
 
 function EmergencyView({ records, create, projectName }: { records: FieldRecord[]; create: Create; projectName: string }) {
-  return <Grid><form onSubmit={(event) => void create(event, "emergency_action_card", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create emergency action card</h2>{[["project", "Project"], ["address", "Site address / access point"], ["muster", "Muster point"], ["firstAid", "First aid location and attendant"], ["emergencyLead", "Emergency lead and contact"], ["rescue", "Rescue / evacuation method"]].map(([name, placeholder]) => <Input key={name} name={name} placeholder={placeholder} defaultValue={name === "project" ? projectName : undefined} />)}<Save>Save emergency card</Save></form><Register empty="No emergency cards." items={records.map((record) => <article id={`emergency-card-${record.id}`} key={record.id} className="scroll-mt-6 rounded-lg border border-red-200 bg-red-50 p-5"><div className="flex items-center gap-2"><Radio className="text-red-700" /><h3 className="font-semibold text-red-950">{detail(record, "project")}</h3></div><dl className="mt-4 grid gap-2 text-sm"><div><dt className="font-semibold">Address/access:</dt><dd>{detail(record, "address")}</dd></div><div><dt className="font-semibold">Muster point:</dt><dd>{detail(record, "muster")}</dd></div><div><dt className="font-semibold">First aid:</dt><dd>{detail(record, "firstAid")}</dd></div><div><dt className="font-semibold">Emergency lead:</dt><dd>{detail(record, "emergencyLead")}</dd></div><div><dt className="font-semibold">Rescue/evacuation:</dt><dd>{detail(record, "rescue")}</dd></div></dl><p className="mt-3 text-xs text-red-800">Created {record.work_date}. Confirm with the crew and replace when conditions change.</p><EmergencyFieldAccess record={record} /></article>)} /></Grid>;
+  return <Grid><form key={projectName || "unlinked"} onSubmit={(event) => void create(event, "emergency_action_card", "project")} className="space-y-3 rounded-xl border bg-white p-6"><h2 className="font-semibold">Create emergency action card</h2>{[["project", "Project"], ["address", "Site address / access point"], ["muster", "Muster point"], ["firstAid", "First aid location and attendant"], ["emergencyLead", "Emergency lead and contact"], ["rescue", "Rescue / evacuation method"]].map(([name, placeholder]) => <Input key={name} name={name} placeholder={placeholder} defaultValue={name === "project" ? projectName : undefined} />)}<Save>Save emergency card</Save></form><Register empty="No emergency cards." items={records.map((record) => <article id={`emergency-card-${record.id}`} key={record.id} className="scroll-mt-6 rounded-lg border border-red-200 bg-red-50 p-5"><div className="flex items-center gap-2"><Radio className="text-red-700" /><h3 className="font-semibold text-red-950">{detail(record, "project")}</h3></div><dl className="mt-4 grid gap-2 text-sm"><div><dt className="font-semibold">Address/access:</dt><dd>{detail(record, "address")}</dd></div><div><dt className="font-semibold">Muster point:</dt><dd>{detail(record, "muster")}</dd></div><div><dt className="font-semibold">First aid:</dt><dd>{detail(record, "firstAid")}</dd></div><div><dt className="font-semibold">Emergency lead:</dt><dd>{detail(record, "emergencyLead")}</dd></div><div><dt className="font-semibold">Rescue/evacuation:</dt><dd>{detail(record, "rescue")}</dd></div></dl><p className="mt-3 text-xs text-red-800">Created {record.work_date}. Confirm with the crew and replace when conditions change.</p><EmergencyFieldAccess record={record} /></article>)} /></Grid>;
 }
 
 function EmergencyFieldAccess({ record }: { record: FieldRecord }) {
@@ -237,6 +241,12 @@ function FirstAidView({ records, employees, create }: { records: FieldRecord[]; 
 
 function EmployeeSelect({ employees, optional = false }: { employees: Employee[]; optional?: boolean }) {
   return <select required={!optional} name="employee_id" defaultValue="" className="w-full rounded-md border p-2 text-sm"><option value="">{optional ? "Affected worker, if applicable" : "Select worker"}</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.first_name} {employee.last_name}</option>)}</select>;
+}
+
+function readView(value: string | null): View {
+  return value === "actions" || value === "emergency" || value === "incidents" || value === "first-aid"
+    ? value
+    : "permits";
 }
 
 function detail(record: FieldRecord, key: string) { const value = record.details[key]; return typeof value === "string" ? value : ""; }

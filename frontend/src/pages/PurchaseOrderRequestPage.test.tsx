@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useNavigate } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fieldOperationsApi } from "../api/fieldOperations";
 import { PurchaseOrderRequestPage } from "./PurchaseOrderRequestPage";
@@ -29,17 +31,72 @@ describe("PurchaseOrderRequestPage", () => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/request-po?projectId=job-1&projectName=Linked+Job");
     vi.mocked(fieldOperationsApi.bootstrap).mockResolvedValue({
-      projects: [{ id: "job-1", name: "Linked Job", project_number: "IH-2026-030" }],
+      projects: [
+        { id: "job-1", name: "Linked Job", project_number: "IH-2026-030" },
+        { id: "job-2", name: "Second Job", project_number: "IH-2026-031" },
+      ],
       suppliers: [],
       cost_codes: [],
       records: [],
     } as never);
   });
 
+  afterEach(() => vi.unstubAllGlobals());
+
   it("preselects the job carried from the guided workflow", async () => {
-    render(<PurchaseOrderRequestPage />);
+    renderPo("/request-po?projectId=job-1&projectName=Linked+Job");
 
     expect(await screen.findByRole("combobox", { name: "Job" })).toHaveValue("job-1");
     expect(screen.getByRole("option", { name: "IH-2026-030 Linked Job" })).toBeInTheDocument();
   });
+
+  it("updates the selected job when workflow context changes without unmounting", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/request-po?projectId=job-1&projectName=Linked+Job"]}>
+        <PoRouteHarness />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("combobox", { name: "Job" })).toHaveValue("job-1");
+    await user.click(screen.getByRole("button", { name: "Open second job" }));
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Job" })).toHaveValue("job-2"));
+  });
+
+  it("keeps an explicit workflow draft authoritative over routed project context", async () => {
+    window.history.replaceState({}, "", "/request-po?draftId=draft-1&projectId=job-1&projectName=Linked+Job");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      id: "draft-1",
+      owner_account_id: "admin-1",
+      project_id: "job-2",
+      workflow_type: "purchase_order_request",
+      title: "PO request — Aggregate",
+      payload: { projectId: "job-2", supplierId: "", costCode: "", purpose: "Aggregate", amount: "" },
+      schema_version: 1,
+      revision: 2,
+      status: "active",
+      last_saved_at: "2026-08-21T12:00:00Z",
+      created_at: "2026-08-21T11:00:00Z",
+      updated_at: "2026-08-21T12:00:00Z",
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    renderPo("/request-po?draftId=draft-1&projectId=job-1&projectName=Linked+Job");
+
+    const jobSelect = await screen.findByRole("combobox", { name: "Job" });
+    await waitFor(() => expect(jobSelect).toHaveValue("job-2"));
+    expect(screen.getByPlaceholderText(/20 m of 200 mm PVC/)).toHaveValue("Aggregate");
+  });
 });
+
+function renderPo(path: string) {
+  return render(<MemoryRouter initialEntries={[path]}><PurchaseOrderRequestPage /></MemoryRouter>);
+}
+
+function PoRouteHarness() {
+  const navigate = useNavigate();
+  return <>
+    <button type="button" onClick={() => navigate("/request-po?projectId=job-2&projectName=Second+Job")}>Open second job</button>
+    <PurchaseOrderRequestPage />
+  </>;
+}
