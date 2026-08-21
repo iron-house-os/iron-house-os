@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -48,6 +48,11 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    start_checklist_items = relationship(
+        "ProjectStartChecklistItem",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectSupplier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -59,3 +64,19 @@ class ProjectSupplier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     project = relationship("Project", back_populates="supplier_links")
     supplier = relationship("Supplier")
+
+
+class ProjectStartChecklistItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "project_start_checklist_items"
+    __table_args__ = (UniqueConstraint("project_id", "code", name="uq_project_start_checklist_project_code"),)
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(500), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    changed_by: Mapped[str | None] = mapped_column(String(320))
+    changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    project = relationship("Project", back_populates="start_checklist_items")

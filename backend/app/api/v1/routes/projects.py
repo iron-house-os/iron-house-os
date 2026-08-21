@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.project import (
     ProjectCreate,
@@ -14,6 +15,7 @@ from app.schemas.project import (
 )
 from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest, ProjectFolderRequest
 from app.schemas.project_readiness import ProjectReadinessResponse
+from app.schemas.project_start import ProjectStartChecklistRead, ProjectStartChecklistUpdate
 from app.services import project_folders, project_readiness, projects
 
 router = APIRouter()
@@ -64,3 +66,25 @@ def read_project_readiness(project_id: UUID, db: DBSession) -> ProjectReadinessR
 @router.get("/{project_id}/workspace", response_model=AwardedProjectWorkspace)
 def read_awarded_project_workspace(project_id: UUID, db: DBSession) -> AwardedProjectWorkspace:
     return projects.get_awarded_workspace(db, project_id)
+
+
+@router.get("/{project_id}/start-checklist", response_model=ProjectStartChecklistRead)
+def read_project_start_checklist(project_id: UUID, db: DBSession) -> ProjectStartChecklistRead:
+    return projects.get_project_start_checklist(db, project_id)
+
+
+@router.patch("/{project_id}/start-checklist/{code}", response_model=ProjectStartChecklistRead)
+def update_project_start_checklist_item(
+    project_id: UUID,
+    code: str,
+    payload: ProjectStartChecklistUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectStartChecklistRead:
+    return projects.update_project_start_checklist_item(
+        db,
+        project_id,
+        code,
+        payload.completed,
+        user.email,
+    )

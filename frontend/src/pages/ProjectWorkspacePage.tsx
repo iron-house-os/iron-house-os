@@ -7,6 +7,7 @@ import {
   Project,
   ProjectCreatePayload,
   ProjectDashboard,
+  ProjectStartChecklist,
   ProjectStatus,
   projectStatuses,
   projectsApi,
@@ -35,6 +36,8 @@ export function ProjectWorkspacePage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
   const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
+  const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
+  const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [activeTab, setActiveTab] = useState("Overview");
@@ -53,17 +56,20 @@ export function ProjectWorkspacePage() {
       setDashboardByProjectId(Object.fromEntries(summaries));
       if (projectId) {
         const detail = await projectsApi.detail(projectId);
-        const [summary, provisionedWorkspace] = await Promise.all([
+        const [summary, provisionedWorkspace, provisionedStartChecklist] = await Promise.all([
           projectsApi.dashboard(projectId),
           detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
+          detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
         ]);
         setSelectedProject(detail);
         setDashboard(summary);
         setWorkspace(provisionedWorkspace);
+        setStartChecklist(provisionedStartChecklist);
       } else {
         setSelectedProject(null);
         setDashboard(null);
         setWorkspace(null);
+        setStartChecklist(null);
       }
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load projects");
@@ -99,6 +105,20 @@ export function ProjectWorkspacePage() {
     await refresh();
   }
 
+  async function updateStartChecklistItem(code: string, completed: boolean) {
+    if (!selectedProject) return;
+    setSavingChecklistCode(code);
+    setError(null);
+    try {
+      const updated = await projectsApi.updateStartChecklistItem(selectedProject.id, code, completed);
+      setStartChecklist(updated);
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update the job start checklist");
+    } finally {
+      setSavingChecklistCode(null);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -132,10 +152,13 @@ export function ProjectWorkspacePage() {
             project={selectedProject}
             dashboard={dashboard}
             workspace={workspace}
+            startChecklist={startChecklist}
+            savingChecklistCode={savingChecklistCode}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onStatusChange={(value) => void updateStatus(value)}
             onArchive={() => void archiveProject()}
+            onStartChecklistChange={(code, completed) => void updateStartChecklistItem(code, completed)}
           />
         ) : (
           <div className="rounded-md border border-iron-100 bg-white p-6">
@@ -316,18 +339,24 @@ function ProjectDetail({
   project,
   dashboard,
   workspace,
+  startChecklist,
+  savingChecklistCode,
   activeTab,
   onTabChange,
   onStatusChange,
   onArchive,
+  onStartChecklistChange,
 }: {
   project: Project;
   dashboard: ProjectDashboard;
   workspace: AwardedProjectWorkspace | null;
+  startChecklist: ProjectStartChecklist | null;
+  savingChecklistCode: string | null;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onStatusChange: (status: ProjectStatus) => void;
   onArchive: () => void;
+  onStartChecklistChange: (code: string, completed: boolean) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -364,6 +393,13 @@ function ProjectDetail({
       </div>
 
       {workspace ? <AwardedWorkspaceCard workspace={workspace} /> : null}
+      {startChecklist ? (
+        <ProjectStartChecklistCard
+          checklist={startChecklist}
+          savingCode={savingChecklistCode}
+          onChange={onStartChecklistChange}
+        />
+      ) : null}
       <DashboardWidgets dashboard={dashboard} project={project} />
       <CommandCenter project={project} dashboard={dashboard} />
 
@@ -421,6 +457,75 @@ function AwardedWorkspaceCard({ workspace }: { workspace: AwardedProjectWorkspac
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function ProjectStartChecklistCard({
+  checklist,
+  savingCode,
+  onChange,
+}: {
+  checklist: ProjectStartChecklist;
+  savingCode: string | null;
+  onChange: (code: string, completed: boolean) => void;
+}) {
+  const ready = checklist.status === "ready";
+  return (
+    <section aria-label="Awarded job start checklist" className="rounded-md border border-iron-100 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-brand-gold" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-iron-950">Awarded job start checklist</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-iron-500">
+            Confirm the standard project-start controls by selecting each completed item.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={[
+              "rounded-md px-3 py-2 text-xs font-semibold",
+              ready ? "bg-signal-green/10 text-signal-green" : "bg-brand-gold/10 text-iron-800",
+            ].join(" ")}
+          >
+            {ready ? "Ready" : "Not ready"}
+          </span>
+          <span className="text-sm font-semibold text-iron-800">
+            {checklist.completed_count} of {checklist.total_count}
+          </span>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {checklist.items.map((item) => (
+          <label
+            key={item.code}
+            className="flex min-h-12 cursor-pointer items-start gap-3 rounded-md border border-iron-100 p-3 hover:bg-iron-50"
+          >
+            <input
+              type="checkbox"
+              checked={item.completed}
+              disabled={savingCode === item.code}
+              onChange={(event) => onChange(item.code, event.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-signal-green"
+            />
+            <span>
+              <span className="block text-xs font-semibold uppercase tracking-wide text-iron-500">{item.category}</span>
+              <span className="mt-1 block text-sm leading-5 text-iron-800">{item.label}</span>
+              {item.changed_by && item.changed_at ? (
+                <span className="mt-1 block text-xs text-iron-500">
+                  Recorded by {item.changed_by} at <time dateTime={item.changed_at}>{new Date(item.changed_at).toLocaleString()}</time>
+                </span>
+              ) : null}
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-4 text-xs leading-5 text-iron-500">
+        A checked item records management confirmation only. It does not replace source documents, permits, contract approval,
+        engineering approval, or project-specific safety evidence.
+      </p>
     </section>
   );
 }
