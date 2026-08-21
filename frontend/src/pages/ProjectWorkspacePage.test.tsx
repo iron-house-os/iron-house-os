@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AwardedProjectWorkspace, Project, ProjectDashboard, ProjectStartChecklist } from "../api/projects";
+import {
+  AwardedProjectWorkspace,
+  Project,
+  ProjectDashboard,
+  ProjectLaunchDashboard,
+  ProjectStartChecklist,
+} from "../api/projects";
 import { ProjectWorkspacePage } from "./ProjectWorkspacePage";
 
 const project: Project = {
@@ -91,6 +97,33 @@ const awardedStartChecklist: ProjectStartChecklist = {
   })),
 };
 
+const awardedLaunchDashboard: ProjectLaunchDashboard = {
+  project_id: awardedProject.id,
+  job_number: "IH-2026-014",
+  mobilization_status: "not_ready",
+  checklist_completed_count: 0,
+  checklist_total_count: 10,
+  next_incomplete_control: {
+    code: "award_contract",
+    category: "Contract",
+    label: "Award notice or executed contract and the client scope record are saved.",
+  },
+  estimate_workspace_count: 1,
+  priced_estimate_available: true,
+  baseline_budget_total: 125000,
+  budget_entry_count: 4,
+  po_request_count: 3,
+  pending_po_request_count: 2,
+  safety_record_counts: {
+    safety_permit: 1,
+    emergency_action_card: 1,
+    daily_hazard_assessment: 2,
+    toolbox_talk: 1,
+    corrective_action: 0,
+  },
+  document_count: 7,
+};
+
 let releaseChecklistUpdate: (() => void) | null = null;
 
 afterEach(() => {
@@ -145,8 +178,10 @@ describe("ProjectWorkspacePage", () => {
     expect(screen.getByText("City of Surrey - Surrey")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Awarded project workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Job launch dashboard" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Awarded job start checklist" })).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes("/start-checklist"))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => url.toString().includes("/launch-dashboard"))).toBe(false);
   });
 
   it("shows the stable prepared workspace for an awarded job", async () => {
@@ -159,6 +194,27 @@ describe("ProjectWorkspacePage", () => {
     expect(workspace).toHaveTextContent("IH-2026-014_AwardedCulvertReplacement");
     expect(within(workspace).getByText("00_Admin")).toBeInTheDocument();
     expect(within(workspace).getByText("13_Award_Handoff")).toBeInTheDocument();
+  });
+
+  it("shows awarded-job launch indicators with project-scoped handoff links", async () => {
+    mockProjectApi(awardedProject, awardedWorkspace, awardedStartChecklist, false, awardedLaunchDashboard);
+
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const launch = await screen.findByRole("region", { name: "Job launch dashboard" });
+    expect(launch).toHaveTextContent("Mobilization controls not ready");
+    expect(launch).toHaveTextContent("0 of 10");
+    expect(launch).toHaveTextContent("Available");
+    expect(launch).toHaveTextContent("$125,000");
+    expect(launch).toHaveTextContent("3");
+    expect(launch).toHaveTextContent("5");
+    expect(launch).toHaveTextContent("Only the project-start checklist determines");
+
+    for (const name of ["Estimate", "Budget", "Purchase orders", "Safety", "Documents"]) {
+      const link = within(launch).getByRole("link", { name: new RegExp(name) });
+      expect(link).toHaveAttribute("href", expect.stringContaining(`projectId=${awardedProject.id}`));
+      expect(link).toHaveAttribute("href", expect.stringContaining("projectName=Awarded+Culvert+Replacement"));
+    }
   });
 
   it("updates awarded-job readiness by selecting a pre-populated checklist item", async () => {
@@ -292,6 +348,7 @@ function mockProjectApi(
   workspace?: AwardedProjectWorkspace,
   startChecklist?: ProjectStartChecklist,
   delayChecklistUpdates = false,
+  launchDashboard: ProjectLaunchDashboard = awardedLaunchDashboard,
 ) {
   let currentStartChecklist = startChecklist;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
@@ -321,6 +378,20 @@ function mockProjectApi(
 
     if (url.endsWith(`/projects/${currentProject.id}/start-checklist`) && currentStartChecklist) {
       return jsonResponse(currentStartChecklist);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/launch-dashboard`) && workspace) {
+      return jsonResponse({
+        ...launchDashboard,
+        project_id: currentProject.id,
+        job_number: currentProject.project_number,
+        mobilization_status: currentStartChecklist?.status ?? launchDashboard.mobilization_status,
+        checklist_completed_count: currentStartChecklist?.completed_count ?? launchDashboard.checklist_completed_count,
+        checklist_total_count: currentStartChecklist?.total_count ?? launchDashboard.checklist_total_count,
+        next_incomplete_control: currentStartChecklist
+          ? currentStartChecklist.items.find((item) => !item.completed) ?? null
+          : launchDashboard.next_incomplete_control,
+      });
     }
 
     const checklistItemPath = `/projects/${currentProject.id}/start-checklist/`;

@@ -7,6 +7,7 @@ import {
   Project,
   ProjectCreatePayload,
   ProjectDashboard,
+  ProjectLaunchDashboard,
   ProjectStartChecklist,
   ProjectStatus,
   projectStatuses,
@@ -36,6 +37,7 @@ export function ProjectWorkspacePage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
   const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
+  const [launchDashboard, setLaunchDashboard] = useState<ProjectLaunchDashboard | null>(null);
   const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
@@ -56,19 +58,22 @@ export function ProjectWorkspacePage() {
       setDashboardByProjectId(Object.fromEntries(summaries));
       if (projectId) {
         const detail = await projectsApi.detail(projectId);
-        const [summary, provisionedWorkspace, provisionedStartChecklist] = await Promise.all([
+        const [summary, provisionedWorkspace, provisionedStartChecklist, launchSummary] = await Promise.all([
           projectsApi.dashboard(projectId),
           detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
           detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
+          detail.workspace_root ? projectsApi.launchDashboard(projectId) : Promise.resolve(null),
         ]);
         setSelectedProject(detail);
         setDashboard(summary);
         setWorkspace(provisionedWorkspace);
+        setLaunchDashboard(launchSummary);
         setStartChecklist(provisionedStartChecklist);
       } else {
         setSelectedProject(null);
         setDashboard(null);
         setWorkspace(null);
+        setLaunchDashboard(null);
         setStartChecklist(null);
       }
     } catch (currentError) {
@@ -112,6 +117,17 @@ export function ProjectWorkspacePage() {
     try {
       const updated = await projectsApi.updateStartChecklistItem(selectedProject.id, code, completed);
       setStartChecklist(updated);
+      setLaunchDashboard((current) =>
+        current
+          ? {
+              ...current,
+              mobilization_status: updated.status,
+              checklist_completed_count: updated.completed_count,
+              checklist_total_count: updated.total_count,
+              next_incomplete_control: updated.items.find((item) => !item.completed) ?? null,
+            }
+          : current,
+      );
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to update the job start checklist");
     } finally {
@@ -152,6 +168,7 @@ export function ProjectWorkspacePage() {
             project={selectedProject}
             dashboard={dashboard}
             workspace={workspace}
+            launchDashboard={launchDashboard}
             startChecklist={startChecklist}
             savingChecklistCode={savingChecklistCode}
             activeTab={activeTab}
@@ -339,6 +356,7 @@ function ProjectDetail({
   project,
   dashboard,
   workspace,
+  launchDashboard,
   startChecklist,
   savingChecklistCode,
   activeTab,
@@ -350,6 +368,7 @@ function ProjectDetail({
   project: Project;
   dashboard: ProjectDashboard;
   workspace: AwardedProjectWorkspace | null;
+  launchDashboard: ProjectLaunchDashboard | null;
   startChecklist: ProjectStartChecklist | null;
   savingChecklistCode: string | null;
   activeTab: string;
@@ -393,6 +412,7 @@ function ProjectDetail({
       </div>
 
       {workspace ? <AwardedWorkspaceCard workspace={workspace} /> : null}
+      {launchDashboard ? <ProjectLaunchDashboardCard dashboard={launchDashboard} project={project} /> : null}
       {startChecklist ? (
         <ProjectStartChecklistCard
           checklist={startChecklist}
@@ -422,6 +442,103 @@ function ProjectDetail({
           <TabBody tab={activeTab} project={project} dashboard={dashboard} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProjectLaunchDashboardCard({
+  dashboard,
+  project,
+}: {
+  dashboard: ProjectLaunchDashboard;
+  project: Project;
+}) {
+  const safetyRecordCount = Object.values(dashboard.safety_record_counts).reduce((total, count) => total + count, 0);
+  const ready = dashboard.mobilization_status === "ready";
+  const actions = [
+    { label: "Estimate", href: "/estimating", description: "Confirm the priced estimate and handoff." },
+    { label: "Budget", href: "/finance", description: "Establish the baseline budget and cost codes." },
+    { label: "Purchase orders", href: "/request-po", description: "Prepare and route project PO requests." },
+    { label: "Safety", href: "/safety-operations", description: "Create project-specific safety records." },
+    { label: "Documents", href: "/documents", description: "Register current award and construction files." },
+  ];
+  return (
+    <section aria-label="Job launch dashboard" className="rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-brand-gold" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-iron-950">Job launch dashboard</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-iron-500">
+            One view of the records needed to move {dashboard.job_number} from award into controlled mobilization.
+          </p>
+        </div>
+        <span
+          className={[
+            "w-fit rounded-md px-3 py-2 text-xs font-semibold",
+            ready ? "bg-signal-green/10 text-signal-green" : "bg-brand-gold/10 text-iron-800",
+          ].join(" ")}
+        >
+          {ready ? "Mobilization controls ready" : "Mobilization controls not ready"}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <LaunchMetric
+          label="Start checklist"
+          value={`${dashboard.checklist_completed_count} of ${dashboard.checklist_total_count}`}
+          detail={dashboard.next_incomplete_control ? `Next: ${dashboard.next_incomplete_control.label}` : "All controls confirmed."}
+        />
+        <LaunchMetric
+          label="Priced estimate"
+          value={dashboard.priced_estimate_available ? "Available" : "Missing"}
+          detail={`${dashboard.estimate_workspace_count} estimate workspace${dashboard.estimate_workspace_count === 1 ? "" : "s"}`}
+        />
+        <LaunchMetric
+          label="Baseline budget"
+          value={formatCurrency(dashboard.baseline_budget_total)}
+          detail={`${dashboard.budget_entry_count} active budget entr${dashboard.budget_entry_count === 1 ? "y" : "ies"}`}
+        />
+        <LaunchMetric
+          label="PO requests"
+          value={String(dashboard.po_request_count)}
+          detail={`${dashboard.pending_po_request_count} awaiting approval`}
+        />
+        <LaunchMetric
+          label="Safety records"
+          value={String(safetyRecordCount)}
+          detail="Project-linked records only"
+        />
+        <LaunchMetric label="Documents" value={String(dashboard.document_count)} detail="Project-linked records only" />
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {actions.map((action) => (
+          <Link
+            key={action.label}
+            to={withProjectContext(action.href, project)}
+            className="rounded-md border border-iron-100 p-3 hover:bg-iron-50"
+          >
+            <span className="block text-sm font-semibold text-iron-950">{action.label}</span>
+            <span className="mt-1 block text-xs leading-5 text-iron-500">{action.description}</span>
+          </Link>
+        ))}
+      </div>
+      <p className="mt-4 text-xs leading-5 text-iron-500">
+        Estimate, budget, PO, safety, and document totals are launch indicators. Only the project-start checklist determines the
+        mobilization-ready status; no approval is inferred from a record count.
+      </p>
+    </section>
+  );
+}
+
+function LaunchMetric({ label: itemLabel, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-md border border-iron-100 bg-iron-50 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">{itemLabel}</div>
+      <div className="mt-2 text-xl font-semibold text-iron-950">{value}</div>
+      <p className="mt-1 text-xs leading-5 text-iron-500">{detail}</p>
     </div>
   );
 }
@@ -675,6 +792,14 @@ function getNextStep(project: Project, dashboard: ProjectDashboard) {
   if (dashboard.rfq_count === 0) return "create RFQ packages for pipe, aggregates, asphalt, concrete, testing, and specialty scopes.";
   if (dashboard.readiness_percentage < 80) return "finish RFQ readiness items before final pricing.";
   return "build the estimate, compare quotes, and assemble the bid package.";
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function Field({ label: itemLabel, children }: { label: string; children: React.ReactNode }) {
