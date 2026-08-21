@@ -81,6 +81,7 @@ def test_release_workflow_uses_disposable_staging_and_immutable_evidence() -> No
     assert "Disposable staging smoke, rollback, and evidence" in workflow
     assert "scripts/staging-smoke-test.sh" in workflow
     assert "STAGING_SYNTHETIC_DATA: \"true\"" in workflow
+    assert "STAGING_MVP_SYNTHETIC_DATA: \"true\"" in workflow
     assert "scripts/staging_rollback_probe.py verify-absent" in workflow
     assert "--profile staging" in workflow
     assert "--production-baseline 55afaa689603263c1ad415436e90cce6679808c3" in workflow
