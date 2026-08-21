@@ -4,6 +4,7 @@ import { fieldOperationsApi, FieldOperationsBootstrap, FieldRecord } from "../ap
 import { useAuth } from "../contexts/AuthContext";
 import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
 import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
+import { readEffectiveProjectContext } from "../utils/projectContext";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -14,8 +15,9 @@ function buildPoNumber(jobNumber: string) {
 
 export function PurchaseOrderRequestPage() {
   const { user, portalRole } = useAuth();
+  const routedProjectId = readEffectiveProjectContext(window.location.search).projectId ?? "";
   const [data, setData] = useState<FieldOperationsBootstrap | null>(null);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(routedProjectId);
   const [supplierId, setSupplierId] = useState("");
   const [costCode, setCostCode] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -54,7 +56,10 @@ export function PurchaseOrderRequestPage() {
     ready: bootstrapReady,
     enabled: draftEnabled,
     onRestore: (saved) => {
-      setProjectId(typeof saved.projectId === "string" ? saved.projectId : "");
+      const requestedDraft = new URLSearchParams(window.location.search).has("draftId");
+      setProjectId(requestedDraft
+        ? (typeof saved.projectId === "string" ? saved.projectId : "")
+        : routedProjectId || (typeof saved.projectId === "string" ? saved.projectId : ""));
       setSupplierId(typeof saved.supplierId === "string" ? saved.supplierId : "");
       setCostCode(typeof saved.costCode === "string" ? saved.costCode : "");
       setPurpose(typeof saved.purpose === "string" ? saved.purpose : "");

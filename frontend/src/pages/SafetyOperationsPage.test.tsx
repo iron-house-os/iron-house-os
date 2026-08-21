@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,6 +43,7 @@ describe("SafetyOperationsPage", () => {
     });
     vi.mocked(fieldOperationsApi.bootstrap).mockResolvedValue({
       employees: [{ id: "worker-1", first_name: "Crew", last_name: "Member", email: "crew@example.com" }],
+      projects: [{ id: "project-1", name: "River Road", project_number: "IH-2026-001" }],
       records: [{
         id: "incident-1",
         record_type: "incident",
@@ -91,6 +92,8 @@ describe("SafetyOperationsPage", () => {
         submitted_by: "manager@example.com",
       }],
     } as never);
+    vi.mocked(fieldOperationsApi.createRecord).mockResolvedValue({} as never);
+    window.history.replaceState({}, "", "/safety-operations");
   });
 
   it("shows durable incident review and management-only first-aid workflows", async () => {
@@ -116,5 +119,27 @@ describe("SafetyOperationsPage", () => {
     expect(screen.getByText(/Minimum necessary operational record/)).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Crew Member" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save confidential record" })).toBeInTheDocument();
+  });
+
+  it("links new safety controls to the project carried from the workflow", async () => {
+    window.history.replaceState({}, "", "/safety-operations?projectId=project-1&projectName=River+Road");
+    const user = userEvent.setup();
+
+    render(<SafetyOperationsPage />);
+
+    expect(await screen.findByText("New safety records will be linked to River Road.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Project / location")).toHaveValue("River Road");
+    await user.type(screen.getByPlaceholderText("Task and work limits"), "Excavate storm connection");
+    await user.type(screen.getByPlaceholderText("Responsible supervisor"), "Site supervisor");
+    await user.type(screen.getByPlaceholderText("Controls and verification evidence required"), "Locate and expose utilities");
+    await user.click(screen.getByRole("button", { name: "Save blocked permit" }));
+
+    await waitFor(() => expect(fieldOperationsApi.createRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        record_type: "safety_permit",
+        project_id: "project-1",
+        details: expect.objectContaining({ project: "River Road" }),
+      }),
+    ));
   });
 });
