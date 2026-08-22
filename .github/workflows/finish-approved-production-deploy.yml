@@ -1,6 +1,16 @@
 name: Finish approved production deploy
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact approved 40-character commit SHA on main
+        required: true
+        type: string
+      evidence_run_id:
+        description: Successful Release readiness run for the exact release SHA
+        required: true
+        type: string
   push:
     branches: [main]
     paths:
@@ -21,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 130
     env:
-      RELEASE_SHA: d4c4fd34afc2cffaad0550c0ac802fb9fe126e6c
+      RELEASE_SHA: ${{ inputs.release_sha || 'd4c4fd34afc2cffaad0550c0ac802fb9fe126e6c' }}
       RELEASE_REF: release-evidence/d4c4fd3
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -30,6 +40,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify approved release and exact evidence ref
+        if: github.event_name == 'push'
         run: |
           set -euo pipefail
           git fetch --quiet origin main "$RELEASE_REF"
@@ -37,7 +48,26 @@ jobs:
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           test "$(git rev-parse "origin/$RELEASE_REF")" = "$RELEASE_SHA"
 
+      - name: Verify manually approved release and evidence
+        if: github.event_name == 'workflow_dispatch'
+        id: manual_evidence
+        env:
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[0-9]+$ ]]
+          git fetch --quiet origin main
+          git cat-file -e "$RELEASE_SHA^{commit}"
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${EVIDENCE_RUN_ID}")"
+          test "$(jq -r .head_sha <<<"$run")" = "$RELEASE_SHA"
+          test "$(jq -r .conclusion <<<"$run")" = "success"
+          test "$(jq -r .name <<<"$run")" = "Release readiness"
+          echo "evidence_run_id=$EVIDENCE_RUN_ID" >> "$GITHUB_OUTPUT"
+
       - name: Dispatch exact CI and Release Readiness gates
+        if: github.event_name == 'push'
         id: gate_dispatch
         run: |
           set -euo pipefail
@@ -47,6 +77,7 @@ jobs:
           gh workflow run release-readiness.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_REF"
 
       - name: Wait for exact CI and Release Readiness gates
+        if: github.event_name == 'push'
         id: gates
         env:
           STARTED: ${{ steps.gate_dispatch.outputs.started }}
@@ -80,7 +111,7 @@ jobs:
       - name: Dispatch approved Production deploy
         id: dispatch
         env:
-          EVIDENCE_RUN_ID: ${{ steps.gates.outputs.evidence_run_id }}
+          EVIDENCE_RUN_ID: ${{ steps.gates.outputs.evidence_run_id || steps.manual_evidence.outputs.evidence_run_id }}
         run: |
           set -euo pipefail
           started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
