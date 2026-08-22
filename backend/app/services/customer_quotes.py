@@ -9,10 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.customer_quote import CustomerQuote
+from app.models.document import Document
 from app.models.project import Project
 from app.schemas.customer_quote import (
     CustomerQuoteAccept,
     CustomerQuoteCreate,
+    CustomerQuoteIssueStatus,
+    CustomerQuoteIssueUpdate,
     CustomerQuoteLineItem,
     CustomerQuoteList,
     CustomerQuoteRead,
@@ -121,6 +124,14 @@ def _read(quote: CustomerQuote, project: Project) -> CustomerQuoteRead:
         notes=quote.notes,
         created_by=quote.created_by,
         sent_at=quote.sent_at,
+        issue_status=quote.issue_status,
+        approved_revision=quote.approved_revision,
+        approved_at=quote.approved_at,
+        approved_by=quote.approved_by,
+        issued_at=quote.issued_at,
+        issued_by=quote.issued_by,
+        issuance_method=quote.issuance_method,
+        issuance_reference=quote.issuance_reference,
         accepted_at=quote.accepted_at,
         accepted_by=quote.accepted_by,
         acceptance_reference=quote.acceptance_reference,
@@ -218,6 +229,11 @@ def update_customer_quote(
     quote = _load_quote(db, quote_id, for_update=True)
     if quote.status == CustomerQuoteStatus.accepted.value:
         raise AppError("Accepted quotes are immutable.", status_code=409)
+    if quote.issue_status in {
+        CustomerQuoteIssueStatus.approved_for_issue.value,
+        CustomerQuoteIssueStatus.issued.value,
+    }:
+        raise AppError("Approved or issued quote revisions are immutable. Start a new controlled revision.", status_code=409)
     if quote.record_revision != payload.expected_revision:
         raise AppError("This quote changed in another session. Reload before saving.", status_code=409)
 
@@ -262,6 +278,7 @@ def update_customer_quote(
         quote.status = CustomerQuoteStatus.draft.value
         quote.closed_at = None
     quote.record_revision += 1
+    quote.issue_status = CustomerQuoteIssueStatus.draft.value
 
     project = _load_project(db, quote.project_id, for_update=True)
     if payload.project_name is not None:
@@ -294,20 +311,109 @@ def update_customer_quote_status(
         raise AppError("Create a new quote revision before reopening a closed quote.", status_code=409)
     if quote.record_revision != payload.expected_revision:
         raise AppError("This quote changed in another session. Reload before saving.", status_code=409)
+    if payload.status == CustomerQuoteStatus.sent:
+        raise AppError("Approve the quote revision and record issuance through the controlled issue action.", status_code=409)
     now = datetime.now(UTC)
     quote.status = payload.status.value
     quote.record_revision += 1
     if payload.note:
         quote.notes = payload.note.strip()
-    if payload.status == CustomerQuoteStatus.sent:
-        quote.sent_at = now
-        quote.closed_at = None
-    else:
-        quote.closed_at = now
+    quote.closed_at = now
     db.commit()
     project = _load_project(db, quote.project_id)
     db.refresh(quote)
     return _read(quote, project)
+
+
+def update_customer_quote_issue_status(
+    db: Session,
+    quote_id: UUID,
+    payload: CustomerQuoteIssueUpdate,
+    actor_email: str,
+) -> CustomerQuoteRead:
+    quote = _load_quote(db, quote_id, for_update=True)
+    project = _load_project(db, quote.project_id)
+    if quote.record_revision != payload.expected_revision:
+        raise AppError("This quote changed in another session. Reload before continuing.", status_code=409)
+    if quote.status in {
+        CustomerQuoteStatus.accepted.value,
+        CustomerQuoteStatus.declined.value,
+        CustomerQuoteStatus.expired.value,
+    }:
+        raise AppError("Closed quotes cannot move through issue review.", status_code=409)
+
+    now = datetime.now(UTC)
+    target = payload.status
+    if target == CustomerQuoteIssueStatus.ready_for_review:
+        if quote.issue_status != CustomerQuoteIssueStatus.draft.value:
+            raise AppError("Only draft revisions can be submitted for review.", status_code=409)
+        quote.issue_status = target.value
+    elif target == CustomerQuoteIssueStatus.approved_for_issue:
+        if quote.issue_status != CustomerQuoteIssueStatus.ready_for_review.value:
+            raise AppError("The revision must be ready for review before approval.", status_code=409)
+        quote.issue_status = target.value
+        quote.approved_revision = quote.record_revision
+        quote.approved_at = now
+        quote.approved_by = actor_email
+        snapshot = _read(quote, project).model_dump(mode="json")
+        snapshot["issue_status"] = CustomerQuoteIssueStatus.approved_for_issue.value
+        quote.approved_snapshot_json = snapshot
+        existing = next(
+            (
+                document
+                for document in db.scalars(
+                    select(Document).where(
+                        Document.project_id == quote.project_id,
+                        Document.category == "quote",
+                    )
+                ).all()
+                if (document.metadata_json or {}).get("customer_quote_id") == str(quote.id)
+                and (document.metadata_json or {}).get("quote_revision") == quote.record_revision
+            ),
+            None,
+        )
+        if existing is None:
+            db.add(Document(
+                title=f"{quote.quote_number} revision {quote.record_revision}",
+                category="quote",
+                status="current",
+                project_id=quote.project_id,
+                description="Approved customer quote PDF generated from the controlled IHOS revision.",
+                revision=str(quote.record_revision),
+                issue_date=quote.quote_date,
+                metadata_json={
+                    "source": "customer_quote",
+                    "customer_quote_id": str(quote.id),
+                    "quote_revision": quote.record_revision,
+                    "generated_pdf_path": f"/api/v1/customer-quotes/{quote.id}/pdf",
+                },
+            ))
+    elif target == CustomerQuoteIssueStatus.issued:
+        if quote.issue_status != CustomerQuoteIssueStatus.approved_for_issue.value:
+            raise AppError("Only an approved revision can be recorded as issued.", status_code=409)
+        if not payload.issuance_method or not payload.issuance_reference:
+            raise AppError("Issuance method and reference are required.", status_code=422)
+        quote.issue_status = target.value
+        quote.issued_at = now
+        quote.issued_by = actor_email
+        quote.issuance_method = payload.issuance_method.strip()
+        quote.issuance_reference = payload.issuance_reference.strip()
+        quote.status = CustomerQuoteStatus.sent.value
+        quote.sent_at = now
+    else:
+        raise AppError("Unsupported quote issue transition.", status_code=422)
+
+    quote.record_revision += 1
+    db.commit()
+    db.refresh(quote)
+    return _read(quote, project)
+
+
+def get_customer_quote_pdf_snapshot(db: Session, quote_id: UUID) -> CustomerQuoteRead:
+    quote = _load_quote(db, quote_id)
+    if quote.approved_snapshot_json:
+        return CustomerQuoteRead.model_validate(quote.approved_snapshot_json)
+    return _read(quote, _load_project(db, quote.project_id))
 
 
 def accept_customer_quote(

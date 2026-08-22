@@ -111,7 +111,7 @@ describe("MVPWorkflowPage", () => {
 
     const draftCard = within(queue).getByText("Morgan Lee — Driveway culvert").closest("article");
     expect(draftCard).not.toBeNull();
-    expect(within(draftCard as HTMLElement).getByRole("link", { name: "Finish and send quote" })).toHaveAttribute(
+    expect(within(draftCard as HTMLElement).getByRole("link", { name: "Finish quote" })).toHaveAttribute(
       "href",
       "/customer-quotes?quoteId=quote-draft&action=edit",
     );
@@ -300,6 +300,14 @@ function customerQuote(overrides: Partial<CustomerQuote>): CustomerQuote {
     notes: null,
     created_by: "admin@ironhousecontracting.com",
     sent_at: null,
+    issue_status: "draft",
+    approved_revision: null,
+    approved_at: null,
+    approved_by: null,
+    issued_at: null,
+    issued_by: null,
+    issuance_method: null,
+    issuance_reference: null,
     accepted_at: null,
     accepted_by: null,
     acceptance_reference: null,

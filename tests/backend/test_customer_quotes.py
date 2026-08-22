@@ -80,14 +80,28 @@ def test_verbal_quote_creates_a_durable_opportunity_without_job_number() -> None
 
 def test_sent_quote_remains_non_binding_and_stale_edits_are_rejected() -> None:
     created = _create_quote()
+    ready = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": 1, "status": "ready_for_review"},
+    ).json()
+    approved = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": ready["record_revision"], "status": "approved_for_issue"},
+    ).json()
     sent = client.post(
-        f"/api/v1/customer-quotes/{created['id']}/status",
-        json={"expected_revision": 1, "status": "sent", "note": "Emailed outside this test."},
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={
+            "expected_revision": approved["record_revision"],
+            "status": "issued",
+            "issuance_method": "Email",
+            "issuance_reference": "Customer email 2026-08-21",
+        },
     )
 
     assert sent.status_code == 200
     assert sent.json()["status"] == "sent"
-    assert sent.json()["record_revision"] == 2
+    assert sent.json()["issue_status"] == "issued"
+    assert sent.json()["record_revision"] == 4
     assert sent.json()["job_number"] is None
 
     stale = client.patch(
@@ -96,6 +110,58 @@ def test_sent_quote_remains_non_binding_and_stale_edits_are_rejected() -> None:
     )
     assert stale.status_code == 409
     assert client.get(f"/api/v1/projects/{created['project_id']}").json()["status"] == "opportunity"
+
+
+def test_unapproved_quote_cannot_be_issued_and_approved_snapshot_is_immutable() -> None:
+    created = _create_quote()
+    blocked = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={
+            "expected_revision": 1,
+            "status": "issued",
+            "issuance_method": "Email",
+            "issuance_reference": "Not approved",
+        },
+    )
+    assert blocked.status_code == 409
+
+    ready = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": 1, "status": "ready_for_review"},
+    ).json()
+    approved = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": ready["record_revision"], "status": "approved_for_issue"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["approved_revision"] == 2
+    assert approved.json()["approved_by"] == "test-admin@ironhousecontracting.com"
+
+    edit = client.patch(
+        f"/api/v1/customer-quotes/{created['id']}",
+        json={"expected_revision": approved.json()["record_revision"], "scope_summary": "Changed after approval"},
+    )
+    assert edit.status_code == 409
+
+    documents = client.get(f"/api/v1/documents?project_id={created['project_id']}")
+    assert documents.status_code == 200
+    linked = [item for item in documents.json()["items"] if item["metadata"].get("customer_quote_id") == created["id"]]
+    assert len(linked) == 1
+
+
+def test_estimator_can_submit_for_review_but_cannot_approve() -> None:
+    _authenticate_as("estimator")
+    created = _create_quote()
+    ready = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": 1, "status": "ready_for_review"},
+    )
+    assert ready.status_code == 200
+    denied = client.post(
+        f"/api/v1/customer-quotes/{created['id']}/issue-status",
+        json={"expected_revision": 2, "status": "approved_for_issue"},
+    )
+    assert denied.status_code == 403
 
 
 def test_quote_date_cannot_be_cleared_on_update() -> None:
