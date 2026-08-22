@@ -29,6 +29,7 @@ export type Project = {
   metadata: Record<string, unknown>;
   workspace_root?: string | null;
   workspace_provisioned_at?: string | null;
+  deleted_at?: string | null;
   supplier_ids: string[];
   created_at: string;
   updated_at: string;
@@ -169,8 +170,11 @@ export const projectStatuses: ProjectStatus[] = [
 ];
 
 export const projectsApi = {
-  list: (status?: string) => {
-    const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  list: (status?: string, includeDeleted = false) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (includeDeleted) params.set("include_deleted", "true");
+    const suffix = params.size ? `?${params.toString()}` : "";
     return request<ProjectList>(`/projects${suffix}`);
   },
   create: (payload: ProjectCreatePayload) =>
@@ -186,6 +190,15 @@ export const projectsApi = {
     }),
   archive: (id: string) =>
     request<Project>(`/projects/${id}/archive`, {
+      method: "POST",
+    }),
+  delete: (id: string, confirmationName: string) =>
+    request<Project>(`/projects/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirmation_name: confirmationName }),
+    }),
+  restore: (id: string) =>
+    request<Project>(`/projects/${id}/restore`, {
       method: "POST",
     }),
   dashboard: (id: string) => request<ProjectDashboard>(`/projects/${id}/dashboard`),

@@ -56,6 +56,10 @@ class ProjectUpdate(BaseModel):
     supplier_ids: list[UUID] | None = None
 
 
+class ProjectDeleteRequest(BaseModel):
+    confirmation_name: str = Field(min_length=1)
+
+
 class ProjectRead(BaseModel):
     id: UUID
     name: str
@@ -77,6 +81,7 @@ class ProjectRead(BaseModel):
     metadata: dict
     workspace_root: str | None
     workspace_provisioned_at: datetime | None
+    deleted_at: datetime | None
     supplier_ids: list[UUID]
     created_at: datetime
     updated_at: datetime

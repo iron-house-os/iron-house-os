@@ -34,6 +34,7 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     workspace_root: Mapped[str | None] = mapped_column(String(500))
     workspace_manifest_json: Mapped[dict | None] = mapped_column(JSONType)
     workspace_provisioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     municipality_ref = relationship("Municipality", back_populates="projects")
     tenders = relationship("Tender", back_populates="project")
