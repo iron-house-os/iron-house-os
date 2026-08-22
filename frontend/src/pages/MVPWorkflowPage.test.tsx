@@ -369,5 +369,11 @@ function launchDashboard(job: Project, status: "ready" | "not_ready"): ProjectLa
     pending_po_request_count: 1,
     safety_record_counts: { safety_permit: 1 },
     document_count: 4,
+    award_baseline_source: "Q-2026-001",
+    award_pricing_subtotal: 100000,
+    award_cost_budget_status: "needs_cost_allocation",
+    uncoded_award_line_count: 5,
+    procurement_requirement_count: 2,
+    procurement_plan_status: "draft",
   };
 }
