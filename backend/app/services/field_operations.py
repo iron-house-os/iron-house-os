@@ -957,10 +957,8 @@ def attach_purchase_order_invoice(
     }
     next_details = {**(item.details or {}), "invoice": invoice, "invoice_status": "pending_approval", "invoice_audit_history": history}
     document_ids = list(dict.fromkeys([*(item.document_ids or []), str(payload.document_id)]))
-    result = db.execute(update(FieldRecord).where(FieldRecord.id == item.id, FieldRecord.updated_at == item.updated_at).values(details=next_details, document_ids=document_ids).execution_options(synchronize_session=False))
-    if result.rowcount != 1:
-        db.rollback()
-        raise AppError("The PO changed while the invoice was being attached. Reload and try again.", status_code=409)
+    item.details = next_details
+    item.document_ids = document_ids
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)
@@ -984,10 +982,7 @@ def decide_purchase_order_invoice(
     history = list(details.get("invoice_audit_history") or [])
     history.append({"action": payload.decision, "by": user.display_name, "email": user.email, "at": now, "note": (payload.note or "").strip() or None})
     next_details = {**details, "invoice_status": payload.decision, "invoice_decision": {"decision": payload.decision, "by": user.display_name, "email": user.email, "at": now, "note": (payload.note or "").strip() or None}, "invoice_audit_history": history}
-    result = db.execute(update(FieldRecord).where(FieldRecord.id == item.id, FieldRecord.updated_at == item.updated_at).values(details=next_details).execution_options(synchronize_session=False))
-    if result.rowcount != 1:
-        db.rollback()
-        raise AppError("The invoice changed while it was being reviewed. Reload and try again.", status_code=409)
+    item.details = next_details
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)
