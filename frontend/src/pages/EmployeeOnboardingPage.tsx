@@ -156,15 +156,29 @@ export function EmployeeOnboardingPage() {
   }
 
   async function generateInvitation(record: OnboardingRecord) {
-    await runAction(
-      record,
-      async () => {
-        const generated = await employeeOnboardingApi.invite(record.id);
-        setInvitation(generated);
-        setInvitationRecipient(record);
-      },
-      "Secure invitation generated. Share it only with the intended employee.",
-    );
+    setError(null); setMessage(null); setActingId(record.id);
+    try {
+      const generated = await employeeOnboardingApi.invite(record.id);
+      setInvitation(generated); setInvitationRecipient(record);
+      if (generated.delivery_status === "failed") setError(invitationDeliveryMessage(generated.delivery_status));
+      else setMessage(invitationDeliveryMessage(generated.delivery_status));
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to generate the invitation.");
+    } finally { setActingId(null); }
+  }
+
+  async function deliverInvitation(record: OnboardingRecord) {
+    setError(null); setMessage(null); setActingId(record.id);
+    try {
+      const delivered = await employeeOnboardingApi.deliverInvitation(record.id);
+      setInvitation(delivered); setInvitationRecipient(record);
+      if (delivered.delivery_status === "failed") setError(invitationDeliveryMessage(delivered.delivery_status));
+      else setMessage(invitationDeliveryMessage(delivered.delivery_status));
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to send the current invitation.");
+    } finally { setActingId(null); }
   }
 
   async function shareInvitation() {
@@ -245,7 +259,7 @@ export function EmployeeOnboardingPage() {
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-brand-gold-dark" />
             <div className="min-w-0 flex-1">
-              <h2 className="font-semibold text-iron-950">Secure invitation generated</h2>
+              <h2 className="font-semibold text-iron-950">{invitation.delivery_status === "sent" ? "Secure invitation sent" : "Secure invitation generated"}</h2>
               <p className="mt-1 text-sm text-iron-600">
                 This link expires {new Date(invitation.expires_at).toLocaleString("en-CA")}. A resend invalidates the previous link.
               </p>
@@ -255,8 +269,9 @@ export function EmployeeOnboardingPage() {
               <div className="mt-4 flex flex-wrap items-center gap-4">
                 {invitationQr ? <img src={invitationQr} alt={`Onboarding QR code for ${invitationRecipient?.legal_first_name ?? "employee"}`} className="h-56 w-56 rounded-md border bg-white p-2" /> : <p className="text-sm text-iron-600">Preparing local QR code…</p>}
                 <div className="grid gap-2">
+                  {invitation.delivery_status !== "sent" && invitationRecipient ? <button type="button" onClick={() => void deliverInvitation(invitationRecipient)} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-gold px-4 text-sm font-semibold text-brand-black"><Mail className="h-4 w-4" />Retry automatic email</button> : null}
                   {invitationQr ? <a href={invitationQr} download={`ihos-onboarding-${invitationRecipient?.legal_first_name.toLowerCase() ?? "employee"}.svg`} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold/60 bg-white px-4 text-sm font-semibold text-iron-800"><Download className="h-4 w-4" />Download QR</a> : null}
-                  <button type="button" onClick={() => void shareInvitation()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-brand-gold px-4 text-sm font-semibold text-brand-black"><Mail className="h-4 w-4" />Email or share QR</button>
+                  <button type="button" onClick={() => void shareInvitation()} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold/60 bg-white px-4 text-sm font-semibold text-iron-800"><Mail className="h-4 w-4" />Share manually</button>
                 </div>
               </div>
               <p className="mt-3 text-xs leading-5 text-iron-600">The QR is generated locally from this exact time-limited link. It contains no completed form data. Reissuing the invitation invalidates this QR.</p>
@@ -381,11 +396,13 @@ export function EmployeeOnboardingPage() {
                   <Fact label="Completion" value={`${record.completion_percent}%`} />
                   <Fact label="Missing items" value={String(record.missing_items.length)} />
                   <Fact label="Required action" value={requiredAction(record, readiness)} />
+                  <Fact label="Invitation delivery" value={labelValue(record.invitation_delivery_status)} />
                 </div>
                 {readiness?.blockers.length ? <p className="mt-3 text-xs leading-5 text-iron-500">{readiness.blockers.join(" ")}</p> : null}
                 {record.correction_note ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">Correction requested: {record.correction_note}</p> : null}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {canInvite ? <Action disabled={busy} onClick={() => void generateInvitation(record)}>Generate invitation</Action> : null}
+                  {canInvite ? <Action disabled={busy} onClick={() => void generateInvitation(record)}>{record.status === "draft" ? "Generate and send invitation" : "Reissue and invalidate previous invitation"}</Action> : null}
+                  {canInvite && ["ready", "failed"].includes(record.invitation_delivery_status) ? <Action disabled={busy} onClick={() => void deliverInvitation(record)}>Send current invitation</Action> : null}
                   {record.completion_percent > 0 ? <Action disabled={busy} onClick={() => void openPacket(record)}>Review saved forms</Action> : null}
                   {!['active', 'cancelled'].includes(record.status) ? (
                     <Action disabled={busy} onClick={() => void runAction(record, () => employeeOnboardingApi.revoke(record.id), "Invitation revoked and onboarding cancelled.")}>Revoke</Action>
@@ -428,13 +445,20 @@ export function EmployeeOnboardingPage() {
 }
 
 function requiredAction(record: OnboardingRecord, readiness: DeploymentStatus | undefined) {
-  if (record.status === "draft") return "Generate invitation";
+  if (record.status === "draft") return "Generate and send invitation";
+  if (record.status === "invitation_ready") return "Send or share invitation";
   if (["invitation_sent", "invitation_opened", "in_progress", "corrections_required"].includes(record.status)) return "Employee completion";
   if (record.status === "submitted") return "Management review";
   if (record.status === "approved" && readiness?.status !== "Ready") return "Orientation evidence";
   if (record.status === "approved") return "Activate employee";
   if (record.status === "active") return "Complete";
   return "No action";
+}
+
+function invitationDeliveryMessage(status: "ready" | "sent" | "failed") {
+  if (status === "sent") return "Invitation email accepted for delivery by the configured company mail server.";
+  if (status === "failed") return "Invitation generated, but automatic email delivery failed. Retry or share the current link manually.";
+  return "Invitation generated. Automatic email delivery is not configured; share the current link or QR manually.";
 }
 
 function labelValue(value: string) {

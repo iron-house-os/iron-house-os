@@ -69,7 +69,48 @@ def invite(onboarding_id: UUID, request: Request, admin: AdminUser, db: DBSessio
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     base_url = str(request.base_url).rstrip("/")
-    return InvitationRead(onboarding_id=record.id, invite_url=f"{base_url}/employee-onboarding/{token}", expires_at=expires_at)
+    invite_url = f"{base_url}/employee-onboarding/{token}"
+    delivery_status = service.deliver_invitation(
+        db,
+        record,
+        invite_url=invite_url,
+        actor=admin.email,
+    )
+    return InvitationRead(
+        onboarding_id=record.id,
+        invite_url=invite_url,
+        expires_at=expires_at,
+        delivery_status=delivery_status,
+    )
+
+
+@router.post("/{onboarding_id}/invite/deliver", response_model=InvitationRead)
+def deliver_invite(onboarding_id: UUID, request: Request, admin: AdminUser, db: DBSession) -> InvitationRead:
+    record = _record_or_404(db, onboarding_id)
+    if record.status not in service.EMPLOYEE_EDITABLE_STATUSES:
+        raise HTTPException(status_code=409, detail="This onboarding is no longer open for invitation delivery.")
+    if record.invitation_expires_at is None or record.invitation_token_hash is None:
+        raise HTTPException(status_code=409, detail="Generate an invitation before sending it.")
+    if service.as_utc(record.invitation_expires_at) < service.utcnow():
+        raise HTTPException(status_code=409, detail="The current invitation has expired. Generate a new invitation.")
+    try:
+        token = service.current_invitation_token(record)
+    except OnboardingDataUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    base_url = str(request.base_url).rstrip("/")
+    invite_url = f"{base_url}/employee-onboarding/{token}"
+    delivery_status = service.deliver_invitation(
+        db,
+        record,
+        invite_url=invite_url,
+        actor=admin.email,
+    )
+    return InvitationRead(
+        onboarding_id=record.id,
+        invite_url=invite_url,
+        expires_at=record.invitation_expires_at,
+        delivery_status=delivery_status,
+    )
 
 
 @router.post("/{onboarding_id}/revoke", response_model=EmployeeOnboardingRead)

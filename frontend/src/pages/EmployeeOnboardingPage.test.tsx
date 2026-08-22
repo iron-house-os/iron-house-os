@@ -16,6 +16,7 @@ vi.mock("../api/employeeOnboarding", async (importOriginal) => {
       positions: vi.fn(),
       create: vi.fn(),
       invite: vi.fn(),
+      deliverInvitation: vi.fn(),
       reviewPacket: vi.fn(),
       revoke: vi.fn(),
       requestCorrections: vi.fn(),
@@ -51,6 +52,9 @@ const record: OnboardingRecord = {
   correction_note: null,
   invitation_expires_at: null,
   invited_at: null,
+  invitation_delivery_status: "not_generated",
+  invitation_delivery_attempted_at: null,
+  invitation_delivered_at: null,
   submitted_at: "2026-08-20T10:00:00Z",
   approved_at: "2026-08-20T11:00:00Z",
   activated_at: null,
@@ -129,15 +133,48 @@ describe("EmployeeOnboardingPage", () => {
     const draft = { ...record, status: "draft" as const, completion_percent: 0, missing_items: ["personal_information"] };
     vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [draft], total: 1 });
     vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({ status: "Blocked", blockers: ["Company orientation has not been recorded."], latest_company_orientation_id: null, latest_site_orientation_id: null });
-    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z" });
+    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z", delivery_status: "ready" });
     render(<MemoryRouter><EmployeeOnboardingPage /></MemoryRouter>);
 
-    await user.click(await screen.findByRole("button", { name: "Generate invitation" }));
+    await user.click(await screen.findByRole("button", { name: "Generate and send invitation" }));
 
     expect(await screen.findByRole("img", { name: "Onboarding QR code for Alex" })).toHaveAttribute("src", expect.stringMatching(/^data:image\/svg\+xml/));
     expect(screen.getByRole("link", { name: "Download QR" })).toHaveAttribute("download", "ihos-onboarding-alex.svg");
-    expect(screen.getByRole("button", { name: "Email or share QR" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share manually" })).toBeInTheDocument();
     expect(employeeOnboardingApi.invite).toHaveBeenCalledWith("onboarding-1");
+  });
+
+  it("reports an invitation as sent only after confirmed automatic delivery", async () => {
+    const user = userEvent.setup();
+    const draft = { ...record, status: "draft" as const, completion_percent: 0, missing_items: ["personal_information"] };
+    vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [draft], total: 1 });
+    vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({ status: "Blocked", blockers: [], latest_company_orientation_id: null, latest_site_orientation_id: null });
+    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z", delivery_status: "sent" });
+    render(<MemoryRouter><EmployeeOnboardingPage /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Generate and send invitation" }));
+
+    expect(await screen.findByRole("heading", { name: "Secure invitation sent" })).toBeInTheDocument();
+    expect(screen.getByText("Invitation email accepted for delivery by the configured company mail server.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry automatic email" })).not.toBeInTheDocument();
+  });
+
+  it("retries failed automatic delivery without generating a different invitation", async () => {
+    const user = userEvent.setup();
+    const draft = { ...record, status: "draft" as const, completion_percent: 0, missing_items: ["personal_information"] };
+    const invitation = { onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z" };
+    vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [draft], total: 1 });
+    vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({ status: "Blocked", blockers: [], latest_company_orientation_id: null, latest_site_orientation_id: null });
+    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ ...invitation, delivery_status: "failed" });
+    vi.mocked(employeeOnboardingApi.deliverInvitation).mockResolvedValue({ ...invitation, delivery_status: "sent" });
+    render(<MemoryRouter><EmployeeOnboardingPage /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Generate and send invitation" }));
+    expect(await screen.findByText("Invitation generated, but automatic email delivery failed. Retry or share the current link manually.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry automatic email" }));
+
+    expect(await screen.findByRole("heading", { name: "Secure invitation sent" })).toBeInTheDocument();
+    expect(employeeOnboardingApi.deliverInvitation).toHaveBeenCalledWith(draft.id);
   });
 
   it("handles an iPad share-sheet cancellation without an unhandled rejection", async () => {
@@ -150,12 +187,12 @@ describe("EmployeeOnboardingPage", () => {
     }));
     vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [draft], total: 1 });
     vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({ status: "Blocked", blockers: ["Company orientation has not been recorded."], latest_company_orientation_id: null, latest_site_orientation_id: null });
-    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z" });
+    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z", delivery_status: "ready" });
     render(<MemoryRouter><EmployeeOnboardingPage /></MemoryRouter>);
 
-    await user.click(await screen.findByRole("button", { name: "Generate invitation" }));
+    await user.click(await screen.findByRole("button", { name: "Generate and send invitation" }));
     await screen.findByRole("img", { name: "Onboarding QR code for Alex" });
-    await user.click(screen.getByRole("button", { name: "Email or share QR" }));
+    await user.click(screen.getByRole("button", { name: "Share manually" }));
 
     expect(await screen.findByText("Sharing cancelled. The current invitation and QR remain available.")).toBeInTheDocument();
     expect(share).toHaveBeenCalledTimes(1);
@@ -171,12 +208,12 @@ describe("EmployeeOnboardingPage", () => {
     }));
     vi.mocked(employeeOnboardingApi.list).mockResolvedValue({ items: [draft], total: 1 });
     vi.mocked(employeeOnboardingApi.deploymentStatus).mockResolvedValue({ status: "Blocked", blockers: ["Company orientation has not been recorded."], latest_company_orientation_id: null, latest_site_orientation_id: null });
-    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z" });
+    vi.mocked(employeeOnboardingApi.invite).mockResolvedValue({ onboarding_id: draft.id, invite_url: "https://staging.os.ironhousecivil.com/employee-onboarding/current-token", expires_at: "2026-08-23T10:00:00Z", delivery_status: "ready" });
     render(<MemoryRouter><EmployeeOnboardingPage /></MemoryRouter>);
 
-    await user.click(await screen.findByRole("button", { name: "Generate invitation" }));
+    await user.click(await screen.findByRole("button", { name: "Generate and send invitation" }));
     await screen.findByRole("img", { name: "Onboarding QR code for Alex" });
-    await user.click(screen.getByRole("button", { name: "Email or share QR" }));
+    await user.click(screen.getByRole("button", { name: "Share manually" }));
 
     expect(await screen.findByText("The device could not attach the QR. Opening an email with the secure link instead.")).toBeInTheDocument();
     expect(share).toHaveBeenCalledTimes(1);

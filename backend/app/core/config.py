@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     )
     google_calendar_frontend_return_url: str = "http://localhost:5173/google-calendar"
     google_calendar_token_encryption_key: str | None = None
+    onboarding_email_delivery_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = "Iron House Contracting"
+    smtp_starttls: bool = True
+    smtp_use_ssl: bool = False
+    smtp_timeout_seconds: int = Field(default=10, ge=1, le=30)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -78,6 +88,17 @@ def validate_production_settings(settings: Settings) -> None:
         errors.append("BOOTSTRAP_ADMIN_EMAIL must be an explicit non-example address")
     if _looks_insecure(settings.bootstrap_admin_password, minimum_length=16):
         errors.append("BOOTSTRAP_ADMIN_PASSWORD must be an explicit non-placeholder value")
+    if settings.onboarding_email_delivery_enabled:
+        if _looks_insecure(settings.smtp_host):
+            errors.append("SMTP_HOST must be configured when onboarding email delivery is enabled")
+        if _looks_insecure(settings.smtp_username):
+            errors.append("SMTP_USERNAME must be configured when onboarding email delivery is enabled")
+        if _looks_insecure(settings.smtp_password, minimum_length=12):
+            errors.append("SMTP_PASSWORD must be a protected non-placeholder value")
+        if _looks_insecure(settings.smtp_from_email):
+            errors.append("SMTP_FROM_EMAIL must be configured when onboarding email delivery is enabled")
+        if not settings.smtp_starttls and not settings.smtp_use_ssl:
+            errors.append("SMTP_STARTTLS or SMTP_USE_SSL must be enabled in production")
 
     if errors:
         raise RuntimeError("Insecure production configuration: " + "; ".join(errors))

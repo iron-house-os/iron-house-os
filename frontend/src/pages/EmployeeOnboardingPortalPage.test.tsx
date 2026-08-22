@@ -18,6 +18,7 @@ const invitationRecord: OnboardingRecord = {
   start_date: "2026-08-20", primary_location: "Yard", onboarding_package: "standard-field",
   status: "in_progress", completion_percent: 0, missing_items: [], reviewer_id: null,
   correction_note: null, invitation_expires_at: "2026-08-23T08:00:00Z", invited_at: "2026-08-20T08:00:00Z",
+  invitation_delivery_status: "sent", invitation_delivery_attempted_at: "2026-08-20T08:00:00Z", invitation_delivered_at: "2026-08-20T08:00:00Z",
   submitted_at: null, approved_at: null, activated_at: null, created_at: "2026-08-20T08:00:00Z", updated_at: "2026-08-20T08:00:00Z",
 };
 

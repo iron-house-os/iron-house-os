@@ -42,3 +42,23 @@ def test_insecure_production_configuration_fails_closed(
 
 def test_development_defaults_remain_available_for_local_work() -> None:
     validate_production_settings(Settings())
+
+
+def test_enabled_production_onboarding_email_requires_secure_mail_settings() -> None:
+    values = SECURE_PRODUCTION | {"onboarding_email_delivery_enabled": True}
+
+    with pytest.raises(RuntimeError, match="SMTP_HOST"):
+        validate_production_settings(Settings(**values))
+
+
+def test_enabled_production_onboarding_email_accepts_protected_tls_configuration() -> None:
+    values = SECURE_PRODUCTION | {
+        "onboarding_email_delivery_enabled": True,
+        "smtp_host": "smtp.ironhousecontracting.com",
+        "smtp_username": "onboarding@ironhousecontracting.com",
+        "smtp_password": "protected-mail-password",
+        "smtp_from_email": "onboarding@ironhousecontracting.com",
+        "smtp_starttls": True,
+    }
+
+    validate_production_settings(Settings(**values))

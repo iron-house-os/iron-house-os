@@ -35,8 +35,32 @@ def decrypt_packet(encrypted: str | None) -> PortalPacket:
         ) from exc
 
 
+def encrypt_invitation_token(token: str) -> str:
+    return _token_cipher().encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def decrypt_invitation_token(encrypted: str | None) -> str:
+    if not encrypted:
+        raise OnboardingDataUnavailable(
+            "The current invitation cannot be recovered for delivery. Reissue it before sending."
+        )
+    try:
+        return _token_cipher().decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError) as exc:
+        raise OnboardingDataUnavailable(
+            "The current invitation cannot be recovered for delivery. Reissue it before sending."
+        ) from exc
+
+
 def _cipher() -> Fernet:
     source = get_settings().secret_key
     context = b"iron-house-os:employee-onboarding:v1:"
+    key = base64.urlsafe_b64encode(hashlib.sha256(context + source.encode("utf-8")).digest())
+    return Fernet(key)
+
+
+def _token_cipher() -> Fernet:
+    source = get_settings().secret_key
+    context = b"iron-house-os:employee-onboarding-invitation:v1:"
     key = base64.urlsafe_b64encode(hashlib.sha256(context + source.encode("utf-8")).digest())
     return Fernet(key)
