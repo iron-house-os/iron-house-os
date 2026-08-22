@@ -92,6 +92,12 @@ describe("CustomerQuotesPage", () => {
         savedQuote = quote("accepted", 2);
         return json(savedQuote);
       }
+      if (url.endsWith("/issue-status") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        quoteBodies.push(body);
+        savedQuote = { ...quote("sent", 2), issue_status: body.status };
+        return json(savedQuote);
+      }
       if (url.endsWith("/status") && init?.method === "POST") {
         const body = JSON.parse(String(init.body));
         quoteBodies.push(body);
@@ -259,5 +265,50 @@ describe("CustomerQuotesPage", () => {
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByLabelText("Project / work name")).toHaveValue("Creek crossing");
     expect(screen.getByLabelText("Customer / company")).toHaveValue("Valley Developments");
+  });
+
+  it("auto-fills issuance evidence from a valid customer contact and keeps it editable", async () => {
+    savedQuote = {
+      ...quote("sent", 3),
+      issue_status: "approved_for_issue",
+      customer_email: "alex@example.com",
+      customer_phone: "604-555-0182",
+    };
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><CustomerQuotesPage /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Record issued" }));
+    expect(screen.getByLabelText("Issuance method")).toHaveValue("Email");
+    expect(screen.getByLabelText("Issuance reference")).toHaveValue("alex@example.com");
+
+    await user.selectOptions(screen.getByLabelText("Issuance method"), "Text message");
+    expect(screen.getByLabelText("Issuance reference")).toHaveValue("604-555-0182");
+    await user.clear(screen.getByLabelText("Issuance reference"));
+    await user.type(screen.getByLabelText("Issuance reference"), "SMS delivery receipt 123");
+    await user.click(screen.getAllByRole("button", { name: "Record issued" })[0]);
+
+    await waitFor(() => expect(quoteBodies.at(-1)).toEqual(expect.objectContaining({
+      expected_revision: 3,
+      status: "issued",
+      issuance_method: "Text message",
+      issuance_reference: "SMS delivery receipt 123",
+    })));
+  });
+
+  it("requires a controlled method when the quote has no valid contact", async () => {
+    savedQuote = { ...quote("sent", 3), issue_status: "approved_for_issue" };
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><CustomerQuotesPage /></MemoryRouter>);
+
+    await user.click(await screen.findByRole("button", { name: "Record issued" }));
+    expect(screen.getByLabelText("Issuance method")).toHaveValue("");
+    expect(screen.getByLabelText("Issuance reference")).toHaveValue("");
+    expect(screen.getAllByRole("button", { name: "Record issued" })[0]).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Issuance method"), "Hand delivered");
+    expect(screen.getByLabelText("Issuance reference")).toHaveValue("Q-2026-001 — hand delivered");
+    expect(screen.getAllByRole("button", { name: "Record issued" })[0]).toBeEnabled();
   });
 });
