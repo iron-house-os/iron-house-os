@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 130
     env:
-      RELEASE_SHA: 55295263d861e60c535cc0b41185dcd8b18ae4e8
-      RELEASE_REF: release-evidence/55295263
+      RELEASE_SHA: d4c4fd34afc2cffaad0550c0ac802fb9fe126e6c
+      RELEASE_REF: release-evidence/d4c4fd3
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
