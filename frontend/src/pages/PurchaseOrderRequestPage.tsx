@@ -11,7 +11,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function buildPoNumber(jobNumber: string) {
   const sequence = Date.now().toString().slice(-8);
-  return `PO-${sequence}-${jobNumber}`;
+  const jobCode = jobNumber.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  return `PO${sequence}-${jobCode}`;
 }
 
 export function PurchaseOrderRequestPage() {

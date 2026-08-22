@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -183,11 +183,17 @@ def _update_awarded_project(
 
 def _next_job_number(db: Session, award_year: int | None = None) -> str:
     year = award_year or datetime.now(IRON_HOUSE_TIME_ZONE).year
-    prefix = f"{JOB_NUMBER_PREFIX}-{year}-"
+    prefix = f"{JOB_NUMBER_PREFIX}{year}"
+    legacy_prefix = f"{JOB_NUMBER_PREFIX}-{year}-"
     existing = db.scalars(
-        select(Project.project_number).where(Project.project_number.like(f"{prefix}%"))
+        select(Project.project_number).where(
+            or_(
+                Project.project_number.like(f"{prefix}%"),
+                Project.project_number.like(f"{legacy_prefix}%"),
+            )
+        )
     ).all()
-    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+    pattern = re.compile(rf"^(?:{re.escape(prefix)}|{re.escape(legacy_prefix)})(\d+)$")
     sequences = [
         int(match.group(1)) for number in existing if number and (match := pattern.match(number))
     ]

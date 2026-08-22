@@ -192,7 +192,7 @@ def test_management_acceptance_atomically_awards_project_and_is_idempotent() -> 
     body = accepted.json()
     assert body["status"] == "accepted"
     assert body["record_revision"] == 2
-    assert body["job_number"].startswith("IH-2026-")
+    assert body["job_number"].startswith("IH2026")
     assert body["accepted_by"] == "test-admin@ironhousecontracting.com"
 
     project = client.get(f"/api/v1/projects/{created['project_id']}").json()

@@ -64,10 +64,10 @@ def test_awarded_project_creation_generates_sequential_job_numbers() -> None:
 
     assert first.status_code == 201
     assert second.status_code == 201
-    assert first.json()["project_number"] == f"IH-{year}-001"
-    assert second.json()["project_number"] == f"IH-{year}-002"
-    assert first.json()["workspace_root"] == f"IH-{year}-001_FirstAward"
-    assert second.json()["workspace_root"] == f"IH-{year}-002_SecondAward"
+    assert first.json()["project_number"] == f"IH{year}001"
+    assert second.json()["project_number"] == f"IH{year}002"
+    assert first.json()["workspace_root"] == f"IH{year}001_FirstAward"
+    assert second.json()["workspace_root"] == f"IH{year}002_SecondAward"
 
 
 def test_transition_to_awarded_generates_job_number() -> None:
@@ -78,12 +78,12 @@ def test_transition_to_awarded_generates_job_number() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "awarded"
-    assert response.json()["project_number"] == f"IH-{year}-001"
-    assert response.json()["workspace_root"] == f"IH-{year}-001_TenderWithoutNumber"
+    assert response.json()["project_number"] == f"IH{year}001"
+    assert response.json()["workspace_root"] == f"IH{year}001_TenderWithoutNumber"
 
     workspace = client.get(f"/api/v1/projects/{project['id']}/workspace")
     assert workspace.status_code == 200
-    assert workspace.json()["job_number"] == f"IH-{year}-001"
+    assert workspace.json()["job_number"] == f"IH{year}001"
     assert any(entry["path"].endswith("/13_Award_Handoff") for entry in workspace.json()["entries"])
 
     checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist")
@@ -234,7 +234,7 @@ def test_award_generation_skips_existing_numbers_and_preserves_explicit_number()
     assert explicit.json()["project_number"] == f"IH-{year}-009"
     assert explicit.json()["workspace_root"] == f"IH-{year}-009_ExistingAward"
     assert generated.status_code == 201
-    assert generated.json()["project_number"] == f"IH-{year}-010"
+    assert generated.json()["project_number"] == f"IH{year}010"
 
 
 def test_award_generation_retries_a_unique_collision() -> None:
