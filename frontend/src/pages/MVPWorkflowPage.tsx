@@ -248,16 +248,41 @@ export function buildMvpWorkQueue(
 
   for (const quote of quotes) {
     if (quote.status === "draft" || quote.status === "sent") {
+      const issueStep = quote.status === "sent"
+        ? {
+            stage: "Customer decision",
+            detail: `${formatMoney(quote.total)} approved revision is recorded as issued. Record acceptance, decline, or a revised scope when the customer responds.`,
+            label: "Record customer decision",
+            action: "decision",
+          }
+        : quote.issue_status === "ready_for_review"
+          ? {
+              stage: "Quote review",
+              detail: `${formatMoney(quote.total)} revision is ready for management review. Approve the exact PDF revision before issuance.`,
+              label: "Review quote",
+              action: "review",
+            }
+          : quote.issue_status === "approved_for_issue"
+            ? {
+                stage: "Approved for issue",
+                detail: `${formatMoney(quote.total)} revision is approved and immutable. Record how it was issued to the customer.`,
+                label: "Record quote issuance",
+                action: "issue",
+              }
+            : {
+                stage: "Quote draft",
+                detail: `${formatMoney(quote.total)} quote is saved but not approved. Finish it and submit the revision for review.`,
+                label: "Finish quote",
+                action: "edit",
+              };
       items.push({
         id: `quote-${quote.id}`,
         title: `${quote.customer_name} — ${quote.project_name}`,
         reference: quote.quote_number,
-        stage: quote.status === "draft" ? "Quote draft" : "Customer decision",
-        detail: quote.status === "draft"
-          ? `${formatMoney(quote.total)} quote is saved but not sent. Finish the scope, price, assumptions, and exclusions.`
-          : `${formatMoney(quote.total)} quote is recorded as sent. Record acceptance, decline, or a revised scope when the customer responds.`,
-        nextLabel: quote.status === "draft" ? "Finish and send quote" : "Record customer decision",
-        nextPath: `/customer-quotes?quoteId=${encodeURIComponent(quote.id)}&action=${quote.status === "draft" ? "edit" : "decision"}`,
+        stage: issueStep.stage,
+        detail: issueStep.detail,
+        nextLabel: issueStep.label,
+        nextPath: `/customer-quotes?quoteId=${encodeURIComponent(quote.id)}&action=${issueStep.action}`,
         secondaryActions: [{ label: "Open project", path: `/projects/${quote.project_id}` }],
       });
     } else if (quote.status === "accepted" && !projectIds.has(quote.project_id)) {

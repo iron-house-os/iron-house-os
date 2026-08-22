@@ -9,6 +9,8 @@ from app.db.session import get_db
 from app.schemas.customer_quote import (
     CustomerQuoteAccept,
     CustomerQuoteCreate,
+    CustomerQuoteIssueStatus,
+    CustomerQuoteIssueUpdate,
     CustomerQuoteList,
     CustomerQuoteRead,
     CustomerQuoteStatus,
@@ -47,7 +49,7 @@ def read_customer_quote(quote_id: UUID, db: DBSession) -> CustomerQuoteRead:
 
 @router.get("/{quote_id}/pdf")
 def customer_quote_pdf(quote_id: UUID, db: DBSession) -> Response:
-    quote = customer_quotes.get_customer_quote(db, quote_id)
+    quote = customer_quotes.get_customer_quote_pdf_snapshot(db, quote_id)
     return Response(
         content=render_customer_quote_pdf(quote),
         media_type="application/pdf",
@@ -71,6 +73,21 @@ def update_customer_quote_status(
     db: DBSession,
 ) -> CustomerQuoteRead:
     return customer_quotes.update_customer_quote_status(db, quote_id, payload)
+
+
+@router.post("/{quote_id}/issue-status", response_model=CustomerQuoteRead)
+def update_customer_quote_issue_status(
+    quote_id: UUID,
+    payload: CustomerQuoteIssueUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> CustomerQuoteRead:
+    if payload.status in {CustomerQuoteIssueStatus.approved_for_issue, CustomerQuoteIssueStatus.issued} and user.role not in {"admin", "operations_manager"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Management approval is required to approve or issue a customer quote.",
+        )
+    return customer_quotes.update_customer_quote_issue_status(db, quote_id, payload, user.email)
 
 
 @router.post("/{quote_id}/accept", response_model=CustomerQuoteRead)

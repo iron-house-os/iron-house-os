@@ -1,6 +1,7 @@
 import { apiFetch } from "./client";
 
 export type CustomerQuoteStatus = "draft" | "sent" | "accepted" | "declined" | "expired";
+export type CustomerQuoteIssueStatus = "draft" | "ready_for_review" | "approved_for_issue" | "issued";
 
 export type CustomerQuoteLineItem = {
   description: string;
@@ -34,6 +35,14 @@ export type CustomerQuote = {
   notes: string | null;
   created_by: string;
   sent_at: string | null;
+  issue_status: CustomerQuoteIssueStatus;
+  approved_revision: number | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  issued_at: string | null;
+  issued_by: string | null;
+  issuance_method: string | null;
+  issuance_reference: string | null;
   accepted_at: string | null;
   accepted_by: string | null;
   acceptance_reference: string | null;
@@ -98,6 +107,21 @@ export const customerQuotesApi = {
       method: "POST",
       body: JSON.stringify({ expected_revision: revision, status, note: note || null }),
     }),
+  issueStatus: (
+    quoteId: string,
+    revision: number,
+    status: CustomerQuoteIssueStatus,
+    issuanceMethod?: string,
+    issuanceReference?: string,
+  ) => request<CustomerQuote>(`/customer-quotes/${quoteId}/issue-status`, {
+    method: "POST",
+    body: JSON.stringify({
+      expected_revision: revision,
+      status,
+      issuance_method: issuanceMethod || null,
+      issuance_reference: issuanceReference || null,
+    }),
+  }),
   accept: (quoteId: string, revision: number, acceptanceReference: string, acceptanceNote?: string) =>
     request<CustomerQuote>(`/customer-quotes/${quoteId}/accept`, {
       method: "POST",

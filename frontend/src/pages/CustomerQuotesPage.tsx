@@ -43,6 +43,9 @@ export function CustomerQuotesPage() {
   const [accepting, setAccepting] = useState<CustomerQuote | null>(null);
   const [acceptanceReference, setAcceptanceReference] = useState("");
   const [acceptanceNote, setAcceptanceNote] = useState("");
+  const [issuing, setIssuing] = useState<CustomerQuote | null>(null);
+  const [issuanceMethod, setIssuanceMethod] = useState("");
+  const [issuanceReference, setIssuanceReference] = useState("");
   const [intakeStage, setIntakeStage] = useState(0);
 
   async function refresh() {
@@ -219,13 +222,36 @@ export function CustomerQuotesPage() {
     return true;
   }
 
-  async function markSent(quote: CustomerQuote) {
+  async function moveIssueStatus(quote: CustomerQuote, status: "ready_for_review" | "approved_for_issue") {
     setError(null);
     try {
-      const result = await customerQuotesApi.status(quote.id, quote.record_revision, "sent");
+      const result = await customerQuotesApi.issueStatus(quote.id, quote.record_revision, status);
       setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to update quote status.");
+      setError(reason instanceof Error ? reason.message : "Unable to update quote issue status.");
+    }
+  }
+
+  async function recordIssued() {
+    if (!issuing || !issuanceMethod.trim() || !issuanceReference.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await customerQuotesApi.issueStatus(
+        issuing.id,
+        issuing.record_revision,
+        "issued",
+        issuanceMethod.trim(),
+        issuanceReference.trim(),
+      );
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+      setIssuing(null);
+      setIssuanceMethod("");
+      setIssuanceReference("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to record quote issuance.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -348,14 +374,25 @@ export function CustomerQuotesPage() {
         </section>
       ) : null}
 
+      {issuing ? (
+        <section className="rounded-xl border-2 border-brand-gold bg-white p-5 shadow-brand" aria-labelledby="issue-quote-title">
+          <h2 id="issue-quote-title" className="text-xl font-semibold text-iron-950">Record issuance of {issuing.quote_number}</h2>
+          <p className="mt-2 text-sm text-iron-600">IHOS records how the approved revision was issued. This action does not send email or text.</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2"><Field label="Issuance method" value={issuanceMethod} onChange={setIssuanceMethod} required /><Field label="Issuance reference" value={issuanceReference} onChange={setIssuanceReference} required /></div>
+          <div className="mt-4 flex gap-2"><button type="button" disabled={saving || !issuanceMethod.trim() || !issuanceReference.trim()} onClick={() => void recordIssued()} className="rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black disabled:opacity-50">Record issued</button><button type="button" onClick={() => setIssuing(null)} className="rounded-md border border-iron-200 px-4 py-2 font-semibold">Cancel</button></div>
+        </section>
+      ) : null}
+
       <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-semibold text-iron-950">Customer quote register</h2>
-        <p className="mt-1 text-sm text-iron-500">Draft and sent quotes have no job number. Only management acceptance creates an awarded job.</p>
+        <p className="mt-1 text-sm text-iron-500">Review, approval, issuance, customer acceptance, and project award are separate controlled actions.</p>
         <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500"><tr><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Customer / project</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>
           {quotes.map((quote) => {
             const targeted = new URLSearchParams(location.search).get("quoteId") === quote.id;
             const closed = quote.status === "declined" || quote.status === "expired";
-            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}</td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" ? <><button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">{closed ? "Start new revision" : "Edit"}</button>{!closed && quote.status === "draft" ? <button type="button" onClick={() => void markSent(quote)} className="font-semibold text-iron-700">Mark sent</button> : null}{!closed && (user?.role === "admin" || user?.role === "operations_manager") ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}{!closed ? <><button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}</> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Open PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
+            const management = user?.role === "admin" || user?.role === "operations_manager";
+            const immutableIssue = quote.issue_status === "approved_for_issue" || quote.issue_status === "issued";
+            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}<div className="text-xs font-normal capitalize text-iron-500">{quote.issue_status.replaceAll("_", " ")}</div></td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" ? <>{!immutableIssue ? <button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">{closed ? "Start new revision" : "Edit"}</button> : null}{!closed && quote.issue_status === "draft" ? <button type="button" onClick={() => void moveIssueStatus(quote, "ready_for_review")} className="font-semibold text-iron-700">Ready for review</button> : null}{!closed && quote.issue_status === "ready_for_review" && management ? <button type="button" onClick={() => void moveIssueStatus(quote, "approved_for_issue")} className="font-semibold text-emerald-700">Approve for issue</button> : null}{!closed && quote.issue_status === "approved_for_issue" && management ? <button type="button" onClick={() => { setIssuing(quote); setIssuanceMethod(""); setIssuanceReference(""); }} className="font-semibold text-emerald-700">Record issued</button> : null}{!closed && management ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}{!closed ? <><button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}</> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Preview PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
           })}
           {!quotes.length ? <tr><td colSpan={6} className="px-3 py-8 text-center text-iron-500">No customer quotes yet.</td></tr> : null}
         </tbody></table></div>

@@ -14,6 +14,13 @@ class CustomerQuoteStatus(StrEnum):
     expired = "expired"
 
 
+class CustomerQuoteIssueStatus(StrEnum):
+    draft = "draft"
+    ready_for_review = "ready_for_review"
+    approved_for_issue = "approved_for_issue"
+    issued = "issued"
+
+
 class CustomerQuoteLineItem(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     quantity: Decimal = Field(gt=0, decimal_places=3, max_digits=14)
@@ -74,6 +81,13 @@ class CustomerQuoteAccept(BaseModel):
     acceptance_note: str | None = Field(default=None, max_length=10_000)
 
 
+class CustomerQuoteIssueUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    status: CustomerQuoteIssueStatus
+    issuance_method: str | None = Field(default=None, max_length=80)
+    issuance_reference: str | None = Field(default=None, max_length=500)
+
+
 class CustomerQuoteRead(BaseModel):
     id: UUID
     project_id: UUID
@@ -98,6 +112,14 @@ class CustomerQuoteRead(BaseModel):
     notes: str | None
     created_by: str
     sent_at: datetime | None
+    issue_status: CustomerQuoteIssueStatus
+    approved_revision: int | None
+    approved_at: datetime | None
+    approved_by: str | None
+    issued_at: datetime | None
+    issued_by: str | None
+    issuance_method: str | None
+    issuance_reference: str | None
     accepted_at: datetime | None
     accepted_by: str | None
     acceptance_reference: str | None

@@ -147,10 +147,47 @@ PY
 import json
 import os
 
-print(json.dumps({"expected_revision": int(os.environ["QUOTE_REVISION"]), "status": "sent"}))
+print(json.dumps({"expected_revision": int(os.environ["QUOTE_REVISION"]), "status": "ready_for_review"}))
 PY
   request \
-    "$API_URL$API_PREFIX/customer-quotes/$quote_id/status" \
+    "$API_URL$API_PREFIX/customer-quotes/$quote_id/issue-status" \
+    "200" \
+    --cookie "$cookie_file" \
+    --header "Content-Type: application/json" \
+    --request POST \
+    --data-binary "@$mvp_status_file"
+  quote_metadata="$(read_quote_state "draft" "absent" "$quote_id" "$project_id")"
+  IFS=$'\t' read -r quote_id project_id quote_revision job_number <<< "$quote_metadata"
+
+  QUOTE_REVISION="$quote_revision" python - <<'PY' > "$mvp_status_file"
+import json
+import os
+
+print(json.dumps({"expected_revision": int(os.environ["QUOTE_REVISION"]), "status": "approved_for_issue"}))
+PY
+  request \
+    "$API_URL$API_PREFIX/customer-quotes/$quote_id/issue-status" \
+    "200" \
+    --cookie "$cookie_file" \
+    --header "Content-Type: application/json" \
+    --request POST \
+    --data-binary "@$mvp_status_file"
+  quote_metadata="$(read_quote_state "draft" "absent" "$quote_id" "$project_id")"
+  IFS=$'\t' read -r quote_id project_id quote_revision job_number <<< "$quote_metadata"
+
+  QUOTE_REVISION="$quote_revision" SYNTHETIC_SUFFIX="$synthetic_suffix" python - <<'PY' > "$mvp_status_file"
+import json
+import os
+
+print(json.dumps({
+    "expected_revision": int(os.environ["QUOTE_REVISION"]),
+    "status": "issued",
+    "issuance_method": "Disposable staging API",
+    "issuance_reference": f"Synthetic issue {os.environ['SYNTHETIC_SUFFIX']}",
+}))
+PY
+  request \
+    "$API_URL$API_PREFIX/customer-quotes/$quote_id/issue-status" \
     "200" \
     --cookie "$cookie_file" \
     --header "Content-Type: application/json" \

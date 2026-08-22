@@ -56,6 +56,10 @@ def test_disposable_mvp_smoke_proves_quote_to_job_lifecycle_and_viewer_boundary(
     assert "STAGING_MVP_SYNTHETIC_DATA requires STAGING_SYNTHETIC_DATA=true" in script
     assert '"$API_URL$API_PREFIX/customer-quotes"' in script
     assert 'read_quote_state "draft" "absent"' in script
+    assert '"status": "ready_for_review"' in script
+    assert '"status": "approved_for_issue"' in script
+    assert '"status": "issued"' in script
+    assert 'customer-quotes/$quote_id/issue-status' in script
     assert 'read_quote_state "sent" "absent"' in script
     assert 'read_quote_state "accepted" "present"' in script
     assert '"$API_URL$API_PREFIX/projects/$project_id/workspace"' in script
