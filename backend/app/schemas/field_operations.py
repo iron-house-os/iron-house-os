@@ -277,6 +277,34 @@ class FieldRecordRead(FieldRecordCreate):
     updated_at: datetime
 
 
+class PurchaseOrderInvoiceAttach(BaseModel):
+    document_id: UUID
+    invoice_number: str = Field(min_length=1, max_length=120)
+    vendor_name: str = Field(min_length=1, max_length=255)
+    invoice_date: date
+    subtotal: float = Field(ge=0)
+    tax: float = Field(ge=0)
+    total: float = Field(gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_invoice_total(self) -> "PurchaseOrderInvoiceAttach":
+        if abs((self.subtotal + self.tax) - self.total) > 0.02:
+            raise ValueError("Invoice subtotal plus tax must equal the total.")
+        return self
+
+
+class PurchaseOrderInvoiceDecision(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_rejection_note(self) -> "PurchaseOrderInvoiceDecision":
+        if self.decision == "rejected" and not str(self.note or "").strip():
+            raise ValueError("A rejection note is required.")
+        return self
+
+
 class SignatureCreate(BaseModel):
     employee_id: UUID
     employee_name: str = Field(min_length=1, max_length=255)

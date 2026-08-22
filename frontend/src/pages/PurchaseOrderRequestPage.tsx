@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { fieldOperationsApi, FieldOperationsBootstrap, FieldRecord } from "../api/fieldOperations";
+import { documentsApi } from "../api/documents";
 import { useAuth } from "../contexts/AuthContext";
 import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
 import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
@@ -11,8 +12,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function buildPoNumber(jobNumber: string) {
   const sequence = Date.now().toString().slice(-8);
-  const jobCode = jobNumber.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  return `PO${sequence}-${jobCode}`;
+  return `PO-${sequence}-${jobNumber}`;
 }
 
 export function PurchaseOrderRequestPage() {
@@ -30,6 +30,17 @@ export function PurchaseOrderRequestPage() {
   const [error, setError] = useState<string | null>(null);
   const [createdPo, setCreatedPo] = useState<string | null>(null);
   const [bootstrapReady, setBootstrapReady] = useState(false);
+  const [invoicePoId, setInvoicePoId] = useState("");
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceVendor, setInvoiceVendor] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(today());
+  const [invoiceSubtotal, setInvoiceSubtotal] = useState("");
+  const [invoiceTax, setInvoiceTax] = useState("");
+  const [invoiceTotal, setInvoiceTotal] = useState("");
+  const [invoiceNote, setInvoiceNote] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("pending_approval");
+  const [invoiceMessage, setInvoiceMessage] = useState<string | null>(null);
 
   async function refresh() {
     setError(null);
@@ -81,6 +92,37 @@ export function PurchaseOrderRequestPage() {
     () => (data?.records ?? []).filter((record) => record.record_type === "purchase_order_request"),
     [data],
   );
+  const selectedInvoicePo = pending.find((record) => record.id === invoicePoId);
+  const invoiceQueue = pending.filter((record) => invoiceFilter === "all" || String(record.details.invoice_status ?? "not_attached") === invoiceFilter);
+  const canReviewInvoices = user?.role === "admin" || user?.role === "operations_manager";
+
+  async function attachInvoice(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedInvoicePo || !invoiceFile) return;
+    setSaving(true); setError(null); setInvoiceMessage(null);
+    try {
+      const uploaded = await documentsApi.upload({ file: invoiceFile, title: `${invoiceNumber.trim()} — ${String(selectedInvoicePo.details.po_number ?? selectedInvoicePo.title)}`, category: "other", project_id: selectedInvoicePo.project_id ?? undefined, description: "Supplier invoice attached to purchase order" });
+      await fieldOperationsApi.attachPoInvoice(selectedInvoicePo.id, { document_id: uploaded.document.id, invoice_number: invoiceNumber.trim(), vendor_name: invoiceVendor.trim(), invoice_date: invoiceDate, subtotal: Number(invoiceSubtotal), tax: Number(invoiceTax), total: Number(invoiceTotal), note: invoiceNote.trim() || null });
+      setInvoiceMessage(`Invoice ${invoiceNumber.trim()} attached and awaiting administrator approval.`);
+      setInvoiceFile(null); setInvoiceNumber(""); setInvoiceVendor(""); setInvoiceDate(today()); setInvoiceSubtotal(""); setInvoiceTax(""); setInvoiceTotal(""); setInvoiceNote("");
+      await refresh();
+    } catch (current) { setError(current instanceof Error ? current.message : "Unable to attach invoice."); }
+    finally { setSaving(false); }
+  }
+
+  async function decideInvoice(record: FieldRecord, decision: "approved" | "rejected") {
+    const note = window.prompt(decision === "rejected" ? "Rejection reason (required)" : "Approval note (optional)", "");
+    if (note === null || (decision === "rejected" && !note.trim())) return;
+    setSaving(true); setError(null); setInvoiceMessage(null);
+    try { await fieldOperationsApi.decidePoInvoice(record.id, decision, note); setInvoiceMessage(`Invoice ${decision}. No payment or accounting entry was created.`); await refresh(); }
+    catch (current) { setError(current instanceof Error ? current.message : "Unable to record invoice decision."); }
+    finally { setSaving(false); }
+  }
+
+  async function openInvoice(documentId: string) {
+    try { const token = await documentsApi.requestDownloadToken(documentId); window.open(documentsApi.signedDownloadUrl(token.token), "_blank", "noopener,noreferrer"); }
+    catch (current) { setError(current instanceof Error ? current.message : "Unable to open invoice attachment."); }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -184,6 +226,28 @@ export function PurchaseOrderRequestPage() {
             <tbody>{pending.slice(0, 25).map((record: FieldRecord) => <tr key={record.id} className="border-t border-iron-100"><td className="px-3 py-2 font-semibold text-iron-950">{String(record.details.po_number ?? "—")}</td><td className="px-3 py-2">{String(record.details.job_number ?? "—")}</td><td className="px-3 py-2">{String(record.details.purpose ?? record.title)}</td><td className="px-3 py-2">{record.status.replaceAll("_", " ")}</td></tr>)}</tbody>
           </table>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-brand-gold/40 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-gold-dark">Finance control</div><h2 className="mt-1 text-xl font-semibold text-iron-950">PO invoice approval</h2><p className="mt-1 text-sm text-iron-500">Attach the supplier invoice to its PO. Administrator approval records the decision only; it does not pay or export the invoice.</p></div>
+          <label className="grid gap-1 text-sm font-medium text-iron-700">Queue filter<select value={invoiceFilter} onChange={(event) => setInvoiceFilter(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2"><option value="pending_approval">Pending approval</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="not_attached">Not attached</option><option value="all">All</option></select></label>
+        </div>
+        {invoiceMessage ? <div className="mt-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{invoiceMessage}</div> : null}
+        <form onSubmit={attachInvoice} className="mt-5 grid gap-3 rounded-lg border border-iron-100 bg-iron-50 p-4 md:grid-cols-3">
+          <label className="grid gap-1 text-sm font-medium">PO number<select required value={invoicePoId} onChange={(event) => { const id = event.target.value; setInvoicePoId(id); const record = pending.find((item) => item.id === id); setInvoiceVendor(String(record?.details.supplier_name ?? "")); }} className="rounded-md border border-iron-200 bg-white px-3 py-2"><option value="">Select PO</option>{pending.map((record) => <option key={record.id} value={record.id}>{String(record.details.po_number ?? record.title)} — {String(record.details.job_number ?? "No job")}</option>)}</select></label>
+          <label className="grid gap-1 text-sm font-medium">Invoice number<input required value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Vendor<input required value={invoiceVendor} onChange={(event) => setInvoiceVendor(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Invoice date<input required type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Subtotal<input required type="number" min="0" step="0.01" value={invoiceSubtotal} onChange={(event) => setInvoiceSubtotal(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Tax<input required type="number" min="0" step="0.01" value={invoiceTax} onChange={(event) => setInvoiceTax(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium">Total<input required type="number" min="0.01" step="0.01" value={invoiceTotal} onChange={(event) => setInvoiceTotal(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium md:col-span-2">Invoice PDF or image<input required type="file" accept="application/pdf,image/*" onChange={(event) => setInvoiceFile(event.target.files?.[0] ?? null)} className="rounded-md border border-iron-200 bg-white px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium md:col-span-3">Note<input value={invoiceNote} onChange={(event) => setInvoiceNote(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>
+          {selectedInvoicePo ? <div className="text-sm text-iron-600 md:col-span-3">Linked job: <strong>{String(selectedInvoicePo.details.job_number ?? "—")}</strong> · PO requested amount: <strong>${Number(selectedInvoicePo.details.amount_estimate ?? 0).toFixed(2)}</strong> · Invoice variance: <strong>${(Number(invoiceTotal || 0) - Number(selectedInvoicePo.details.amount_estimate ?? 0)).toFixed(2)}</strong></div> : null}
+          <div className="md:col-span-3"><button disabled={saving || !invoicePoId || !invoiceFile} className="rounded-md bg-iron-950 px-4 py-2 font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Attach invoice for approval"}</button></div>
+        </form>
+        <div className="mt-5 space-y-3">{invoiceQueue.map((record) => { const invoice = (record.details.invoice ?? {}) as Record<string, unknown>; const status = String(record.details.invoice_status ?? "not_attached"); const duplicates = (invoice.duplicate_po_numbers ?? []) as string[]; const variance = Number(invoice.total ?? 0) - Number(record.details.amount_estimate ?? 0); return <article key={record.id} className="rounded-lg border border-iron-100 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-semibold text-iron-950">{String(record.details.po_number ?? record.title)} · {String(record.details.job_number ?? "—")}</div><div className="mt-1 text-sm text-iron-600">{invoice.invoice_number ? `${String(invoice.vendor_name)} invoice ${String(invoice.invoice_number)} · $${Number(invoice.total).toFixed(2)} · variance $${variance.toFixed(2)}` : "No invoice attached"}</div></div><span className="rounded-full bg-iron-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-iron-700">{status.replaceAll("_", " ")}</span></div>{duplicates.length ? <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">Possible duplicate vendor + invoice number on {duplicates.join(", ")}.</div> : null}{invoice.document_id ? <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void openInvoice(String(invoice.document_id))} className="rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold">Open invoice attachment</button>{canReviewInvoices && status === "pending_approval" ? <><button type="button" disabled={saving} onClick={() => void decideInvoice(record, "approved")} className="rounded-md bg-brand-gold px-3 py-2 text-sm font-semibold text-brand-black">Approve invoice</button><button type="button" disabled={saving} onClick={() => void decideInvoice(record, "rejected")} className="rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700">Reject</button></> : null}</div> : null}<div className="mt-3 text-xs text-iron-500">Audit events: {Array.isArray(record.details.invoice_audit_history) ? record.details.invoice_audit_history.length : 0}</div></article>; })}</div>
       </section>
     </section>
   );

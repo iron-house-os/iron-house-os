@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.employee_onboarding import EmployeeOnboarding
+from app.models.document import Document
 from app.models.equipment import Equipment
 from app.models.bid import Bid
 from app.models.field_operations import EmployeeCertification, FieldRecord, TimeEntry, Vehicle, VehicleLog
@@ -33,6 +34,8 @@ from app.schemas.field_operations import (
     MilestoneDecision,
     OperatorAccessRead,
     OperatorAssignmentRead,
+    PurchaseOrderInvoiceAttach,
+    PurchaseOrderInvoiceDecision,
     SignatureCreate,
     TimeOffDecision,
     TimeEntryCreate,
@@ -915,6 +918,76 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     values["alert_recipients"] = alerts
     item = FieldRecord(**values, submitted_by=user.email)
     db.add(item)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def attach_purchase_order_invoice(
+    db: Session,
+    record_id: UUID,
+    payload: PurchaseOrderInvoiceAttach,
+    user: AuthenticatedUser,
+) -> FieldRecordRead:
+    item = require_exists(db, FieldRecord, record_id, "Purchase order")
+    if item.record_type != "purchase_order_request":
+        raise AppError("That record is not a purchase order.", status_code=400)
+    document = require_exists(db, Document, payload.document_id, "Invoice document")
+    if document.project_id != item.project_id:
+        raise AppError("The invoice document must belong to the same project as the PO.", status_code=400)
+    if (item.details or {}).get("invoice_status") == "pending_approval":
+        raise AppError("This PO already has an invoice awaiting review.", status_code=409)
+    normalized_vendor = payload.vendor_name.strip().casefold()
+    normalized_number = payload.invoice_number.strip().casefold()
+    duplicate_po_numbers = []
+    for candidate in db.scalars(select(FieldRecord).where(FieldRecord.record_type == "purchase_order_request")):
+        invoice = (candidate.details or {}).get("invoice") or {}
+        if candidate.id != item.id and str(invoice.get("vendor_name") or "").strip().casefold() == normalized_vendor and str(invoice.get("invoice_number") or "").strip().casefold() == normalized_number:
+            duplicate_po_numbers.append(str((candidate.details or {}).get("po_number") or candidate.title))
+    now = datetime.now(UTC).isoformat()
+    history = list((item.details or {}).get("invoice_audit_history") or [])
+    history.append({"action": "attached", "by": user.display_name, "email": user.email, "at": now, "document_id": str(payload.document_id)})
+    invoice = {
+        **payload.model_dump(mode="json"),
+        "invoice_number": payload.invoice_number.strip(),
+        "vendor_name": payload.vendor_name.strip(),
+        "duplicate_po_numbers": duplicate_po_numbers,
+        "attached_by": user.display_name,
+        "attached_at": now,
+    }
+    next_details = {**(item.details or {}), "invoice": invoice, "invoice_status": "pending_approval", "invoice_audit_history": history}
+    document_ids = list(dict.fromkeys([*(item.document_ids or []), str(payload.document_id)]))
+    result = db.execute(update(FieldRecord).where(FieldRecord.id == item.id, FieldRecord.updated_at == item.updated_at).values(details=next_details, document_ids=document_ids).execution_options(synchronize_session=False))
+    if result.rowcount != 1:
+        db.rollback()
+        raise AppError("The PO changed while the invoice was being attached. Reload and try again.", status_code=409)
+    commit(db)
+    db.refresh(item)
+    return FieldRecordRead.model_validate(item)
+
+
+def decide_purchase_order_invoice(
+    db: Session,
+    record_id: UUID,
+    payload: PurchaseOrderInvoiceDecision,
+    user: AuthenticatedUser,
+) -> FieldRecordRead:
+    if user.role not in MANAGEMENT_ROLES:
+        raise AppError("Administrator or operations manager access is required to review invoices.", status_code=403)
+    item = require_exists(db, FieldRecord, record_id, "Purchase order")
+    if item.record_type != "purchase_order_request":
+        raise AppError("That record is not a purchase order.", status_code=400)
+    details = item.details or {}
+    if details.get("invoice_status") != "pending_approval" or not details.get("invoice"):
+        raise AppError("This PO does not have an invoice awaiting review.", status_code=409)
+    now = datetime.now(UTC).isoformat()
+    history = list(details.get("invoice_audit_history") or [])
+    history.append({"action": payload.decision, "by": user.display_name, "email": user.email, "at": now, "note": (payload.note or "").strip() or None})
+    next_details = {**details, "invoice_status": payload.decision, "invoice_decision": {"decision": payload.decision, "by": user.display_name, "email": user.email, "at": now, "note": (payload.note or "").strip() or None}, "invoice_audit_history": history}
+    result = db.execute(update(FieldRecord).where(FieldRecord.id == item.id, FieldRecord.updated_at == item.updated_at).values(details=next_details).execution_options(synchronize_session=False))
+    if result.rowcount != 1:
+        db.rollback()
+        raise AppError("The invoice changed while it was being reviewed. Reload and try again.", status_code=409)
     commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)

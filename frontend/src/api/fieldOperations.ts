@@ -232,6 +232,10 @@ export const fieldOperationsApi = {
     request("/field-operations/time-entries", { method: "POST", body: JSON.stringify(payload) }),
   createRecord: (payload: Record<string, unknown>) =>
     request<FieldRecord>("/field-operations/records", { method: "POST", body: JSON.stringify(payload) }),
+  attachPoInvoice: (id: string, payload: Record<string, unknown>) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/invoice", { method: "POST", body: JSON.stringify(payload) }),
+  decidePoInvoice: (id: string, decision: "approved" | "rejected", note?: string) =>
+    request<FieldRecord>("/field-operations/records/" + id + "/invoice-decision", { method: "POST", body: JSON.stringify({ decision, note }) }),
   updateSafetyStatus: (id: string, status: string, evidence?: string) =>
     request<FieldRecord>("/field-operations/records/" + id + "/safety-status", { method: "PATCH", body: JSON.stringify({ status, evidence }) }),
   signRecord: (id: string, payload: Record<string, unknown>) =>
