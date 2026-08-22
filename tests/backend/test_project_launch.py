@@ -57,6 +57,12 @@ def test_awarded_project_launch_dashboard_starts_with_derived_controls() -> None
             "corrective_action": 0,
         },
         "document_count": 0,
+        "award_baseline_source": None,
+        "award_pricing_subtotal": 0.0,
+        "award_cost_budget_status": "not_started",
+        "uncoded_award_line_count": 0,
+        "procurement_requirement_count": 0,
+        "procurement_plan_status": "not_started",
     }
 
 

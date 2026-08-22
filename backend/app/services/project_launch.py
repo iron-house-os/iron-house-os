@@ -78,6 +78,11 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
     document_count = int(
         db.scalar(select(func.count(Document.id)).where(Document.project_id == project_id)) or 0
     )
+    metadata = project.metadata_json or {}
+    award_baseline = metadata.get("award_pricing_baseline") or {}
+    procurement_plan = metadata.get("procurement_plan") or {}
+    award_lines = award_baseline.get("lines") or []
+    requirements = procurement_plan.get("requirements") or []
     total_count = len(checklist)
     return ProjectLaunchDashboard(
         project_id=project.id,
@@ -104,4 +109,10 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
         pending_po_request_count=sum(row.status == "pending_approval" for row in po_rows),
         safety_record_counts=safety_counts,
         document_count=document_count,
+        award_baseline_source=award_baseline.get("source_quote_number"),
+        award_pricing_subtotal=round(float(award_baseline.get("pricing_subtotal") or 0), 2),
+        award_cost_budget_status=str(award_baseline.get("cost_budget_status") or "not_started"),
+        uncoded_award_line_count=sum(not line.get("cost_code") for line in award_lines),
+        procurement_requirement_count=len(requirements),
+        procurement_plan_status=str(procurement_plan.get("status") or "not_started"),
     )

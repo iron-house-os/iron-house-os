@@ -25,3 +25,9 @@ class ProjectLaunchDashboard(BaseModel):
     pending_po_request_count: int
     safety_record_counts: dict[str, int]
     document_count: int
+    award_baseline_source: str | None
+    award_pricing_subtotal: float
+    award_cost_budget_status: str
+    uncoded_award_line_count: int
+    procurement_requirement_count: int
+    procurement_plan_status: str

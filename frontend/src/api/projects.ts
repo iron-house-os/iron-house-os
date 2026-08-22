@@ -124,6 +124,12 @@ export type ProjectLaunchDashboard = {
   pending_po_request_count: number;
   safety_record_counts: Record<string, number>;
   document_count: number;
+  award_baseline_source: string | null;
+  award_pricing_subtotal: number;
+  award_cost_budget_status: string;
+  uncoded_award_line_count: number;
+  procurement_requirement_count: number;
+  procurement_plan_status: string;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";

@@ -31,6 +31,13 @@ QUOTE_NUMBER_WIDTH = 3
 QUOTE_NUMBER_RETRY_LIMIT = 20
 MONEY = Decimal("0.01")
 
+PROCUREMENT_RULES = (
+    ("rental", ("rental", "rent ", "roller", "skid steer", "excavator", "cutoff saw", "cut-off saw")),
+    ("trucking", ("trucking", "tandem", "haul", "disposal", "dump fee", "delivery")),
+    ("subcontract", ("subcontract", "paving", "concrete placing", "finishing", "testing", "coring")),
+    ("material", ("pipe", "fitting", "concrete", "asphalt", "aggregate", "gravel", "sand", "topsoil")),
+)
+
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY, rounding=ROUND_HALF_UP)
@@ -62,6 +69,71 @@ def _totals(items: list[CustomerQuoteLineItem], gst_rate: Decimal) -> tuple[list
 
 def _clean_list(values: list[str]) -> list[str]:
     return [value.strip() for value in values if value.strip()]
+
+
+def _procurement_category(description: str) -> str | None:
+    normalized = description.casefold()
+    return next((category for category, terms in PROCUREMENT_RULES if any(term in normalized for term in terms)), None)
+
+
+def _initialize_award_controls(project: Project, quote: CustomerQuote, actor_email: str) -> None:
+    """Store an idempotent award baseline without treating customer pricing as a cost budget."""
+    metadata = dict(project.metadata_json or {})
+    baseline = metadata.get("award_pricing_baseline") or {}
+    if baseline.get("source_quote_id") == str(quote.id):
+        return
+    lines = []
+    requirements = []
+    for index, source in enumerate(quote.line_items_json or [], start=1):
+        source_line_id = f"{quote.id}:{index}"
+        description = str(source.get("description") or "").strip()
+        lines.append({
+            "source_line_id": source_line_id,
+            "description": description,
+            "quantity": source.get("quantity"),
+            "unit": source.get("unit"),
+            "customer_unit_price": source.get("unit_price"),
+            "customer_price_amount": source.get("amount"),
+            "cost_code": None,
+            "cost_budget_amount": None,
+            "status": "needs_cost_allocation",
+        })
+        category = _procurement_category(description)
+        if category:
+            requirements.append({
+                "requirement_id": source_line_id,
+                "source_line_id": source_line_id,
+                "category": category,
+                "description": description,
+                "quantity": source.get("quantity"),
+                "unit": source.get("unit"),
+                "status": "not_started",
+                "vendor_id": None,
+                "po_number": None,
+                "required_on_site_date": None,
+                "approval": None,
+            })
+    now = datetime.now(UTC).isoformat()
+    metadata["award_pricing_baseline"] = {
+        "source_quote_id": str(quote.id),
+        "source_quote_number": quote.quote_number,
+        "source_quote_revision": quote.record_revision,
+        "pricing_subtotal": str(quote.subtotal),
+        "basis": "accepted_customer_quote_price",
+        "cost_budget_status": "needs_cost_allocation",
+        "lines": lines,
+        "created_by": actor_email,
+        "created_at": now,
+    }
+    metadata["procurement_plan"] = {
+        "source_quote_id": str(quote.id),
+        "status": "draft",
+        "requirements": requirements,
+        "created_by": actor_email,
+        "created_at": now,
+        "automatic_commitment": False,
+    }
+    project.metadata_json = metadata
 
 
 def _next_quote_number(db: Session) -> str:
@@ -426,6 +498,8 @@ def accept_customer_quote(
         quote = _load_quote(db, quote_id, for_update=True)
         project = _load_project(db, quote.project_id, for_update=True)
         if quote.status == CustomerQuoteStatus.accepted.value:
+            _initialize_award_controls(project, quote, actor_email)
+            db.commit()
             return _read(quote, project)
         if quote.record_revision != payload.expected_revision:
             raise AppError("This quote changed in another session. Reload before accepting.", status_code=409)
@@ -446,6 +520,7 @@ def accept_customer_quote(
         project.contract_value = quote.total
         try:
             projects.prepare_project_award(db, project)
+            _initialize_award_controls(project, quote, actor_email)
             db.commit()
         except IntegrityError:
             db.rollback()
