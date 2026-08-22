@@ -12,6 +12,7 @@ from app.schemas.field_operations import SafetyRecordUpdate
 from app.services import field_operations
 from app.api.dependencies.auth import require_authenticated_user
 from app.models.employee_onboarding import EmployeeOnboarding, WorkerOrientation
+from app.models.document import Document
 from app.models.equipment import Equipment
 from app.models.field_operations import FieldRecord
 from app.services.auth import AuthenticatedUser
@@ -64,13 +65,18 @@ def _project() -> dict:
 
 
 def _invoice_document(project_id: str, name: str = "invoice.pdf") -> str:
-    response = client.post(
-        "/api/v1/documents/upload",
-        data={"category": "other", "project_id": project_id, "title": name},
-        files={"file": (name, b"invoice evidence", "application/pdf")},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["document"]["id"]
+    with TestingSessionLocal() as db:
+        document = Document(
+            title=name,
+            category="other",
+            status="registered",
+            project_id=UUID(project_id),
+            description="Supplier invoice test evidence",
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        return str(document.id)
 
 
 def _grant_operator_access(employee: dict) -> str:
