@@ -17,6 +17,8 @@ from app.schemas.field_operations import (
     FieldOperationsBootstrap,
     FieldRecordCreate,
     FieldRecordRead,
+    PurchaseOrderInvoiceAttach,
+    PurchaseOrderInvoiceDecision,
     MilestoneDecision,
     SignatureCreate,
     SafetyRecordUpdate,
@@ -104,6 +106,16 @@ def create_time_entry(payload: TimeEntryCreate, db: DBSession, user: CurrentUser
 @router.post("/records", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
 def create_field_record(payload: FieldRecordCreate, db: DBSession, user: CurrentUser) -> FieldRecordRead:
     return field_operations.create_field_record(db, payload, user)
+
+
+@router.post("/records/{record_id}/invoice", response_model=FieldRecordRead)
+def attach_purchase_order_invoice(record_id: UUID, payload: PurchaseOrderInvoiceAttach, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return field_operations.attach_purchase_order_invoice(db, record_id, payload, user)
+
+
+@router.post("/records/{record_id}/invoice-decision", response_model=FieldRecordRead)
+def decide_purchase_order_invoice(record_id: UUID, payload: PurchaseOrderInvoiceDecision, db: DBSession, user: CurrentUser) -> FieldRecordRead:
+    return field_operations.decide_purchase_order_invoice(db, record_id, payload, user)
 
 
 @router.post("/records/{record_id}/sign", response_model=FieldRecordRead)

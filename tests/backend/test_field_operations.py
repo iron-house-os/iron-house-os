@@ -12,6 +12,7 @@ from app.schemas.field_operations import SafetyRecordUpdate
 from app.services import field_operations
 from app.api.dependencies.auth import require_authenticated_user
 from app.models.employee_onboarding import EmployeeOnboarding, WorkerOrientation
+from app.models.document import Document
 from app.models.equipment import Equipment
 from app.models.field_operations import FieldRecord
 from app.services.auth import AuthenticatedUser
@@ -61,6 +62,21 @@ def _project() -> dict:
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _invoice_document(project_id: str, name: str = "invoice.pdf") -> str:
+    with TestingSessionLocal() as db:
+        document = Document(
+            title=name,
+            category="other",
+            status="registered",
+            project_id=UUID(project_id),
+            description="Supplier invoice test evidence",
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        return str(document.id)
 
 
 def _grant_operator_access(employee: dict) -> str:
@@ -1202,3 +1218,43 @@ def test_purchase_order_request_is_accepted_and_returned() -> None:
         if item["id"] == response.json()["id"]
     )
     assert stored["details"]["po_number"] == "PO-12345678-FIELD-OPS-001"
+
+
+def test_po_invoice_attachment_and_admin_decision_preserve_po_status_and_audit() -> None:
+    project = _project()
+    po = client.post("/api/v1/field-operations/records", json={"record_type": "purchase_order_request", "project_id": project["id"], "work_date": str(date.today()), "title": "PO12345678-IH2026001 — Pipe", "status": "pending_approval", "details": {"po_number": "PO12345678-IH2026001", "job_number": "IH2026001", "supplier_name": "Pipe Co", "amount_estimate": 1000}}).json()
+    attached = client.post(f"/api/v1/field-operations/records/{po['id']}/invoice", json={"document_id": _invoice_document(project["id"]), "invoice_number": "INV-42", "vendor_name": "Pipe Co", "invoice_date": str(date.today()), "subtotal": 1000, "tax": 120, "total": 1120, "note": "Delivered"})
+    assert attached.status_code == 200, attached.text
+    assert attached.json()["status"] == "pending_approval"
+    assert attached.json()["details"]["invoice_status"] == "pending_approval"
+    assert attached.json()["details"]["invoice_audit_history"][0]["action"] == "attached"
+    approved = client.post(f"/api/v1/field-operations/records/{po['id']}/invoice-decision", json={"decision": "approved", "note": "Matched to delivery"})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["details"]["invoice_status"] == "approved"
+    assert [event["action"] for event in approved.json()["details"]["invoice_audit_history"]] == ["attached", "approved"]
+    assert approved.json()["status"] == "pending_approval"
+
+
+def test_po_invoice_duplicate_is_flagged_and_non_management_cannot_approve() -> None:
+    project = _project()
+    payload = {"record_type": "purchase_order_request", "project_id": project["id"], "work_date": str(date.today()), "title": "PO", "status": "pending_approval", "details": {"job_number": "IH2026001"}}
+    first = client.post("/api/v1/field-operations/records", json={**payload, "details": {**payload["details"], "po_number": "PO11111111-IH2026001"}}).json()
+    second = client.post("/api/v1/field-operations/records", json={**payload, "details": {**payload["details"], "po_number": "PO22222222-IH2026001"}}).json()
+    invoice = {"invoice_number": "Same-7", "vendor_name": "Vendor Ltd", "invoice_date": str(date.today()), "subtotal": 10, "tax": 1.2, "total": 11.2}
+    client.post(f"/api/v1/field-operations/records/{first['id']}/invoice", json={**invoice, "document_id": _invoice_document(project["id"], "first.pdf")})
+    duplicate = client.post(f"/api/v1/field-operations/records/{second['id']}/invoice", json={**invoice, "invoice_number": " same-7 ", "vendor_name": " vendor ltd ", "document_id": _invoice_document(project["id"], "second.pdf")})
+    assert duplicate.json()["details"]["invoice"]["duplicate_po_numbers"] == ["PO11111111-IH2026001"]
+    _authenticate_as("viewer")
+    denied = client.post(f"/api/v1/field-operations/records/{second['id']}/invoice-decision", json={"decision": "approved"})
+    assert denied.status_code == 403
+
+
+def test_po_invoice_rejection_requires_note_and_amounts_must_balance() -> None:
+    project = _project()
+    po = client.post("/api/v1/field-operations/records", json={"record_type": "purchase_order_request", "project_id": project["id"], "work_date": str(date.today()), "title": "PO", "details": {}}).json()
+    document_id = _invoice_document(project["id"])
+    unbalanced = client.post(f"/api/v1/field-operations/records/{po['id']}/invoice", json={"document_id": document_id, "invoice_number": "INV-9", "vendor_name": "Vendor", "invoice_date": str(date.today()), "subtotal": 10, "tax": 1, "total": 15})
+    assert unbalanced.status_code == 422
+    client.post(f"/api/v1/field-operations/records/{po['id']}/invoice", json={"document_id": document_id, "invoice_number": "INV-9", "vendor_name": "Vendor", "invoice_date": str(date.today()), "subtotal": 10, "tax": 1, "total": 11})
+    rejected = client.post(f"/api/v1/field-operations/records/{po['id']}/invoice-decision", json={"decision": "rejected"})
+    assert rejected.status_code == 422
