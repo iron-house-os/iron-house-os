@@ -122,6 +122,12 @@ const awardedLaunchDashboard: ProjectLaunchDashboard = {
     corrective_action: 0,
   },
   document_count: 7,
+  award_baseline_source: "Q-2026-001",
+  award_pricing_subtotal: 125000,
+  award_cost_budget_status: "needs_cost_allocation",
+  uncoded_award_line_count: 4,
+  procurement_requirement_count: 3,
+  procurement_plan_status: "draft",
 };
 
 let releaseChecklistUpdate: (() => void) | null = null;

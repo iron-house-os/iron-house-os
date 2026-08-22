@@ -199,6 +199,26 @@ def test_management_acceptance_atomically_awards_project_and_is_idempotent() -> 
     assert project["status"] == "awarded"
     assert project["project_number"] == body["job_number"]
     assert project["contract_value"] == 12600.0
+    baseline = project["metadata"]["award_pricing_baseline"]
+    assert baseline["source_quote_id"] == created["id"]
+    assert baseline["source_quote_number"] == created["quote_number"]
+    assert baseline["pricing_subtotal"] == "12000.00"
+    assert baseline["basis"] == "accepted_customer_quote_price"
+    assert baseline["cost_budget_status"] == "needs_cost_allocation"
+    assert len(baseline["lines"]) == 2
+    assert all(line["cost_budget_amount"] is None for line in baseline["lines"])
+    procurement = project["metadata"]["procurement_plan"]
+    assert procurement["status"] == "draft"
+    assert procurement["automatic_commitment"] is False
+    assert all(item["vendor_id"] is None and item["po_number"] is None for item in procurement["requirements"])
+    launch = client.get(f"/api/v1/projects/{created['project_id']}/launch-dashboard")
+    assert launch.status_code == 200
+    assert launch.json()["award_baseline_source"] == created["quote_number"]
+    assert launch.json()["award_pricing_subtotal"] == 12000.0
+    assert launch.json()["award_cost_budget_status"] == "needs_cost_allocation"
+    assert launch.json()["uncoded_award_line_count"] == 2
+    assert launch.json()["procurement_requirement_count"] == 1
+    assert launch.json()["procurement_plan_status"] == "draft"
 
     checklist = client.get(f"/api/v1/projects/{created['project_id']}/start-checklist")
     assert checklist.status_code == 200
@@ -208,6 +228,9 @@ def test_management_acceptance_atomically_awards_project_and_is_idempotent() -> 
     assert repeated.status_code == 200
     assert repeated.json()["job_number"] == body["job_number"]
     assert repeated.json()["record_revision"] == 2
+    repeated_project = client.get(f"/api/v1/projects/{created['project_id']}").json()
+    assert repeated_project["metadata"]["award_pricing_baseline"]["created_at"] == baseline["created_at"]
+    assert repeated_project["metadata"]["procurement_plan"]["requirements"] == procurement["requirements"]
 
 
 def test_estimator_can_prepare_but_cannot_accept_customer_quote() -> None:

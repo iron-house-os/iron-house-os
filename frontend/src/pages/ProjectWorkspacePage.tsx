@@ -511,6 +511,16 @@ function ProjectLaunchDashboardCard({
           detail="Project-linked records only"
         />
         <LaunchMetric label="Documents" value={String(dashboard.document_count)} detail="Project-linked records only" />
+        <LaunchMetric
+          label="Award pricing baseline"
+          value={dashboard.award_baseline_source ?? "Not initialized"}
+          detail={dashboard.award_baseline_source ? `${formatCurrency(dashboard.award_pricing_subtotal)} customer pricing · ${dashboard.uncoded_award_line_count} line(s) need cost codes` : "Accept a controlled customer quote to initialize."}
+        />
+        <LaunchMetric
+          label="Procurement plan"
+          value={label(dashboard.procurement_plan_status)}
+          detail={`${dashboard.procurement_requirement_count} draft requirement(s) · no automatic commitment`}
+        />
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
