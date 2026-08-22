@@ -57,6 +57,7 @@ OFFICE_POSITIONS = {
 
 class OnboardingStatus(StrEnum):
     DRAFT = "draft"
+    INVITATION_READY = "invitation_ready"
     INVITATION_SENT = "invitation_sent"
     INVITATION_OPENED = "invitation_opened"
     IN_PROGRESS = "in_progress"
@@ -119,6 +120,9 @@ class EmployeeOnboardingRead(BaseModel):
     correction_note: str | None
     invitation_expires_at: datetime | None
     invited_at: datetime | None
+    invitation_delivery_status: Literal["not_generated", "ready", "sent", "failed", "unverified"]
+    invitation_delivery_attempted_at: datetime | None
+    invitation_delivered_at: datetime | None
     submitted_at: datetime | None
     approved_at: datetime | None
     activated_at: datetime | None
@@ -137,6 +141,7 @@ class InvitationRead(BaseModel):
     onboarding_id: UUID
     invite_url: str
     expires_at: datetime
+    delivery_status: Literal["ready", "sent", "failed"]
 
 
 class PortalActivationRead(BaseModel):

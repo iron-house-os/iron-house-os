@@ -23,6 +23,7 @@ export const requiredOnboardingItems = [
 
 export type OnboardingStatus =
   | "draft"
+  | "invitation_ready"
   | "invitation_sent"
   | "invitation_opened"
   | "in_progress"
@@ -56,6 +57,9 @@ export type OnboardingRecord = {
   correction_note: string | null;
   invitation_expires_at: string | null;
   invited_at: string | null;
+  invitation_delivery_status: "not_generated" | "ready" | "sent" | "failed" | "unverified";
+  invitation_delivery_attempted_at: string | null;
+  invitation_delivered_at: string | null;
   submitted_at: string | null;
   approved_at: string | null;
   activated_at: string | null;
@@ -119,6 +123,7 @@ export type Invitation = {
   onboarding_id: string;
   invite_url: string;
   expires_at: string;
+  delivery_status: "ready" | "sent" | "failed";
 };
 
 export type PortalCertification = {
@@ -232,6 +237,8 @@ export const employeeOnboardingApi = {
     }),
   invite: (id: string) =>
     request<Invitation>(`/employee-onboarding/${id}/invite`, { method: "POST" }),
+  deliverInvitation: (id: string) =>
+    request<Invitation>(`/employee-onboarding/${id}/invite/deliver`, { method: "POST" }),
   reviewPacket: (id: string) =>
     request<PortalPacket>(`/employee-onboarding/${id}/packet`),
   revoke: (id: string) =>

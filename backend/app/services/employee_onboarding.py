@@ -21,7 +21,14 @@ from app.schemas.employee_onboarding import (
     WorkerOrientationCreate,
 )
 from app.services.auth import hash_password
-from app.services.onboarding_data import decrypt_packet, encrypt_packet
+from app.core.config import get_settings
+from app.services import onboarding_email
+from app.services.onboarding_data import (
+    decrypt_invitation_token,
+    decrypt_packet,
+    encrypt_invitation_token,
+    encrypt_packet,
+)
 
 EMPLOYEE_PACKET_SECTIONS = [
     "personal_information",
@@ -39,6 +46,7 @@ REQUIRED_ITEMS = [
 ]
 INVITABLE_STATUSES = {
     OnboardingStatus.DRAFT.value,
+    OnboardingStatus.INVITATION_READY.value,
     OnboardingStatus.INVITATION_SENT.value,
     OnboardingStatus.INVITATION_OPENED.value,
     OnboardingStatus.IN_PROGRESS.value,
@@ -46,6 +54,7 @@ INVITABLE_STATUSES = {
     OnboardingStatus.INVITATION_EXPIRED.value,
 }
 EMPLOYEE_EDITABLE_STATUSES = {
+    OnboardingStatus.INVITATION_READY.value,
     OnboardingStatus.INVITATION_SENT.value,
     OnboardingStatus.INVITATION_OPENED.value,
     OnboardingStatus.IN_PROGRESS.value,
@@ -187,14 +196,59 @@ def issue_invitation(db: Session, record: EmployeeOnboarding, actor: str, ttl_ho
     token = secrets.token_urlsafe(32)
     expires_at = utcnow() + timedelta(hours=ttl_hours)
     record.invitation_token_hash = hashlib.sha256(token.encode()).hexdigest()
+    record.encrypted_invitation_token = encrypt_invitation_token(token)
     record.invitation_expires_at = expires_at
     record.invitation_revoked_at = None
     record.invitation_used_at = None
     record.invited_at = utcnow()
-    record.status = OnboardingStatus.INVITATION_SENT.value
-    audit(db, record, "invitation_sent", actor, {"expires_at": expires_at.isoformat()})
+    record.invitation_delivery_status = "ready"
+    record.invitation_delivery_attempted_at = None
+    record.invitation_delivered_at = None
+    record.invitation_delivery_error_code = None
+    record.status = OnboardingStatus.INVITATION_READY.value
+    audit(db, record, "invitation_generated", actor, {"expires_at": expires_at.isoformat()})
     db.commit()
     return token, expires_at
+
+
+def current_invitation_token(record: EmployeeOnboarding) -> str:
+    return decrypt_invitation_token(record.encrypted_invitation_token)
+
+
+def deliver_invitation(
+    db: Session,
+    record: EmployeeOnboarding,
+    *,
+    invite_url: str,
+    actor: str,
+) -> str:
+    settings = get_settings()
+    if not settings.onboarding_email_delivery_enabled:
+        return "ready"
+
+    record.invitation_delivery_attempted_at = utcnow()
+    try:
+        onboarding_email.send_onboarding_invitation(
+            recipient_email=record.personal_email,
+            recipient_name=record.preferred_name or record.legal_first_name,
+            invite_url=invite_url,
+            expires_at=record.invitation_expires_at or utcnow(),
+            settings=settings,
+        )
+    except onboarding_email.OnboardingEmailDeliveryError as exc:
+        record.invitation_delivery_status = "failed"
+        record.invitation_delivery_error_code = str(exc)
+        audit(db, record, "invitation_delivery_failed", actor, {"error_code": str(exc)})
+        db.commit()
+        return "failed"
+
+    record.invitation_delivery_status = "sent"
+    record.invitation_delivered_at = utcnow()
+    record.invitation_delivery_error_code = None
+    record.status = OnboardingStatus.INVITATION_SENT.value
+    audit(db, record, "invitation_delivery_succeeded", actor, {"channel": "email"})
+    db.commit()
+    return "sent"
 
 
 def resolve_token(db: Session, token: str) -> EmployeeOnboarding | None:

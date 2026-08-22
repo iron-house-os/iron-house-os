@@ -11,12 +11,14 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db
+from app.core.config import Settings
 from app.main import create_app
 from app.models.employee_onboarding import EmployeeOnboarding, EmployeeOnboardingAudit
 from app.models.user import UserAccount
 from app.services.auth import hash_password
 from app.services.employee_onboarding import REQUIRED_ITEMS
 from app.services.onboarding_data import OnboardingDataUnavailable, decrypt_packet
+from app.services.onboarding_email import OnboardingEmailDeliveryError
 
 
 def _client() -> tuple[TestClient, sessionmaker[Session], str]:
@@ -248,6 +250,91 @@ def test_resend_invalidates_the_previous_invitation_token() -> None:
     assert first_token != second_token
     assert client.get(f"/api/v1/employee-onboarding/portal/{first_token}").status_code == 404
     assert client.get(f"/api/v1/employee-onboarding/portal/{second_token}").status_code == 200
+
+
+def _mail_settings() -> Settings:
+    return Settings(
+        onboarding_email_delivery_enabled=True,
+        smtp_host="smtp.test.invalid",
+        smtp_username="delivery-user",
+        smtp_password="protected-test-password",
+        smtp_from_email="onboarding@ironhousecontracting.com",
+    )
+
+
+def test_invitation_is_marked_sent_only_after_mail_server_acceptance(monkeypatch) -> None:
+    client, testing_session, onboarding_id = _client()
+    delivered: list[dict] = []
+    monkeypatch.setattr("app.services.employee_onboarding.get_settings", _mail_settings)
+    monkeypatch.setattr(
+        "app.services.employee_onboarding.onboarding_email.send_onboarding_invitation",
+        lambda **kwargs: delivered.append(kwargs),
+    )
+
+    response = client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite")
+
+    assert response.status_code == 200
+    assert response.json()["delivery_status"] == "sent"
+    assert delivered[0]["recipient_email"] == "alex.worker@example.com"
+    token = _token(response.json()["invite_url"])
+    with testing_session() as db:
+        stored = db.get(EmployeeOnboarding, UUID(onboarding_id))
+        assert stored is not None
+        assert stored.status == "invitation_sent"
+        assert stored.invitation_delivery_status == "sent"
+        assert stored.invitation_delivered_at is not None
+        assert token not in (stored.encrypted_invitation_token or "")
+        audits = db.query(EmployeeOnboardingAudit).all()
+        assert "invitation_delivery_succeeded" in {item.action for item in audits}
+        assert token not in str([item.metadata_json for item in audits])
+
+
+def test_failed_delivery_keeps_current_invitation_for_safe_retry(monkeypatch) -> None:
+    client, testing_session, onboarding_id = _client()
+    monkeypatch.setattr("app.services.employee_onboarding.get_settings", _mail_settings)
+
+    attempts = 0
+
+    def fail_then_accept(**_: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OnboardingEmailDeliveryError("provider_rejected")
+
+    monkeypatch.setattr(
+        "app.services.employee_onboarding.onboarding_email.send_onboarding_invitation",
+        fail_then_accept,
+    )
+
+    first = client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite")
+    retried = client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite/deliver")
+
+    assert first.status_code == 200
+    assert first.json()["delivery_status"] == "failed"
+    assert retried.status_code == 200
+    assert retried.json()["delivery_status"] == "sent"
+    assert retried.json()["invite_url"] == first.json()["invite_url"]
+    with testing_session() as db:
+        stored = db.get(EmployeeOnboarding, UUID(onboarding_id))
+        assert stored is not None
+        assert stored.invitation_delivery_status == "sent"
+        assert stored.invitation_delivery_error_code is None
+        actions = [item.action for item in db.query(EmployeeOnboardingAudit).all()]
+        assert "invitation_delivery_failed" in actions
+        assert "invitation_delivery_succeeded" in actions
+
+
+def test_non_admin_cannot_retry_invitation_delivery(monkeypatch) -> None:
+    client, _, onboarding_id = _client()
+    monkeypatch.setattr("app.services.employee_onboarding.get_settings", _mail_settings)
+    monkeypatch.setattr(
+        "app.services.employee_onboarding.onboarding_email.send_onboarding_invitation",
+        lambda **_: None,
+    )
+    assert client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite").status_code == 200
+    client.post("/api/v1/auth/logout")
+
+    assert client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite/deliver").status_code == 401
 
 
 def test_invalid_decrypted_packet_is_reported_as_unavailable(monkeypatch) -> None:

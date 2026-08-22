@@ -11,8 +11,8 @@ Office staff: Admin, Controller, Project Manager, CFO, COO, CEO, President.
 ## Workflow
 
 1. An administrator creates a draft onboarding record.
-2. IHOS issues a hashed, expiring invitation token.
-3. The invitation can be delivered as a direct link or a locally generated QR code. A resend invalidates the previous link and QR.
+2. IHOS issues a hashed, expiring invitation token and stores only an encrypted recovery copy for controlled delivery retries.
+3. When protected SMTP delivery is enabled, IHOS sends the bearer link from the company mail account and records `sent` only after the configured mail server accepts it. If delivery is disabled or fails, management sees `ready` or `failed` and must retry the same invitation or deliberately use the local QR/manual-share fallback. Reissuing invalidates the previous link and QR.
 4. The employee opens one IHOS portal and completes the assigned personal information, address, emergency contact, payroll, 2026 TD1/TD1BC, agreements, certification, and PPE forms.
 5. Each form is validated by IHOS, encrypted before storage, and can be saved and resumed while the invitation is valid.
 6. The employee reviews the completed packet, certifies it with a typed electronic signature, and submits it.
@@ -27,6 +27,21 @@ Office staff: Admin, Controller, Project Manager, CFO, COO, CEO, President.
 - Restricted values are excluded from invitation emails and QR codes, onboarding list responses, logs, and audit metadata.
 - Management access to the decrypted packet is administrator-only and creates an audit event.
 - Invitation links and QR codes are bearer credentials. They expire, must not be forwarded, and are invalidated when a new invitation is issued.
+- Invitation delivery audit metadata records only the channel, safe error code, and timestamps. It never records the bearer link or token.
+
+## Email delivery configuration
+
+Automatic onboarding email is disabled by default. The system owner must configure these values through protected environment configuration, never in GitHub, chat, screenshots, or checked-in `.env` files:
+
+- `ONBOARDING_EMAIL_DELIVERY_ENABLED=true`
+- `SMTP_HOST` and `SMTP_PORT`
+- `SMTP_USERNAME` and protected `SMTP_PASSWORD`
+- approved company `SMTP_FROM_EMAIL` and `SMTP_FROM_NAME`
+- `SMTP_STARTTLS=true` for port 587 or `SMTP_USE_SSL=true` for the approved implicit-TLS port
+
+Production startup rejects enabled delivery if the host, credentials, sender, or encrypted transport is missing. Staging must use an approved non-production mailbox or sandbox. A staging test must prove provider acceptance, safe failure/retry, token redaction, and manual fallback before production approval.
+
+Existing invitations created before delivery tracking are labelled `unverified`; IHOS does not retroactively claim they were sent. Because their recoverable token was not stored, they must either be shared from the screen where they were generated or deliberately reissued before automatic delivery.
 
 ## 2026 TD1 sources
 

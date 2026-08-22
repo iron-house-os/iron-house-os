@@ -32,7 +32,7 @@ def _portal_read(record) -> PortalOnboardingRead:
 @router.get("/{token}", response_model=PortalOnboardingRead)
 def portal_record(token: str, db: DBSession) -> PortalOnboardingRead:
     record = _resolve_or_404(db, token)
-    if record.status == "invitation_sent":
+    if record.status in {"invitation_ready", "invitation_sent"}:
         record.status = "invitation_opened"
         service.audit(db, record, "invitation_opened", record.personal_email)
         db.commit()
