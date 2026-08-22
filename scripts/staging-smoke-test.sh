@@ -74,6 +74,7 @@ read_quote_state() {
   python - <<'PY'
 import json
 import os
+import re
 from uuid import UUID
 
 payload = json.loads(open(os.environ["BODY_FILE"], encoding="utf-8").read())
@@ -90,7 +91,7 @@ if os.environ["EXPECTED_PROJECT_ID"] and project_id != os.environ["EXPECTED_PROJ
 job_number = payload.get("job_number")
 if os.environ["JOB_EXPECTATION"] == "absent" and job_number is not None:
     raise SystemExit(f"Non-binding quote state unexpectedly has job number {job_number!r}.")
-if os.environ["JOB_EXPECTATION"] == "present" and not str(job_number or "").startswith("IH-"):
+if os.environ["JOB_EXPECTATION"] == "present" and not re.fullmatch(r"IH\d{7}", str(job_number or "")):
     raise SystemExit(f"Accepted quote has invalid job number {job_number!r}.")
 revision = int(payload.get("record_revision") or 0)
 if revision < 1:
