@@ -1,0 +1,110 @@
+name: Controlled production project cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inventory candidates or delete exact project names
+        required: true
+        type: choice
+        options: [inventory, delete]
+        default: inventory
+      exact_names_json:
+        description: JSON array of exact project names; required for delete
+        required: false
+        default: "[]"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-production-project-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: [self-hosted, linux, ihos-production]
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Inventory or move exact projects to trash
+        env:
+          CLEANUP_MODE: ${{ inputs.mode }}
+          EXACT_NAMES_JSON: ${{ inputs.exact_names_json }}
+        run: |
+          set -euo pipefail
+          test -r /etc/iron-house-os/production.env
+          set -a
+          source /etc/iron-house-os/production.env
+          set +a
+          python3 - <<'PY'
+          import http.cookiejar
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.request
+
+          port = os.environ.get("IHOS_PORT", "8080")
+          base = f"http://127.0.0.1:{port}"
+          jar = http.cookiejar.CookieJar()
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+          def request(path, method="GET", body=None, expected=(200,)):
+              data = None if body is None else json.dumps(body).encode()
+              req = urllib.request.Request(base + path, data=data, method=method, headers={"Content-Type": "application/json"})
+              try:
+                  with opener.open(req, timeout=30) as response:
+                      payload = json.load(response)
+                      if response.status not in expected:
+                          raise RuntimeError(f"Unexpected status {response.status}")
+                      return payload
+              except urllib.error.HTTPError as exc:
+                  raise RuntimeError(f"IHOS request failed: {exc.code} {exc.read().decode(errors='replace')}") from exc
+
+          request("/api/v1/auth/login", method="POST", body={
+              "email": os.environ["BOOTSTRAP_ADMIN_EMAIL"],
+              "password": os.environ["BOOTSTRAP_ADMIN_PASSWORD"],
+          })
+          projects = request("/api/v1/projects").get("items", [])
+          marker = re.compile(r"(?:^|[^a-z0-9])(smoke|test)(?:[^a-z0-9]|$)", re.I)
+          candidates = [
+              {"id": item["id"], "name": item["name"], "project_number": item.get("project_number"), "status": item.get("status")}
+              for item in projects if marker.search(item.get("name", ""))
+          ]
+          mode = os.environ["CLEANUP_MODE"]
+          evidence = {"mode": mode, "candidates": candidates, "deleted": []}
+          if mode == "delete":
+              names = json.loads(os.environ["EXACT_NAMES_JSON"])
+              if not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names):
+                  raise SystemExit("Delete mode requires a non-empty JSON array of exact names.")
+              by_name = {item["name"]: item for item in candidates}
+              missing = sorted(set(names) - set(by_name))
+              if missing:
+                  raise SystemExit(f"Exact names are not current smoke/test candidates: {missing}")
+              for name in names:
+                  item = by_name[name]
+                  deleted = request(
+                      f"/api/v1/projects/{item['id']}",
+                      method="DELETE",
+                      body={"confirmation_name": name},
+                  )
+                  evidence["deleted"].append({"id": deleted["id"], "name": deleted["name"], "deleted_at": deleted["deleted_at"]})
+          with open("production-project-cleanup-evidence.json", "w") as stream:
+              json.dump(evidence, stream, indent=2, sort_keys=True)
+              stream.write("\n")
+          print(json.dumps(evidence, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-project-cleanup-${{ github.run_id }}
+          path: production-project-cleanup-evidence.json
+          if-no-files-found: warn
+          retention-days: 90

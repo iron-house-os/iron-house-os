@@ -12,6 +12,10 @@ import {
 } from "../api/projects";
 import { ProjectWorkspacePage } from "./ProjectWorkspacePage";
 
+vi.mock("../contexts/AuthContext", () => ({
+  useAuth: () => ({ user: { role: "admin" } }),
+}));
+
 const project: Project = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "King George Utility Upgrade",

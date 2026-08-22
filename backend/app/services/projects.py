@@ -101,12 +101,16 @@ def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     return _to_schema(_load_project(db, project.id))
 
 
-def list_projects(db: Session, status: str | None = None) -> ProjectList:
+def list_projects(
+    db: Session, status: str | None = None, include_deleted: bool = False
+) -> ProjectList:
     statement = (
         select(Project)
         .options(selectinload(Project.supplier_links))
         .order_by(Project.created_at.desc())
     )
+    if not include_deleted:
+        statement = statement.where(Project.deleted_at.is_(None))
     if status:
         statement = statement.where(Project.status == status)
     items = [_to_schema(project) for project in db.scalars(statement).all()]
@@ -273,6 +277,24 @@ def archive_project(db: Session, project_id: UUID) -> ProjectRead:
     return _to_schema(_load_project(db, project_id))
 
 
+def delete_project(db: Session, project_id: UUID, confirmation_name: str) -> ProjectRead:
+    project = _load_project(db, project_id)
+    if confirmation_name.strip() != project.name:
+        raise AppError("Enter the exact project name to confirm deletion.", status_code=409)
+    project.deleted_at = datetime.now(UTC)
+    db.commit()
+    return _to_schema(_load_project(db, project_id, include_deleted=True))
+
+
+def restore_project(db: Session, project_id: UUID) -> ProjectRead:
+    project = _load_project(db, project_id, include_deleted=True)
+    if project.deleted_at is None:
+        raise AppError("Project is not in trash.", status_code=409)
+    project.deleted_at = None
+    db.commit()
+    return _to_schema(_load_project(db, project_id))
+
+
 def get_awarded_workspace(db: Session, project_id: UUID) -> AwardedProjectWorkspace:
     project = _load_project(db, project_id)
     if (
@@ -407,12 +429,15 @@ def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
     )
 
 
-def _load_project(db: Session, project_id: UUID) -> Project:
-    project = db.scalar(
+def _load_project(db: Session, project_id: UUID, include_deleted: bool = False) -> Project:
+    statement = (
         select(Project)
         .where(Project.id == project_id)
         .options(selectinload(Project.supplier_links))
     )
+    if not include_deleted:
+        statement = statement.where(Project.deleted_at.is_(None))
+    project = db.scalar(statement)
     if project is None:
         raise AppError("Project not found", status_code=404)
     return project
@@ -498,6 +523,7 @@ def _to_schema(project: Project) -> ProjectRead:
         metadata=project.metadata_json or {},
         workspace_root=project.workspace_root,
         workspace_provisioned_at=project.workspace_provisioned_at,
+        deleted_at=project.deleted_at,
         supplier_ids=[link.supplier_id for link in project.supplier_links],
         created_at=project.created_at,
         updated_at=project.updated_at,

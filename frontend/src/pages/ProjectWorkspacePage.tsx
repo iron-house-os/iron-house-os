@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Calculator, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw, ShieldCheck, Table2, Users } from "lucide-react";
+import { Activity, BookOpen, Calculator, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw, RotateCcw, ShieldCheck, Table2, Trash2, Users } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -13,6 +13,7 @@ import {
   projectStatuses,
   projectsApi,
 } from "../api/projects";
+import { useAuth } from "../contexts/AuthContext";
 import { modulePathWithProjectContext, storeActiveProject, withProjectContext } from "../utils/projectContext";
 
 const tabs = [
@@ -33,6 +34,8 @@ const tabs = [
 export function ProjectWorkspacePage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
@@ -42,6 +45,7 @@ export function ProjectWorkspacePage() {
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
+  const [showTrash, setShowTrash] = useState(false);
   const [activeTab, setActiveTab] = useState("Overview");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +54,11 @@ export function ProjectWorkspacePage() {
     setIsLoading(true);
     setError(null);
     try {
-      const list = await projectsApi.list(statusFilter);
-      setProjects(list.items);
+      const list = await projectsApi.list(statusFilter, showTrash);
+      const visibleProjects = showTrash ? list.items.filter((project) => project.deleted_at) : list.items;
+      setProjects(visibleProjects);
       const summaries = await Promise.all(
-        list.items.map(async (project) => [project.id, await projectsApi.dashboard(project.id)] as const),
+        visibleProjects.filter((project) => !project.deleted_at).map(async (project) => [project.id, await projectsApi.dashboard(project.id)] as const),
       );
       setDashboardByProjectId(Object.fromEntries(summaries));
       if (projectId) {
@@ -81,7 +86,7 @@ export function ProjectWorkspacePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectId, statusFilter]);
+  }, [projectId, showTrash, statusFilter]);
 
   useEffect(() => {
     // This effect synchronizes the project workspace with route and filter changes.
@@ -107,6 +112,20 @@ export function ProjectWorkspacePage() {
   async function archiveProject() {
     if (!selectedProject) return;
     await projectsApi.archive(selectedProject.id);
+    await refresh();
+  }
+
+  async function deleteProject() {
+    if (!selectedProject || !isAdmin) return;
+    const confirmation = window.prompt(`Type the exact project name to move it to trash:\n\n${selectedProject.name}`);
+    if (confirmation === null) return;
+    await projectsApi.delete(selectedProject.id, confirmation);
+    navigate("/projects");
+  }
+
+  async function restoreProject(project: Project) {
+    if (!isAdmin) return;
+    await projectsApi.restore(project.id);
     await refresh();
   }
 
@@ -160,8 +179,18 @@ export function ProjectWorkspacePage() {
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="min-w-0 space-y-6">
           <ProjectFilters status={statusFilter} onStatusChange={setStatusFilter} />
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => setShowTrash((value) => !value)}
+              className="inline-flex items-center gap-2 rounded-md border border-iron-100 bg-white px-3 py-2 text-sm font-semibold text-iron-800"
+            >
+              {showTrash ? <FolderKanban className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+              {showTrash ? "Back to projects" : "View trash"}
+            </button>
+          ) : null}
           <CreateProjectForm onSubmit={(payload) => void createProject(payload)} />
-          <ProjectList projects={projects} selectedId={projectId} dashboards={dashboardByProjectId} />
+          <ProjectList projects={projects} selectedId={projectId} dashboards={dashboardByProjectId} showTrash={showTrash} onRestore={(project) => void restoreProject(project)} />
         </div>
         {selectedProject && dashboard ? (
           <ProjectDetail
@@ -175,6 +204,8 @@ export function ProjectWorkspacePage() {
             onTabChange={setActiveTab}
             onStatusChange={(value) => void updateStatus(value)}
             onArchive={() => void archiveProject()}
+            onDelete={() => void deleteProject()}
+            canDelete={isAdmin}
             onStartChecklistChange={(code, completed) => void updateStartChecklistItem(code, completed)}
           />
         ) : (
@@ -295,10 +326,14 @@ function ProjectList({
   projects,
   selectedId,
   dashboards,
+  showTrash,
+  onRestore,
 }: {
   projects: Project[];
   selectedId: string | undefined;
   dashboards: Record<string, ProjectDashboard>;
+  showTrash: boolean;
+  onRestore: (project: Project) => void;
 }) {
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
@@ -314,6 +349,7 @@ function ProjectList({
               <th className="py-2 pr-4">Bid Due</th>
               <th className="py-2 pr-4">Ready</th>
               <th className="py-2 pr-4">Docs</th>
+              {showTrash ? <th className="py-2 pr-4">Action</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -327,21 +363,26 @@ function ProjectList({
                   )}
                 >
                   <td className="py-3 pr-4 font-semibold text-iron-800">{project.project_number ?? "Pending award"}</td>
-                  <td className="py-3 pr-4 font-medium text-iron-950">
-                    <Link to={`/projects/${project.id}`}>{project.name}</Link>
-                  </td>
+                  <td className="py-3 pr-4 font-medium text-iron-950">{showTrash ? project.name : <Link to={`/projects/${project.id}`}>{project.name}</Link>}</td>
                   <td className="py-3 pr-4 text-iron-800">{project.municipality ?? "Unassigned"}</td>
                   <td className="py-3 pr-4 text-iron-800">{label(project.status)}</td>
                   <td className="py-3 pr-4 text-iron-800">{project.bid_due_date ?? "Not set"}</td>
                   <td className="py-3 pr-4 text-iron-800">{summary ? `${summary.readiness_percentage}%` : "Loading"}</td>
                   <td className="py-3 pr-4 text-iron-800">{summary ? summary.document_count : "Loading"}</td>
+                  {showTrash ? (
+                    <td className="py-3 pr-4">
+                      <button type="button" onClick={() => onRestore(project)} className="inline-flex items-center gap-2 rounded-md border border-iron-100 px-3 py-2 font-semibold text-iron-800">
+                        <RotateCcw className="h-4 w-4" /> Restore
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
             {projects.length === 0 ? (
               <tr>
-                <td className="py-3 text-iron-500" colSpan={7}>
-                  No projects found.
+                <td className="py-3 text-iron-500" colSpan={showTrash ? 8 : 7}>
+                  {showTrash ? "Trash is empty." : "No projects found."}
                 </td>
               </tr>
             ) : null}
@@ -363,6 +404,8 @@ function ProjectDetail({
   onTabChange,
   onStatusChange,
   onArchive,
+  onDelete,
+  canDelete,
   onStartChecklistChange,
 }: {
   project: Project;
@@ -375,6 +418,8 @@ function ProjectDetail({
   onTabChange: (tab: string) => void;
   onStatusChange: (status: ProjectStatus) => void;
   onArchive: () => void;
+  onDelete: () => void;
+  canDelete: boolean;
   onStartChecklistChange: (code: string, completed: boolean) => void;
 }) {
   return (
@@ -407,6 +452,11 @@ function ProjectDetail({
             >
               Archive
             </button>
+            {canDelete ? (
+              <button type="button" onClick={onDelete} className="inline-flex items-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700">
+                <Trash2 className="h-4 w-4" /> Delete
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

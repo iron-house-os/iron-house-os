@@ -4,10 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import CurrentUser
+from app.api.dependencies.auth import AdminUser, CurrentUser
 from app.db.session import get_db
 from app.schemas.project import (
     ProjectCreate,
+    ProjectDeleteRequest,
     ProjectDashboard,
     ProjectList,
     ProjectRead,
@@ -21,7 +22,7 @@ from app.services import project_folders, project_launch, project_readiness, pro
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
-OptionalStatusQuery = Annotated[str | None, Query()]
+IncludeDeletedQuery = Annotated[bool, Query()]
 
 
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
@@ -30,8 +31,18 @@ def create_project(payload: ProjectCreate, db: DBSession) -> ProjectRead:
 
 
 @router.get("", response_model=ProjectList)
-def list_projects(db: DBSession, status: OptionalStatusQuery = None) -> ProjectList:
-    return projects.list_projects(db, status=status)
+def list_projects(
+    db: DBSession,
+    user: CurrentUser,
+    project_status: Annotated[str | None, Query(alias="status")] = None,
+    include_deleted: IncludeDeletedQuery = False,
+) -> ProjectList:
+    if include_deleted and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access is required.",
+        )
+    return projects.list_projects(db, status=project_status, include_deleted=include_deleted)
 
 
 @router.post("/folder-manifest", response_model=ProjectFolderManifest)
@@ -52,6 +63,21 @@ def update_project(project_id: UUID, payload: ProjectUpdate, db: DBSession) -> P
 @router.post("/{project_id}/archive", response_model=ProjectRead)
 def archive_project(project_id: UUID, db: DBSession) -> ProjectRead:
     return projects.archive_project(db, project_id)
+
+
+@router.delete("/{project_id}", response_model=ProjectRead)
+def delete_project(
+    project_id: UUID,
+    payload: ProjectDeleteRequest,
+    db: DBSession,
+    _admin: AdminUser,
+) -> ProjectRead:
+    return projects.delete_project(db, project_id, payload.confirmation_name)
+
+
+@router.post("/{project_id}/restore", response_model=ProjectRead)
+def restore_project(project_id: UUID, db: DBSession, _admin: AdminUser) -> ProjectRead:
+    return projects.restore_project(db, project_id)
 
 
 @router.get("/{project_id}/dashboard", response_model=ProjectDashboard)
