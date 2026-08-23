@@ -183,10 +183,14 @@ jobs:
         if: success()
         env:
           CI_RUN_ID: ${{ steps.gates.outputs.ci_run_id }}
-          EVIDENCE_RUN_ID: ${{ steps.gates.outputs.evidence_run_id }}
+          EVIDENCE_RUN_ID: ${{ steps.gates.outputs.evidence_run_id || steps.manual_evidence.outputs.evidence_run_id }}
           PRODUCTION_RUN_ID: ${{ steps.dispatch.outputs.production_run_id }}
         run: |
-          gh issue comment 168 --repo "$GITHUB_REPOSITORY" --body "Production deployment completed for \`${RELEASE_SHA}\`. CI: ${CI_RUN_ID}. Release Readiness: ${EVIDENCE_RUN_ID}. Production deploy: ${PRODUCTION_RUN_ID}. Public health/readiness and exact release ID verification passed."
+          ci_record=""
+          if [[ -n "$CI_RUN_ID" ]]; then
+            ci_record="CI: ${CI_RUN_ID}. "
+          fi
+          gh issue comment 168 --repo "$GITHUB_REPOSITORY" --body "Production deployment completed for \`${RELEASE_SHA}\`. ${ci_record}Release Readiness: ${EVIDENCE_RUN_ID}. Production deploy: ${PRODUCTION_RUN_ID}. Public health/readiness and exact release ID verification passed."
           gh issue close 168 --repo "$GITHUB_REPOSITORY" --reason completed
 
       - name: Record blocker for operator follow-up
