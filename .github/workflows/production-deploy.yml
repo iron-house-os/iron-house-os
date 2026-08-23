@@ -113,7 +113,19 @@ jobs:
           installed_wrapper=/usr/local/sbin/ihos-production-deploy
           trusted_wrapper="$GITHUB_WORKSPACE/.deploy-tooling/ops/digitalocean/production-deploy-wrapper.sh"
           [[ "$(stat -c '%U:%G:%a' "$installed_wrapper")" == "root:root:755" ]]
-          cmp --silent "$trusted_wrapper" "$installed_wrapper"
+          installed_hash=$(sha256sum "$installed_wrapper" | awk '{print $1}')
+          trusted_hash=$(sha256sum "$trusted_wrapper" | awk '{print $1}')
+          echo "Installed wrapper SHA-256: $installed_hash"
+          echo "Trusted wrapper SHA-256:   $trusted_hash"
+          if ! cmp --silent "$trusted_wrapper" "$installed_wrapper"; then
+            echo "::error::Installed production wrapper does not match trusted workflow tooling."
+            diff -u \
+              --label installed-production-wrapper \
+              --label trusted-production-wrapper \
+              "$installed_wrapper" "$trusted_wrapper" |
+              sed -n '1,200p' || true
+            exit 1
+          fi
 
       - name: Execute restricted production cutover
         working-directory: .release
