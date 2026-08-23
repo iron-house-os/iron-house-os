@@ -47,6 +47,8 @@ export function ProjectWorkspacePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [smokeTestOnly, setSmokeTestOnly] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [activeTab, setActiveTab] = useState("Overview");
   const [isLoading, setIsLoading] = useState(true);
@@ -131,6 +133,34 @@ export function ProjectWorkspacePage() {
     await refresh();
   }
 
+  async function moveFilteredSmokeTestsToTrash(filteredProjects: Project[]) {
+    if (!isAdmin || bulkDeleting || filteredProjects.length === 0) return;
+    const confirmed = window.confirm(
+      `Move all ${filteredProjects.length} filtered smoke/test projects to recoverable Trash?\n\nNo other projects will be changed.`,
+    );
+    if (!confirmed) return;
+    setBulkDeleting(true);
+    setBulkDeleteResult(null);
+    setError(null);
+    let moved = 0;
+    try {
+      for (const project of filteredProjects) {
+        await projectsApi.delete(project.id, project.name);
+        moved += 1;
+      }
+      setBulkDeleteResult(`${moved} smoke/test projects moved to Trash. They can be restored by an administrator.`);
+    } catch (currentError) {
+      setError(
+        `${moved} projects moved to Trash before cleanup stopped. ${
+          currentError instanceof Error ? currentError.message : "Unable to complete smoke/test cleanup."
+        }`,
+      );
+    } finally {
+      await refresh();
+      setBulkDeleting(false);
+    }
+  }
+
   async function updateStartChecklistItem(code: string, completed: boolean) {
     if (!selectedProject || savingChecklistCode) return;
     setSavingChecklistCode(code);
@@ -188,6 +218,7 @@ export function ProjectWorkspacePage() {
       </div>
 
       {error ? <Notice tone="error" message={error} /> : null}
+      {bulkDeleteResult ? <Notice tone="neutral" message={bulkDeleteResult} /> : null}
       {isLoading ? <Notice tone="neutral" message="Loading projects..." /> : null}
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
@@ -200,6 +231,19 @@ export function ProjectWorkspacePage() {
             onSearchChange={setSearchFilter}
             onSmokeTestOnlyChange={setSmokeTestOnly}
           />
+          {isAdmin && smokeTestOnly && !showTrash && filteredProjects.length > 0 ? (
+            <button
+              type="button"
+              disabled={bulkDeleting}
+              onClick={() => void moveFilteredSmokeTestsToTrash(filteredProjects)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              {bulkDeleting
+                ? "Moving smoke/test projects to Trash..."
+                : `Move ${filteredProjects.length} filtered smoke/test projects to Trash`}
+            </button>
+          ) : null}
           {isAdmin ? (
             <button
               type="button"
