@@ -90,7 +90,8 @@ jobs:
           [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
           git fetch --quiet origin main
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
-          [[ -z "$(git status --porcelain)" ]]
+          git diff --quiet
+          git diff --cached --quiet
 
       - name: Download immutable release evidence
         env:
