@@ -180,6 +180,29 @@ describe("ProjectWorkspacePage", () => {
     expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
   });
 
+  it("moves only the filtered smoke/test projects to recoverable trash after confirmation", async () => {
+    const smokeProjects: Project[] = [
+      { ...project, id: "33333333-3333-4333-8333-333333333333", name: "Release smoke 20260823-100046", project_number: "SMOKE-20260823-100046" },
+      { ...project, id: "44444444-4444-4444-8444-444444444444", name: "Release smoke 20260823-131404", project_number: "SMOKE-20260823-131404" },
+    ];
+    const fetchMock = mockProjectApiWithProjects([project, ...smokeProjects]);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderWorkspace("/projects");
+
+    await screen.findByText(project.name);
+    await user.click(screen.getByRole("checkbox", { name: "Smoke/test projects only" }));
+    await user.click(screen.getByRole("button", { name: "Move 2 filtered smoke/test projects to Trash" }));
+
+    await screen.findByText("2 smoke/test projects moved to Trash. They can be restored by an administrator.");
+    const deletes = fetchMock.mock.calls.filter(([, options]) => options?.method === "DELETE");
+    expect(deletes).toHaveLength(2);
+    expect(deletes.map(([, options]) => JSON.parse(String(options?.body)).confirmation_name)).toEqual(
+      smokeProjects.map((item) => item.name),
+    );
+    expect(screen.queryByText(project.name)).not.toBeInTheDocument();
+  });
+
   it("creates an awarded project and delegates job-number generation to IHOS", async () => {
     const fetchMock = mockProjectApi();
     const user = userEvent.setup();
@@ -468,9 +491,16 @@ function mockProjectApi(
   return fetchMock;
 }
 
-function mockProjectApiWithProjects(projects: Project[]) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+function mockProjectApiWithProjects(initialProjects: Project[]) {
+  let projects = initialProjects;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
     const url = input.toString();
+    if (options?.method === "DELETE") {
+      const deleted = projects.find((item) => url.endsWith(`/projects/${item.id}`));
+      if (!deleted) return jsonResponse({ detail: "Not found" }, 404);
+      projects = projects.filter((item) => item.id !== deleted.id);
+      return jsonResponse({ ...deleted, deleted_at: "2026-08-23T15:00:00Z" });
+    }
     if (url.endsWith("/projects")) return jsonResponse({ items: projects, total: projects.length });
     const dashboardProject = projects.find((item) => url.endsWith(`/projects/${item.id}/dashboard`));
     if (dashboardProject) return jsonResponse({ ...dashboard, project_id: dashboardProject.id });
