@@ -156,6 +156,30 @@ describe("ProjectWorkspacePage", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
+  it("filters projects by searchable fields and the smoke/test cleanup control", async () => {
+    const smokeProject: Project = {
+      ...project,
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Release smoke 20260823-100046",
+      project_number: "SMOKE-20260823-100046",
+    };
+    mockProjectApiWithProjects([project, smokeProject]);
+    const user = userEvent.setup();
+    renderWorkspace("/projects");
+
+    expect(await screen.findByText(project.name)).toBeInTheDocument();
+    expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search projects" }), "100046");
+    expect(screen.queryByText(project.name)).not.toBeInTheDocument();
+    expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search projects" }));
+    await user.click(screen.getByRole("checkbox", { name: "Smoke/test projects only" }));
+    expect(screen.queryByText(project.name)).not.toBeInTheDocument();
+    expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
+  });
+
   it("creates an awarded project and delegates job-number generation to IHOS", async () => {
     const fetchMock = mockProjectApi();
     const user = userEvent.setup();
@@ -440,6 +464,18 @@ function mockProjectApi(
     return jsonResponse({ detail: "Not found" }, 404);
   });
 
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function mockProjectApiWithProjects(projects: Project[]) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = input.toString();
+    if (url.endsWith("/projects")) return jsonResponse({ items: projects, total: projects.length });
+    const dashboardProject = projects.find((item) => url.endsWith(`/projects/${item.id}/dashboard`));
+    if (dashboardProject) return jsonResponse({ ...dashboard, project_id: dashboardProject.id });
+    throw new Error(`Unhandled request: ${url}`);
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }

@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Calculator, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw, RotateCcw, ShieldCheck, Table2, Trash2, Users } from "lucide-react";
+import { Activity, BookOpen, Calculator, CalendarDays, FileStack, FolderKanban, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Table2, Trash2, Users } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -45,6 +45,8 @@ export function ProjectWorkspacePage() {
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
+  const [smokeTestOnly, setSmokeTestOnly] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [activeTab, setActiveTab] = useState("Overview");
   const [isLoading, setIsLoading] = useState(true);
@@ -154,6 +156,18 @@ export function ProjectWorkspacePage() {
     }
   }
 
+  const normalizedSearch = searchFilter.trim().toLocaleLowerCase();
+  const smokeTestMarker = /(?:^|[^a-z0-9])(smoke|test)(?:[^a-z0-9]|$)/i;
+  const filteredProjects = projects.filter((project) => {
+    const searchable = [project.project_number, project.name, project.municipality, label(project.status)]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase();
+    const matchesSearch = !normalizedSearch || searchable.includes(normalizedSearch);
+    const matchesSmokeTest = !smokeTestOnly || smokeTestMarker.test(`${project.project_number ?? ""} ${project.name}`);
+    return matchesSearch && matchesSmokeTest;
+  });
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-iron-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
@@ -178,7 +192,14 @@ export function ProjectWorkspacePage() {
 
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="min-w-0 space-y-6">
-          <ProjectFilters status={statusFilter} onStatusChange={setStatusFilter} />
+          <ProjectFilters
+            status={statusFilter}
+            search={searchFilter}
+            smokeTestOnly={smokeTestOnly}
+            onStatusChange={setStatusFilter}
+            onSearchChange={setSearchFilter}
+            onSmokeTestOnlyChange={setSmokeTestOnly}
+          />
           {isAdmin ? (
             <button
               type="button"
@@ -190,7 +211,7 @@ export function ProjectWorkspacePage() {
             </button>
           ) : null}
           <CreateProjectForm onSubmit={(payload) => void createProject(payload)} />
-          <ProjectList projects={projects} selectedId={projectId} dashboards={dashboardByProjectId} showTrash={showTrash} onRestore={(project) => void restoreProject(project)} />
+          <ProjectList projects={filteredProjects} selectedId={projectId} dashboards={dashboardByProjectId} showTrash={showTrash} onRestore={(project) => void restoreProject(project)} />
         </div>
         {selectedProject && dashboard ? (
           <ProjectDetail
@@ -221,15 +242,40 @@ export function ProjectWorkspacePage() {
   );
 }
 
-function ProjectFilters({ status, onStatusChange }: { status: string; onStatusChange: (value: string) => void }) {
+function ProjectFilters({
+  status,
+  search,
+  smokeTestOnly,
+  onStatusChange,
+  onSearchChange,
+  onSmokeTestOnlyChange,
+}: {
+  status: string;
+  search: string;
+  smokeTestOnly: boolean;
+  onStatusChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
+  onSmokeTestOnlyChange: (value: boolean) => void;
+}) {
   return (
     <div className="rounded-md border border-iron-100 bg-white p-5">
       <h2 className="text-base font-semibold text-iron-950">Project Filters</h2>
+      <label className="relative mt-4 block">
+        <span className="sr-only">Search projects</span>
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-iron-500" />
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          className="w-full rounded-md border border-iron-100 py-2 pl-9 pr-3 text-sm"
+          placeholder="Search job #, name, municipality, or status"
+        />
+      </label>
       <select
         aria-label="Project status filter"
         value={status}
         onChange={(event) => onStatusChange(event.target.value)}
-        className="mt-4 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+        className="mt-3 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
       >
         <option value="">All statuses</option>
         {projectStatuses.map((item) => (
@@ -238,6 +284,15 @@ function ProjectFilters({ status, onStatusChange }: { status: string; onStatusCh
           </option>
         ))}
       </select>
+      <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-iron-100 px-3 py-2 text-sm font-semibold text-iron-800">
+        <input
+          type="checkbox"
+          checked={smokeTestOnly}
+          onChange={(event) => onSmokeTestOnlyChange(event.target.checked)}
+          className="h-4 w-4 rounded border-iron-200"
+        />
+        Smoke/test projects only
+      </label>
     </div>
   );
 }
