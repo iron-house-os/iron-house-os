@@ -1,0 +1,86 @@
+name: Finish approved production project cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inventory candidates or delete exact approved names
+        required: true
+        type: choice
+        options: [inventory, delete]
+        default: inventory
+      exact_names_json:
+        description: JSON array of exact approved names; required for delete
+        required: false
+        default: "[]"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: iron-house-os-finish-production-project-cleanup
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch and verify protected project cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLEANUP_MODE: ${{ inputs.mode }}
+      EXACT_NAMES_JSON: ${{ inputs.exact_names_json }}
+    steps:
+      - name: Validate orchestration inputs
+        run: |
+          set -euo pipefail
+          if [[ "$CLEANUP_MODE" == "inventory" ]]; then
+            [[ "$EXACT_NAMES_JSON" == "[]" ]]
+          else
+            [[ "$CLEANUP_MODE" == "delete" ]]
+            [[ "$EXACT_NAMES_JSON" != "[]" ]]
+          fi
+
+      - name: Dispatch cleanup through GitHub Actions bot
+        id: child
+        run: |
+          set -euo pipefail
+          started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          gh workflow run production-project-cleanup.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f mode="$CLEANUP_MODE" \
+            -f exact_names_json="$EXACT_NAMES_JSON"
+
+          for attempt in $(seq 1 20); do
+            run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/production-project-cleanup.yml/runs?event=workflow_dispatch&per_page=30" \
+              --jq ".workflow_runs | map(select(.created_at >= \"${started}\" and .head_branch == \"main\")) | sort_by(.created_at) | first | .id // empty")"
+            if [[ -n "$run_id" ]]; then
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              echo "Protected cleanup run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Cleanup dispatch was accepted but no child run appeared." >&2
+          exit 1
+
+      - name: Wait for protected cleanup result
+        env:
+          RUN_ID: ${{ steps.child.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 100); do
+            run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
+            status="$(jq -r .status <<<"$run")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$run")"
+            if [[ "$status" == "completed" ]]; then
+              [[ "$conclusion" == "success" ]]
+              echo "Protected production project cleanup completed successfully."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for protected cleanup run ${RUN_ID}." >&2
+          exit 1
