@@ -255,7 +255,7 @@ describe("ProjectWorkspacePage", () => {
     renderWorkspace(`/projects/${awardedProject.id}`);
 
     expect(await screen.findByRole("heading", { name: awardedProject.name })).toBeInTheDocument();
-    expect(screen.getByText(/Bennet Sidewalk is selected, but its launch dashboard could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`${awardedProject.name} is selected, but its launch dashboard could not be loaded`, "i"))).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Awarded project workspace" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Awarded job start checklist" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Job launch dashboard" })).not.toBeInTheDocument();
