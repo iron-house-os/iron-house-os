@@ -42,6 +42,7 @@ export function ProjectWorkspacePage() {
   const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
   const [launchDashboard, setLaunchDashboard] = useState<ProjectLaunchDashboard | null>(null);
   const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
+  const [projectLoadWarning, setProjectLoadWarning] = useState<string | null>(null);
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
@@ -57,6 +58,7 @@ export function ProjectWorkspacePage() {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setProjectLoadWarning(null);
     try {
       const list = await projectsApi.list(statusFilter, showTrash);
       const visibleProjects = showTrash ? list.items.filter((project) => project.deleted_at) : list.items;
@@ -67,17 +69,34 @@ export function ProjectWorkspacePage() {
       setDashboardByProjectId(Object.fromEntries(summaries));
       if (projectId) {
         const detail = await projectsApi.detail(projectId);
-        const [summary, provisionedWorkspace, provisionedStartChecklist, launchSummary] = await Promise.all([
-          projectsApi.dashboard(projectId),
-          detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
-          detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
-          detail.workspace_root ? projectsApi.launchDashboard(projectId) : Promise.resolve(null),
-        ]);
+        const summary = await projectsApi.dashboard(projectId);
         setSelectedProject(detail);
         setDashboard(summary);
-        setWorkspace(provisionedWorkspace);
-        setLaunchDashboard(launchSummary);
-        setStartChecklist(provisionedStartChecklist);
+        setWorkspace(null);
+        setLaunchDashboard(null);
+        setStartChecklist(null);
+
+        if (detail.workspace_root) {
+          const [workspaceResult, checklistResult, launchResult] = await Promise.allSettled([
+            projectsApi.workspace(projectId),
+            projectsApi.startChecklist(projectId),
+            projectsApi.launchDashboard(projectId),
+          ]);
+          setWorkspace(workspaceResult.status === "fulfilled" ? workspaceResult.value : null);
+          setStartChecklist(checklistResult.status === "fulfilled" ? checklistResult.value : null);
+          setLaunchDashboard(launchResult.status === "fulfilled" ? launchResult.value : null);
+
+          const unavailable = [
+            workspaceResult.status === "rejected" ? "workspace summary" : null,
+            checklistResult.status === "rejected" ? "start checklist" : null,
+            launchResult.status === "rejected" ? "launch dashboard" : null,
+          ].filter(Boolean);
+          if (unavailable.length) {
+            setProjectLoadWarning(
+              `${detail.name} is selected, but its ${unavailable.join(", ")} could not be loaded. Available project controls remain usable.`,
+            );
+          }
+        }
       } else {
         setSelectedProject(null);
         setDashboard(null);
@@ -218,6 +237,7 @@ export function ProjectWorkspacePage() {
       </div>
 
       {error ? <Notice tone="error" message={error} /> : null}
+      {projectLoadWarning ? <Notice tone="error" message={projectLoadWarning} /> : null}
       {bulkDeleteResult ? <Notice tone="neutral" message={bulkDeleteResult} /> : null}
       {isLoading ? <Notice tone="neutral" message="Loading projects..." /> : null}
 
