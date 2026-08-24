@@ -160,20 +160,36 @@ gateway_mutated=1
 install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
 nginx -t
 systemctl reload nginx
-"${compose[@]}" up -d --no-build --wait
-curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
-  "http://127.0.0.1:${IHOS_PORT:-8080}/readiness" | python -c '
-import json, os, sys
-payload = json.load(sys.stdin)
+"${compose[@]}" up -d --no-build
+
+readiness_url="http://127.0.0.1:${IHOS_PORT:-8080}/readiness"
+readiness_file=$(mktemp)
+readiness_ready=0
+for attempt in $(seq 1 24); do
+  if curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+      "$readiness_url" >"$readiness_file" 2>/dev/null &&
+    READINESS_FILE="$readiness_file" python -c '
+import json, os
+with open(os.environ["READINESS_FILE"], encoding="utf-8") as source:
+    payload = json.load(source)
 release_id = payload.get("checks", {}).get("release_id")
 expected = os.environ["IHOS_RELEASE_ID"]
 if payload.get("status") != "ready" or release_id != expected:
-    raise SystemExit(
-        "Loopback readiness failed: status={}, release_id={}, expected={}".format(
-            payload.get("status"), release_id, expected
-        )
-    )
-'
+    raise SystemExit(1)
+'; then
+    readiness_ready=1
+    break
+  fi
+  echo "Waiting for exact production release readiness (attempt $attempt/24)."
+  sleep 5
+done
+rm -f "$readiness_file"
+
+if ((readiness_ready != 1)); then
+  echo "Loopback readiness did not confirm release $IHOS_RELEASE_ID within 120 seconds." >&2
+  "${compose[@]}" ps >&2 || true
+  exit 1
+fi
 application_ready=1
 
 install -m 0644 ops/digitalocean/nginx-live.conf "$gateway_config"
