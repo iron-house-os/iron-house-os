@@ -94,7 +94,7 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
         "/etc/nginx/sites-available/iron-house-os"
     )
     compose_build = '"${compose[@]}" build'
-    compose_up = '"${compose[@]}" up -d --no-build --wait'
+    compose_up = '"${compose[@]}" up -d --no-build'
 
     assert "previous_gateway=$(mktemp)" in cutover
     assert "application_ready=0" in cutover
@@ -102,7 +102,10 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
     assert cutover.index(compose_build) < cutover.rindex(maintenance)
     assert cutover.rindex(maintenance) < cutover.index(compose_up)
     assert "release_id != expected" in cutover
-    assert "--connect-timeout 5 --max-time 30" in cutover
+    assert "for attempt in $(seq 1 24)" in cutover
+    assert "--connect-timeout 5 --max-time 10" in cutover
+    assert "within 120 seconds" in cutover
+    assert 'up -d --no-build --wait' not in cutover
 
 
 def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
