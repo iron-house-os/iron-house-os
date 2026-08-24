@@ -73,24 +73,35 @@ if ! git_workflow merge-base --is-ancestor "$release_sha" origin/main; then
   exit 1
 fi
 
-production_container=
-production_project=
-while IFS= read -r container_id; do
-  config_files=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$container_id")
-  if [[ "$config_files" == *docker-compose.production.yml* ]]; then
-    if [[ -n "$production_container" ]]; then
-      echo "Multiple running production frontend containers were found." >&2
-      exit 1
-    fi
-    production_container=$container_id
-    production_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")
+production_projects() {
+  local include_stopped=${1:-0}
+  local -a docker_ps=(docker ps)
+  if ((include_stopped == 1)); then
+    docker_ps+=(--all)
   fi
-done < <(docker ps --filter label=com.docker.compose.service=frontend --format '{{.ID}}')
+  docker_ps+=(--filter label=com.docker.compose.service=frontend --format '{{.ID}}')
 
-if [[ -z "$production_container" || -z "$production_project" ]]; then
-  echo "Running production Compose project could not be identified." >&2
+  while IFS= read -r container_id; do
+    config_files=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}' "$container_id")
+    if [[ "$config_files" == *docker-compose.production.yml* ]]; then
+      docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id"
+    fi
+  done < <("${docker_ps[@]}")
+}
+
+mapfile -t production_candidates < <(production_projects 0 | sed '/^$/d' | sort -u)
+if (("${#production_candidates[@]}" == 0)); then
+  mapfile -t production_candidates < <(production_projects 1 | sed '/^$/d' | sort -u)
+  if (("${#production_candidates[@]}" == 1)); then
+    echo "Recovering stopped production Compose project: ${production_candidates[0]}"
+  fi
+fi
+
+if (("${#production_candidates[@]}" != 1)); then
+  echo "Exactly one production Compose project is required; found ${#production_candidates[@]}." >&2
   exit 1
 fi
+production_project=${production_candidates[0]}
 
 release_root="/opt/iron-house-os-releases/$release_sha"
 if [[ ! -d "$release_root/.git" ]]; then
