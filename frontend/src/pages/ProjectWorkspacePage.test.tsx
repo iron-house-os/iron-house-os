@@ -241,6 +241,26 @@ describe("ProjectWorkspacePage", () => {
     expect(fetchMock.mock.calls.some(([url]) => url.toString().includes("/launch-dashboard"))).toBe(false);
   });
 
+  it("keeps the awarded project selected when optional launch controls fail", async () => {
+    const fetchMock = mockProjectApi(awardedProject, awardedWorkspace, awardedStartChecklist);
+    const originalImplementation = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, options?: RequestInit) => {
+      if (input.toString().endsWith(`/projects/${awardedProject.id}/launch-dashboard`)) {
+        return jsonResponse({ detail: "Launch dashboard unavailable" }, 500);
+      }
+      if (!originalImplementation) throw new Error("Project API mock is unavailable");
+      return originalImplementation(input, options);
+    });
+
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    expect(await screen.findByRole("heading", { name: awardedProject.name })).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`${awardedProject.name} is selected, but its launch dashboard could not be loaded`, "i"))).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Awarded project workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Awarded job start checklist" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Job launch dashboard" })).not.toBeInTheDocument();
+  });
+
   it("shows the stable prepared workspace for an awarded job", async () => {
     mockProjectApi(awardedProject, awardedWorkspace);
 
