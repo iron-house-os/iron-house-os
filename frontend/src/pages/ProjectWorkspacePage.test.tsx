@@ -148,6 +148,7 @@ describe("ProjectWorkspacePage", () => {
     renderWorkspace("/projects");
 
     expect(await screen.findByText(project.name)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Filters" }).closest(".order-last")).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Ready" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Docs" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Job #" })).toBeInTheDocument();
@@ -232,6 +233,7 @@ describe("ProjectWorkspacePage", () => {
     renderWorkspace(`/projects/${project.id}`);
 
     expect(await screen.findByRole("heading", { name: project.name })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Project Filters" }).closest(".order-last")).not.toBeNull();
     expect(screen.getByText("City of Surrey - Surrey")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Awarded project workspace" })).not.toBeInTheDocument();
