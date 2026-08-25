@@ -3,7 +3,9 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import func, select
 
+from app.models.project import Project
 from app.schemas.chat_invoice_intake import (
     ChatInvoiceIntakeRecord,
     ChatInvoiceIntakeRequest,
@@ -68,33 +70,41 @@ def test_chat_invoice_intake_is_idempotent_for_identical_retry(db_session) -> No
     payload = ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=_invoice())])
 
     first = import_chat_invoices(db_session, payload, _user())
+    project_count_after_first = db_session.scalar(select(func.count()).select_from(Project))
     second = import_chat_invoices(db_session, payload, _user())
+    project_count_after_second = db_session.scalar(select(func.count()).select_from(Project))
 
     assert first.items[0].status == "created"
     assert second.items[0].status == "reused"
     assert second.reused_count == 1
     assert second.items[0].project_created is False
     assert second.items[0].project_id == first.items[0].project_id
+    assert project_count_after_second == project_count_after_first
 
 
-def test_chat_invoice_intake_reports_conflicting_invoice_number(db_session) -> None:
+def test_chat_invoice_intake_reports_conflicting_invoice_without_project_side_effect(db_session) -> None:
     import_chat_invoices(
         db_session,
         ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=_invoice())]),
         _user(),
     )
+    project_count_before_conflict = db_session.scalar(select(func.count()).select_from(Project))
 
+    conflicting = _invoice(unit_price="106.00").model_copy(
+        update={"project_name": "Different Project", "site_address": "999 Other Road"}
+    )
     result = import_chat_invoices(
         db_session,
-        ChatInvoiceIntakeRequest(
-            items=[ChatInvoiceIntakeRecord(invoice=_invoice(unit_price="106.00"))]
-        ),
+        ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=conflicting)]),
         _user(),
     )
+    project_count_after_conflict = db_session.scalar(select(func.count()).select_from(Project))
 
     assert result.conflict_count == 1
     assert result.items[0].status == "conflict"
+    assert result.items[0].project_created is False
     assert "different data" in (result.items[0].detail or "")
+    assert project_count_after_conflict == project_count_before_conflict
 
 
 def test_chat_invoice_intake_reuses_matching_project_for_new_invoice(db_session) -> None:
@@ -114,6 +124,28 @@ def test_chat_invoice_intake_reuses_matching_project_for_new_invoice(db_session)
     assert second.items[0].status == "created"
     assert second.items[0].project_created is False
     assert second.items[0].project_id == first.items[0].project_id
+
+
+def test_chat_invoice_intake_strips_project_creation_fields(db_session) -> None:
+    spaced = _invoice().model_copy(
+        update={
+            "project_name": "  Aria  ",
+            "site_address": "  13575 Commerce Parkway, Richmond, BC V6V 2L1  ",
+            "customer_name": "  Universal Construction  ",
+        }
+    )
+
+    result = import_chat_invoices(
+        db_session,
+        ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=spaced)]),
+        _user(),
+    )
+    project = db_session.get(Project, result.items[0].project_id)
+
+    assert project is not None
+    assert project.name == "Aria"
+    assert project.project_address == "13575 Commerce Parkway, Richmond, BC V6V 2L1"
+    assert project.client_owner == "Universal Construction"
 
 
 def test_chat_invoice_intake_requires_management(db_session) -> None:
