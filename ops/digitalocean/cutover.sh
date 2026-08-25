@@ -188,6 +188,7 @@ if not ports or any(port.get("host_ip") != "127.0.0.1" for port in ports):
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="pre-cutover-$stamp" \
+IHOS_BACKUP_LOCK_WAIT_SECONDS=300 \
 scripts/scheduled_backup.sh
 certbot certonly \
   --webroot \

@@ -139,7 +139,7 @@ def test_scheduled_backup_supports_only_a_bounded_lock_wait() -> None:
     assert "after waiting ${backup_lock_wait_seconds}s" in backup
 
 
-def test_cutover_waits_for_post_cutover_backup_only() -> None:
+def test_cutover_waits_for_both_mandatory_recovery_backups() -> None:
     cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
 
     pre_start = cutover.index("IHOS_BACKUP_NAME=\"pre-cutover-$stamp\"")
@@ -150,9 +150,11 @@ def test_cutover_waits_for_post_cutover_backup_only() -> None:
     pre_backup = cutover[pre_start:maintenance_start]
     post_backup = cutover[post_start:wrappers_start]
 
-    assert "IHOS_BACKUP_LOCK_WAIT_SECONDS" not in pre_backup
+    assert "IHOS_BACKUP_LOCK_WAIT_SECONDS=300" in pre_backup
+    assert "scripts/scheduled_backup.sh" in pre_backup
     assert "IHOS_BACKUP_LOCK_WAIT_SECONDS=300" in post_backup
     assert "scripts/scheduled_backup.sh" in post_backup
+    assert cutover.count("IHOS_BACKUP_LOCK_WAIT_SECONDS=300") == 2
 
 
 def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
