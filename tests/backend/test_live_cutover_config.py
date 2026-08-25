@@ -112,11 +112,11 @@ def test_cutover_recreates_compose_stack_without_removing_volumes() -> None:
     cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
 
     start = cutover.index("recreate_production_stack()")
-    end = cutover.index('\n"\${compose[@]}" config --format json', start)
+    end = cutover.index('\n"${compose[@]}" config --format json', start)
     recreate = cutover[start:end]
 
-    compose_down = '"\${compose[@]}" down --remove-orphans --timeout 30'
-    compose_up = '"\${compose[@]}" up -d --no-build --remove-orphans'
+    compose_down = '"${compose[@]}" down --remove-orphans --timeout 30'
+    compose_up = '"${compose[@]}" up -d --no-build --remove-orphans'
 
     assert "for attempt in 1 2" in recreate
     assert compose_down in recreate
