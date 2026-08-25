@@ -53,6 +53,109 @@ class BundleValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "totals mismatch"):
             MODULE.validate_bundle(bundle)
 
+    def test_line_amounts_are_rounded_before_subtotal(self):
+        payload = {
+            "gst_rate": "5.00",
+            "line_items": [
+                {"quantity": "0.333", "unit_price": "1.00"},
+                {"quantity": "0.333", "unit_price": "1.00"},
+                {"quantity": "0.333", "unit_price": "1.00"},
+            ],
+        }
+        subtotal, gst, total = MODULE.quote_totals(payload)
+        self.assertEqual(str(subtotal), "0.99")
+        self.assertEqual(str(gst), "0.05")
+        self.assertEqual(str(total), "1.04")
+
+    def test_dates_required_before_any_import_write(self):
+        bundle = valid_bundle()
+        del bundle["quotes"][0]["payload"]["quote_date"]
+        with self.assertRaisesRegex(ValueError, "quote_date is required"):
+            MODULE.validate_bundle(bundle)
+
+
+class FakeClient:
+    def __init__(self):
+        self.projects = []
+        self.quotes = []
+        self.invoices = []
+        self.logged_in = 0
+        self.post_count = 0
+
+    def login(self):
+        self.logged_in += 1
+
+    def request(self, path, method="GET", body=None, expected=(200,)):
+        if method == "GET":
+            if path == "/api/v1/projects":
+                return {"items": copy.deepcopy(self.projects)}
+            if path == "/api/v1/customer-quotes":
+                return {"items": copy.deepcopy(self.quotes)}
+            if path == "/api/v1/finance/customer-invoices":
+                return {"items": copy.deepcopy(self.invoices)}
+            raise AssertionError(path)
+
+        self.post_count += 1
+        if path == "/api/v1/projects":
+            record = copy.deepcopy(body)
+            record.update({"id": "project-1", "project_number": None})
+            self.projects.append(record)
+            return copy.deepcopy(record)
+        if path == "/api/v1/customer-quotes":
+            subtotal, gst, total = MODULE.quote_totals(body)
+            record = copy.deepcopy(body)
+            record.update({
+                "id": f"quote-{len(self.quotes) + 1}",
+                "quote_number": f"Q-2026-{len(self.quotes) + 1:03d}",
+                "subtotal": str(subtotal),
+                "gst": str(gst),
+                "total": str(total),
+                "status": "draft",
+                "issue_status": "draft",
+            })
+            self.quotes.append(record)
+            return copy.deepcopy(record)
+        if path == "/api/v1/finance/customer-invoices":
+            subtotal, gst, total = MODULE.invoice_totals(body)
+            record = copy.deepcopy(body)
+            record.update({
+                "id": f"invoice-{len(self.invoices) + 1}",
+                "subtotal": str(subtotal),
+                "gst": str(gst),
+                "total": str(total),
+                "status": "draft",
+            })
+            self.invoices.append(record)
+            return copy.deepcopy(record)
+        raise AssertionError(path)
+
+
+class ImportExecutionTests(unittest.TestCase):
+    def test_import_is_idempotent_with_api_verification(self):
+        client = FakeClient()
+        first = MODULE.import_bundle(valid_bundle(), client)
+        self.assertEqual(first["project"]["operation"], "created")
+        self.assertTrue(all(item["operation"] == "created" for item in first["quotes"]))
+        self.assertEqual(first["invoices"][0]["operation"], "created")
+        self.assertEqual(client.post_count, 5)
+
+        second = MODULE.import_bundle(valid_bundle(), client)
+        self.assertEqual(second["project"]["operation"], "verified_existing")
+        self.assertTrue(all(item["operation"] == "verified_existing" for item in second["quotes"]))
+        self.assertEqual(second["invoices"][0]["operation"], "verified_existing")
+        self.assertEqual(client.post_count, 5)
+        self.assertEqual(client.logged_in, 2)
+
+    def test_same_name_address_without_key_fails_before_write(self):
+        client = FakeClient()
+        project = copy.deepcopy(valid_bundle()["project"]["payload"])
+        project["id"] = "conflict"
+        project["metadata"] = {}
+        client.projects.append(project)
+        with self.assertRaisesRegex(RuntimeError, "manual review required"):
+            MODULE.import_bundle(valid_bundle(), client)
+        self.assertEqual(client.post_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
