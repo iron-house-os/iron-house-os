@@ -8,12 +8,14 @@ on:
       - "ops/scripts/production_awarded_invoice_import.py"
       - "ops/scripts/tests/test_production_awarded_invoice_import.py"
       - "ops/production-awarded-invoice-imports/*.json"
-  push:
-    branches: [main]
-    paths:
-      - "ops/production-awarded-invoice-imports/*.json"
+      - "ops/digitalocean/production-awarded-invoice-import-wrapper.sh"
+      - "ops/digitalocean/cutover.sh"
   workflow_dispatch:
     inputs:
+      release_sha:
+        description: "Exact approved release SHA currently deployed to production"
+        required: true
+        type: string
       import_file:
         description: "Approved bundle under ops/production-awarded-invoice-imports/"
         required: true
@@ -30,17 +32,19 @@ concurrency:
 jobs:
   validate:
     name: Validate awarded-job import bundle
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.release_sha || github.sha }}
           persist-credentials: false
       - name: Run disposable validation
         run: |
           set -euo pipefail
           python3 -m unittest ops.scripts.tests.test_production_awarded_invoice_import -v
+          bash -n ops/digitalocean/production-awarded-invoice-import-wrapper.sh ops/digitalocean/cutover.sh
           shopt -s nullglob
           bundles=(ops/production-awarded-invoice-imports/*.json)
           test ${#bundles[@]} -gt 0
@@ -50,40 +54,41 @@ jobs:
 
   import-production:
     name: Import and verify owner-approved awarded job
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validate
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out approved main revision without credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.release_sha }}
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 0
+
       - name: Resolve approved import bundle
         id: bundle
         env:
           DISPATCH_FILE: ${{ inputs.import_file }}
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            import_file="$DISPATCH_FILE"
-          else
-            mapfile -t changed < <(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- 'ops/production-awarded-invoice-imports/*.json')
-            if [[ ${#changed[@]} -ne 1 ]]; then
-              echo "Expected exactly one changed import bundle; found ${#changed[@]}." >&2
-              exit 1
-            fi
-            import_file="${changed[0]}"
-          fi
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          import_file="$DISPATCH_FILE"
           if [[ ! "$import_file" =~ ^ops/production-awarded-invoice-imports/[A-Za-z0-9._-]+\.json$ ]]; then
-            echo "Invalid import path." >&2
+            echo "Import file must be a direct JSON child of ops/production-awarded-invoice-imports/." >&2
             exit 1
           fi
+          test -f "$import_file"
           issue_number="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["issue_number"])' "$import_file")"
           echo "import_file=$import_file" >> "$GITHUB_OUTPUT"
           echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Revalidate on protected runner
         env:
           IMPORT_FILE: ${{ steps.bundle.outputs.import_file }}
@@ -91,20 +96,27 @@ jobs:
           set -euo pipefail
           python3 -m unittest ops.scripts.tests.test_production_awarded_invoice_import -v
           python3 ops/scripts/production_awarded_invoice_import.py validate --input "$IMPORT_FILE"
-      - name: Import through authenticated IHOS loopback API
-        env:
-          IMPORT_FILE: ${{ steps.bundle.outputs.import_file }}
-          EVIDENCE_FILE: production-awarded-invoice-import-evidence.json
+
+      - name: Verify the installed least-privilege import wrapper
         run: |
           set -euo pipefail
-          if [[ ! -r /etc/iron-house-os/production.env ]]; then
-            echo "Production environment is not readable by the restricted runner." >&2
-            exit 1
-          fi
-          set -a
-          source /etc/iron-house-os/production.env
-          set +a
-          python3 ops/scripts/production_awarded_invoice_import.py import --input "$IMPORT_FILE" --evidence "$EVIDENCE_FILE"
+          installed=/usr/local/sbin/ihos-production-awarded-invoice-import
+          trusted="$GITHUB_WORKSPACE/ops/digitalocean/production-awarded-invoice-import-wrapper.sh"
+          [[ "$(stat -c '%U:%G:%a' "$installed")" == "root:root:755" ]]
+          cmp --silent "$trusted" "$installed"
+
+      - name: Import through the restricted root wrapper and IHOS loopback API
+        env:
+          IMPORT_FILE: ${{ steps.bundle.outputs.import_file }}
+          RELEASE_SHA: ${{ steps.bundle.outputs.release_sha }}
+          EVIDENCE_FILE: ${{ runner.temp }}/production-awarded-invoice-import-evidence.json
+        run: |
+          set -euo pipefail
+          sudo -n /usr/local/sbin/ihos-production-awarded-invoice-import \
+            --release "$RELEASE_SHA" \
+            --bundle "$IMPORT_FILE" \
+            --evidence "$EVIDENCE_FILE"
+
       - name: Publish verified evidence to linked issue
         if: success()
         env:
@@ -115,15 +127,16 @@ jobs:
             echo "### Production awarded-job invoice import verified"
             echo
             echo '~~~json'
-            cat production-awarded-invoice-import-evidence.json
+            cat "${{ runner.temp }}/production-awarded-invoice-import-evidence.json"
             echo '~~~'
           } > "$RUNNER_TEMP/import-comment.md"
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/import-comment.md"
+
       - name: Upload immutable import evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: production-awarded-invoice-import-${{ github.run_id }}
-          path: production-awarded-invoice-import-evidence.json
+          path: ${{ runner.temp }}/production-awarded-invoice-import-evidence.json
           if-no-files-found: warn
           retention-days: 90
