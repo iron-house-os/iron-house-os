@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "issue_number": 314,
+  "import_key": "coho-blueberry-vale-bennett-2026-08-25",
+  "requested_at": "2026-08-25",
+  "project": {
+    "import_key": "coho-blueberry-vale-bennett-2026-08-25",
+    "payload": {
+      "name": "Blueberry Vale - Bennett Road Pavement Restoration",
+      "client_owner": "COHO Management Services Society - Blueberry Vale",
+      "municipality": "Richmond",
+      "project_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
+      "contract_value": 0,
+      "status": "opportunity",
+      "notes": "Draft estimating and quoting intake only. Three customer quotes are retained separately. Options A, B and C in quote BV-20260824-O apply to the same 4 m x 2 m area and are mutually exclusive. No award, authorization or job number is implied.",
+      "metadata": {
+        "source_import_key": "coho-blueberry-vale-bennett-2026-08-25",
+        "source_issue": 314,
+        "customer_contact": {
+          "name": "Noel Lanto",
+          "title": "Management and Maintenance Coordinator",
+          "email": "nlanto@coho.bc.ca",
+          "phone": "604-879-5771 ext. 187",
+          "fax": "604-879-8792"
+        },
+        "billing_address": "200-2955 Virtual Way, Vancouver, BC V5M 4X6",
+        "website": "www.coho.bc.ca",
+        "estimate_basis": {
+          "target_true_profit_margin_percent": 35,
+          "sell_formula": "direct cost / (1 - 35%)",
+          "asphalt": {
+            "direct_cost": 11150,
+            "asphalt_material": "8 tonnes at $200/tonne",
+            "concrete_tie_in_allowance": 2000,
+            "rebar_and_dowels_allowance": 650,
+            "labour": "24 crew-hours at $75/hour",
+            "subgrade_allowance": 1500,
+            "risk_reserve": 750,
+            "warranty_reserve": 500
+          },
+          "concrete": {
+            "direct_cost": 27200,
+            "concrete_supply_allowance": 2000,
+            "rebar_and_dowels_allowance": 3250,
+            "labour": "96 crew-hours at $75/hour",
+            "placement_and_finishing_allowance": 3500,
+            "subgrade_allowance": 4750,
+            "risk_reserve": 1500,
+            "warranty_reserve": 1000
+          }
+        },
+        "site_address_aliases": [
+          "61-8640 Bennet Rd, Richmond, BC V6Y 3T9",
+          "61-8640 Bennett Rd, Richmond, BC V6Y 3T9"
+        ],
+        "source_artifacts": [
+          {
+            "type": "quote_pdf",
+            "external_reference": "BV-20260824-A",
+            "drive_file_id": "1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt",
+            "url": "https://drive.google.com/file/d/1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt/view?usp=drivesdk"
+          },
+          {
+            "type": "quote_pdf",
+            "external_reference": "BV-20260824-C",
+            "drive_file_id": "15KabOkLbiFYBlSDyOKJUvspOfl-5gYqp",
+            "url": "https://drive.google.com/file/d/15KabOkLbiFYBlSDyOKJUvspOfl-5gYqp/view?usp=drivesdk"
+          },
+          {
+            "type": "quote_pdf",
+            "external_reference": "BV-20260824-O",
+            "drive_file_id": "1iCAhFHBUv_yu8AC98pceJwWAykThcKX8",
+            "url": "https://drive.google.com/file/d/1iCAhFHBUv_yu8AC98pceJwWAykThcKX8/view?usp=drivesdk"
+          },
+          {
+            "type": "invoice_pdf",
+            "external_reference": "BEN-2026-0824-C",
+            "drive_file_id": "1rPGft2h9naCZXyb3cQhj7JVmXs0DhRtV",
+            "url": "https://drive.google.com/file/d/1rPGft2h9naCZXyb3cQhj7JVmXs0DhRtV/view?usp=drivesdk"
+          }
+        ]
+      }
+    }
+  },
+  "quotes": [
+    {
+      "external_reference": "BV-20260824-A",
+      "expected_subtotal": "17153.85",
+      "expected_gst": "857.69",
+      "expected_total": "18011.54",
+      "payload": {
+        "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
+        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_email": "nlanto@coho.bc.ca",
+        "customer_phone": "604-879-5771 ext. 187",
+        "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
+        "scope_summary": "Sawcut and remove failed pavement; prepare base; supply, place and compact 2 in asphalt; clean up. Approx. 62 m2.",
+        "line_items": [
+          {
+            "description": "Asphalt restoration - sawcut and remove failed pavement, prepare base, supply/place/compact 2 in asphalt, and clean up; approx. 62 m2",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "17153.85"
+          }
+        ],
+        "assumptions": [
+          "Price includes the described asphalt restoration scope and normal site access.",
+          "Final schedule, access and asphalt availability are to be confirmed before mobilization."
+        ],
+        "exclusions": [
+          "Hidden or failed subgrade, unsuitable material, buried obstructions or work beyond included allowances requires written change authorization.",
+          "Warranty applies to workmanship only and excludes failure caused by existing or concealed subgrade, drainage, structures or work by others."
+        ],
+        "gst_rate": "5.00",
+        "quote_date": "2026-08-24",
+        "valid_until": "2026-09-23",
+        "notes": "External quote reference BV-20260824-A. Drive PDF ID 1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt. [IHOS_IMPORT_REF:BV-20260824-A]"
+      }
+    },
+    {
+      "external_reference": "BV-20260824-C",
+      "expected_subtotal": "41846.15",
+      "expected_gst": "2092.31",
+      "expected_total": "43938.46",
+      "payload": {
+        "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
+        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_email": "nlanto@coho.bc.ca",
+        "customer_phone": "604-879-5771 ext. 187",
+        "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
+        "scope_summary": "Sawcut and remove existing concrete; prepare base; form, reinforce, place and finish 4 in concrete; clean up. Approx. 108.6 m2.",
+        "line_items": [
+          {
+            "description": "Concrete pull-and-pour - removal, base preparation, forming, reinforcement, placement and finishing of 4 in concrete; approx. 108.6 m2",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "41846.15"
+          }
+        ],
+        "assumptions": [
+          "Price is based on approximately 108.6 m2 of 4 in concrete and the described pull-and-pour scope.",
+          "Concrete mix, reinforcing detail, pump requirements, construction joints, finishing requirements and schedule are subject to final confirmation."
+        ],
+        "exclusions": [
+          "Hidden or failed subgrade, buried obstructions or work beyond included allowances requires written change authorization.",
+          "Warranty applies to workmanship only and excludes movement or failure caused by existing or concealed conditions."
+        ],
+        "gst_rate": "5.00",
+        "quote_date": "2026-08-24",
+        "valid_until": "2026-09-23",
+        "notes": "External quote reference BV-20260824-C. Drive PDF ID 15KabOkLbiFYBlSDyOKJUvspOfl-5gYqp. [IHOS_IMPORT_REF:BV-20260824-C]"
+      }
+    },
+    {
+      "external_reference": "BV-20260824-O",
+      "expected_subtotal": "9769.23",
+      "expected_gst": "488.46",
+      "expected_total": "10257.69",
+      "payload": {
+        "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
+        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_email": "nlanto@coho.bc.ca",
+        "customer_phone": "604-879-5771 ext. 187",
+        "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
+        "scope_summary": "Base scope: remove concrete, prepare and place asphalt at the 17 m x 1.2 m garage skirt and 8 m x 1.2 m walkway skirt, total 30.0 m2. One mutually exclusive alternative may be selected for the same 4 m x 2 m paver area.",
+        "line_items": [
+          {
+            "description": "BASE ONLY - remove concrete and prepare/place asphalt at garage and walkway skirts; approx. 30.0 m2",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "9769.23"
+          }
+        ],
+        "assumptions": [
+          "Option A: pull pavers, prepare base, place and compact asphalt at the 4 m x 2 m area - $3,800.00 before GST.",
+          "Option B: carefully pull pavers, re-prepare, align, cut and reinstall pavers at the same area - $7,230.77 before GST.",
+          "Option C: pull pavers, prepare, form, reinforce, place and finish concrete at the same area - $9,846.15 before GST.",
+          "Existing pavers are assumed reusable; replacement pavers beyond the included allowance are extra."
+        ],
+        "exclusions": [
+          "Options A, B and C are mutually exclusive alternatives for the same 4 m x 2 m area and are excluded from the calculated base total until the customer selects one.",
+          "Hidden or failed subgrade, buried obstructions or work beyond the described allowances requires written change authorization."
+        ],
+        "gst_rate": "5.00",
+        "quote_date": "2026-08-24",
+        "valid_until": "2026-09-23",
+        "notes": "Base scope is priced separately. Options A, B and C are alternatives for the same location and must not be added together. GST applies to the base plus the one selected option. External quote reference BV-20260824-O. Drive PDF ID 1iCAhFHBUv_yu8AC98pceJwWAykThcKX8. [IHOS_IMPORT_REF:BV-20260824-O]"
+      }
+    }
+  ],
+  "invoices": [
+    {
+      "external_reference": "BEN-2026-0824-C",
+      "project_match": {
+        "source_quote_number": "BEN-CQ-2026-0818-C"
+      },
+      "expected_subtotal": "2750.00",
+      "expected_gst": "137.50",
+      "expected_total": "2887.50",
+      "payload": {
+        "invoice_number": "BEN-2026-0824-C",
+        "project_name": "Bennett Road - Option 3 Concrete Placement",
+        "site_address": "8640 Bennett Road, Unit 10, Richmond, BC V6Y 3T9",
+        "customer_name": "COHO Management Services Society",
+        "customer_address": "200-2955 Virtual Way, Vancouver, BC V5M 4X6",
+        "customer_phone": "604-879-5771 ext. 187",
+        "invoice_date": "2026-08-24",
+        "due_date": "2026-09-23",
+        "terms": "Net 30",
+        "gst_rate": "5.00",
+        "line_items": [
+          {
+            "description": "Option 3 - concrete placement and finishing in one continuous placement; work area fully ready by others; excavation, backfill, base preparation and forming by others. Source quote BEN-CQ-2026-0818-C.",
+            "quantity": "1",
+            "unit_price": "2750.00"
+          }
+        ]
+      }
+    }
+  ]
+}
