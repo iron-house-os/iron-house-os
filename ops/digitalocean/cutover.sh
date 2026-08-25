@@ -269,6 +269,7 @@ python scripts/release_smoke.py \
   --full
 IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="post-cutover-$stamp" \
+IHOS_BACKUP_LOCK_WAIT_SECONDS=300 \
 scripts/scheduled_backup.sh
 install_production_business_import_wrapper
 install_production_awarded_invoice_import_wrapper

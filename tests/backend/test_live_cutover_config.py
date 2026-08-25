@@ -128,6 +128,33 @@ def test_cutover_recreates_compose_stack_without_removing_volumes() -> None:
     assert "--volumes" not in recreate
     assert " down -v" not in recreate
 
+def test_scheduled_backup_supports_only_a_bounded_lock_wait() -> None:
+    backup = (ROOT / "scripts/scheduled_backup.sh").read_text()
+
+    assert "backup_lock_wait_seconds=${IHOS_BACKUP_LOCK_WAIT_SECONDS:-0}" in backup
+    assert '"$backup_lock_wait_seconds" =~ ^[0-9]+$' in backup
+    assert "10#$backup_lock_wait_seconds > 600" in backup
+    assert 'flock --wait "$backup_lock_wait_seconds" 9' in backup
+    assert "IHOS_BACKUP_LOCK_WAIT_SECONDS must be an integer from 0 to 600." in backup
+    assert "after waiting ${backup_lock_wait_seconds}s" in backup
+
+
+def test_cutover_waits_for_post_cutover_backup_only() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+
+    pre_start = cutover.index("IHOS_BACKUP_NAME=\"pre-cutover-$stamp\"")
+    maintenance_start = cutover.index("gateway_config=")
+    post_start = cutover.index("IHOS_BACKUP_NAME=\"post-cutover-$stamp\"")
+    wrappers_start = cutover.index("install_production_business_import_wrapper", post_start)
+
+    pre_backup = cutover[pre_start:maintenance_start]
+    post_backup = cutover[post_start:wrappers_start]
+
+    assert "IHOS_BACKUP_LOCK_WAIT_SECONDS" not in pre_backup
+    assert "IHOS_BACKUP_LOCK_WAIT_SECONDS=300" in post_backup
+    assert "scripts/scheduled_backup.sh" in post_backup
+
+
 def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
     workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text()
 
