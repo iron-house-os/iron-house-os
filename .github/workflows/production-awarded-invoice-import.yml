@@ -1,0 +1,129 @@
+name: Validate and import approved awarded job invoice
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-awarded-invoice-import.yml"
+      - "ops/scripts/production_awarded_invoice_import.py"
+      - "ops/scripts/tests/test_production_awarded_invoice_import.py"
+      - "ops/production-awarded-invoice-imports/*.json"
+  push:
+    branches: [main]
+    paths:
+      - "ops/production-awarded-invoice-imports/*.json"
+  workflow_dispatch:
+    inputs:
+      import_file:
+        description: "Approved bundle under ops/production-awarded-invoice-imports/"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: iron-house-os-production-awarded-invoice-import
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate awarded-job import bundle
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Run disposable validation
+        run: |
+          set -euo pipefail
+          python3 -m unittest ops.scripts.tests.test_production_awarded_invoice_import -v
+          shopt -s nullglob
+          bundles=(ops/production-awarded-invoice-imports/*.json)
+          test ${#bundles[@]} -gt 0
+          for bundle in "${bundles[@]}"; do
+            python3 ops/scripts/production_awarded_invoice_import.py validate --input "$bundle"
+          done
+
+  import-production:
+    name: Import and verify owner-approved awarded job
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, ihos-production]
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Resolve approved import bundle
+        id: bundle
+        env:
+          DISPATCH_FILE: ${{ inputs.import_file }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            import_file="$DISPATCH_FILE"
+          else
+            mapfile -t changed < <(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- 'ops/production-awarded-invoice-imports/*.json')
+            if [[ ${#changed[@]} -ne 1 ]]; then
+              echo "Expected exactly one changed import bundle; found ${#changed[@]}." >&2
+              exit 1
+            fi
+            import_file="${changed[0]}"
+          fi
+          if [[ ! "$import_file" =~ ^ops/production-awarded-invoice-imports/[A-Za-z0-9._-]+\.json$ ]]; then
+            echo "Invalid import path." >&2
+            exit 1
+          fi
+          issue_number="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["issue_number"])' "$import_file")"
+          echo "import_file=$import_file" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+      - name: Revalidate on protected runner
+        env:
+          IMPORT_FILE: ${{ steps.bundle.outputs.import_file }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest ops.scripts.tests.test_production_awarded_invoice_import -v
+          python3 ops/scripts/production_awarded_invoice_import.py validate --input "$IMPORT_FILE"
+      - name: Import through authenticated IHOS loopback API
+        env:
+          IMPORT_FILE: ${{ steps.bundle.outputs.import_file }}
+          EVIDENCE_FILE: production-awarded-invoice-import-evidence.json
+        run: |
+          set -euo pipefail
+          if [[ ! -r /etc/iron-house-os/production.env ]]; then
+            echo "Production environment is not readable by the restricted runner." >&2
+            exit 1
+          fi
+          set -a
+          source /etc/iron-house-os/production.env
+          set +a
+          python3 ops/scripts/production_awarded_invoice_import.py import --input "$IMPORT_FILE" --evidence "$EVIDENCE_FILE"
+      - name: Publish verified evidence to linked issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ steps.bundle.outputs.issue_number }}
+        run: |
+          {
+            echo "### Production awarded-job invoice import verified"
+            echo
+            echo '~~~json'
+            cat production-awarded-invoice-import-evidence.json
+            echo '~~~'
+          } > "$RUNNER_TEMP/import-comment.md"
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/import-comment.md"
+      - name: Upload immutable import evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-awarded-invoice-import-${{ github.run_id }}
+          path: production-awarded-invoice-import-evidence.json
+          if-no-files-found: warn
+          retention-days: 90

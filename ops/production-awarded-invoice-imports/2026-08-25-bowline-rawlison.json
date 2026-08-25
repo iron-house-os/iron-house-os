@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "issue_number": 322,
+  "import_key": "bowline-rawlison-2026-08-25",
+  "requested_at": "2026-08-25",
+  "project": {
+    "payload": {
+      "name": "Rawlison Cres Common Excavation",
+      "client_owner": "Bowline Construction",
+      "municipality": "Langley",
+      "project_address": "Rawlison Cres, Langley, BC",
+      "contract_value": 10738.77,
+      "status": "awarded",
+      "notes": "Historical completed-work intake from source invoice BOW-2026-0811. Import creates the awarded IHOS job so the system allocates the permanent job number; invoice remains draft pending normal review/issue controls.",
+      "metadata": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_issue": 322,
+        "source_invoice_number": "BOW-2026-0811",
+        "historical_completed_work": true,
+        "billing_address": "20526 50A Avenue, Langley, BC V3A 6Z2",
+        "customer_phone": "778-808-3725",
+        "total_hours": 43.5,
+        "source_file_name": "Bowline_Rawlins_Crescent_Invoice_updated_fixed.pdf"
+      }
+    }
+  },
+  "invoice": {
+    "external_reference": "BOW-2026-0811",
+    "payload": {
+      "invoice_number": "BOW-2026-0811",
+      "project_name": "Rawlison Cres Common Excavation",
+      "site_address": "Rawlison Cres, Langley, BC",
+      "customer_name": "Bowline Construction",
+      "customer_address": "20526 50A Avenue, Langley, BC V3A 6Z2",
+      "customer_phone": "778-808-3725",
+      "invoice_date": "2026-08-15",
+      "due_date": "2026-09-14",
+      "terms": "Net 30",
+      "gst_rate": "5.00",
+      "line_items": [
+        {"description": "Common excavation - Tuesday, August 11, 2026", "quantity": "12.5", "unit_price": "210.00"},
+        {"description": "Common excavation - Wednesday, August 12, 2026", "quantity": "12.0", "unit_price": "210.00"},
+        {"description": "Common excavation - Thursday, August 13, 2026", "quantity": "9.0", "unit_price": "210.00"},
+        {"description": "Common excavation - Friday, August 14, 2026", "quantity": "6.0", "unit_price": "210.00"},
+        {"description": "Mobilize In", "quantity": "1", "unit_price": "706.20"},
+        {"description": "Mobilize Out", "quantity": "1", "unit_price": "706.20"},
+        {"description": "Mini excavator footings and plumbing", "quantity": "4.0", "unit_price": "130.00"}
+      ]
+    },
+    "expected_subtotal": "10227.40",
+    "expected_gst": "511.37",
+    "expected_total": "10738.77"
+  }
+}
