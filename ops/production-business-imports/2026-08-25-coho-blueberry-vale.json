@@ -20,9 +20,35 @@
           "name": "Noel Lanto",
           "title": "Management and Maintenance Coordinator",
           "email": "nlanto@coho.bc.ca",
-          "phone": "604-879-5771 ext. 187"
+          "phone": "604-879-5771 ext. 187",
+          "fax": "604-879-8792"
         },
         "billing_address": "200-2955 Virtual Way, Vancouver, BC V5M 4X6",
+        "website": "www.coho.bc.ca",
+        "estimate_basis": {
+          "target_true_profit_margin_percent": 35,
+          "sell_formula": "direct cost / (1 - 35%)",
+          "asphalt": {
+            "direct_cost": 11150,
+            "asphalt_material": "8 tonnes at $200/tonne",
+            "concrete_tie_in_allowance": 2000,
+            "rebar_and_dowels_allowance": 650,
+            "labour": "24 crew-hours at $75/hour",
+            "subgrade_allowance": 1500,
+            "risk_reserve": 750,
+            "warranty_reserve": 500
+          },
+          "concrete": {
+            "direct_cost": 27200,
+            "concrete_supply_allowance": 2000,
+            "rebar_and_dowels_allowance": 3250,
+            "labour": "96 crew-hours at $75/hour",
+            "placement_and_finishing_allowance": 3500,
+            "subgrade_allowance": 4750,
+            "risk_reserve": 1500,
+            "warranty_reserve": 1000
+          }
+        },
         "site_address_aliases": [
           "61-8640 Bennet Rd, Richmond, BC V6Y 3T9",
           "61-8640 Bennett Rd, Richmond, BC V6Y 3T9"
