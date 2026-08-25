@@ -241,8 +241,22 @@ export function ProjectWorkspacePage() {
       {bulkDeleteResult ? <Notice tone="neutral" message={bulkDeleteResult} /> : null}
       {isLoading ? <Notice tone="neutral" message="Loading projects..." /> : null}
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <div className={["min-w-0 space-y-6", projectId ? "order-last xl:order-none" : ""].filter(Boolean).join(" ")}>
+      <div
+        className={[
+          "grid gap-6 xl:grid-cols-[420px_1fr]",
+          projectId ? "[@media(pointer:coarse)]:!grid-cols-1" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div
+          className={[
+            "min-w-0 space-y-6",
+            projectId ? "order-last xl:order-none [@media(pointer:coarse)]:!order-last" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <ProjectFilters
             status={statusFilter}
             search={searchFilter}
