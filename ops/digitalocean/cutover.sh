@@ -77,6 +77,29 @@ install_production_business_import_wrapper() {
 }
 
 
+install_production_awarded_invoice_import_wrapper() {
+  local wrapper_source="$repo_root/ops/digitalocean/production-awarded-invoice-import-wrapper.sh"
+  local wrapper_target=/usr/local/sbin/ihos-production-awarded-invoice-import
+  local sudoers_target=/etc/sudoers.d/iron-house-os-production-awarded-invoice-import
+  local sudoers_candidate
+
+  if [[ ! -f "$wrapper_source" ]]; then
+    echo "Approved release is missing the production awarded-invoice import wrapper." >&2
+    return 1
+  fi
+  bash -n "$wrapper_source"
+  sudoers_candidate=$(mktemp)
+  printf '%s\n' \
+    "ihos-runner ALL=(root) NOPASSWD: $wrapper_target *" \
+    >"$sudoers_candidate"
+  chmod 0440 "$sudoers_candidate"
+  visudo -cf "$sudoers_candidate" >/dev/null
+  install -o root -g root -m 0755 "$wrapper_source" "$wrapper_target"
+  install -o root -g root -m 0440 "$sudoers_candidate" "$sudoers_target"
+  rm -f "$sudoers_candidate"
+  visudo -cf "$sudoers_target" >/dev/null
+}
+
 cd "$repo_root"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "Refusing cutover from a dirty working tree." >&2
@@ -228,6 +251,7 @@ IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="post-cutover-$stamp" \
 scripts/scheduled_backup.sh
 install_production_business_import_wrapper
+install_production_awarded_invoice_import_wrapper
 
 acceptance=/var/lib/iron-house-os/operator-acceptance-$stamp.md
 cat >"$acceptance" <<EOF

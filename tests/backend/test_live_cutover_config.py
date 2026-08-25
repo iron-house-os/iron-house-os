@@ -122,3 +122,52 @@ def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
     assert 'release_id = payload.get("checks", {}).get("release_id")' in workflow
     assert "release_id != expected" in workflow
     assert workflow.count("--connect-timeout 5 --max-time 30") == 3
+
+
+def test_awarded_invoice_import_is_manual_and_exact_release_only() -> None:
+    workflow = (
+        ROOT / ".github/workflows/production-awarded-invoice-import.yml"
+    ).read_text()
+
+    assert "  push:" not in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "release_sha:" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "needs: validate" in workflow
+    assert "ref: ${{ inputs.release_sha }}" in workflow
+    assert '[[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]' in workflow
+    assert '[[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]' in workflow
+    assert 'git merge-base --is-ancestor "$RELEASE_SHA" origin/main' in workflow
+    assert "/etc/iron-house-os/production.env" not in workflow
+    assert (
+        "sudo -n /usr/local/sbin/ihos-production-awarded-invoice-import"
+        in workflow
+    )
+
+
+def test_cutover_installs_restricted_awarded_invoice_import_wrapper() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+    wrapper = (
+        ROOT / "ops/digitalocean/production-awarded-invoice-import-wrapper.sh"
+    ).read_text()
+
+    assert "install_production_awarded_invoice_import_wrapper" in cutover
+    assert (
+        "wrapper_target=/usr/local/sbin/ihos-production-awarded-invoice-import"
+        in cutover
+    )
+    assert (
+        "sudoers_target=/etc/sudoers.d/iron-house-os-production-awarded-invoice-import"
+        in cutover
+    )
+    assert "if ((EUID != 0))" in wrapper
+    assert 'hostname)" != "iron-house-os-prod-1"' in wrapper
+    assert "ops/production-awarded-invoice-imports/" in wrapper
+    assert "ops/scripts/production_awarded_invoice_import.py" in wrapper
+    assert 'release_root="/opt/iron-house-os-releases/$release_sha"' in wrapper
+    assert 'release_id != expected' in wrapper
+    assert 'environment_file=/etc/iron-house-os/production.env' in wrapper
+    assert "env -i" in wrapper
+    assert (
+        "/opt/iron-house-os-actions-runner/_work/_temp" in wrapper
+    )
