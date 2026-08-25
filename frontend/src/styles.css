@@ -40,18 +40,3 @@ a {
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 32px 32px;
 }
-
-/*
- * Landscape iPads can cross the desktop width breakpoint. Keep the selected
- * project in the first useful viewport for coarse pointers without changing
- * the established fine-pointer desktop layout.
- */
-@media (pointer: coarse) {
-  .project-workspace-layout--selected {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .project-workspace-layout--selected .project-workspace-management {
-    order: 9999;
-  }
-}
