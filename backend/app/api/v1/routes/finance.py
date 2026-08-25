@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies.auth import CurrentUser
 from app.db.session import get_db
 from app.schemas.backups import BackupsIntakeList, BackupsReviewDestination
+from app.schemas.chat_invoice_intake import ChatInvoiceIntakeRequest, ChatInvoiceIntakeResponse
 from app.schemas.receipt import (
     ReceiptAction, ReceiptCreate, ReceiptExtractionRequest, ReceiptExtractionResponse,
     ReceiptList, ReceiptRead, ReceiptUpdate,
@@ -27,7 +28,14 @@ from app.schemas.finance import (
     StartupExpenseSummary,
     StartupExpenseUpdate,
 )
-from app.services import backups, customer_invoices, finance, receipt_extraction, receipts
+from app.services import (
+    backups,
+    chat_invoice_intake,
+    customer_invoices,
+    finance,
+    receipt_extraction,
+    receipts,
+)
 from app.services.customer_invoice_pdf import render_customer_invoice_pdf
 
 router = APIRouter()
@@ -37,6 +45,15 @@ DBSession = Annotated[Session, Depends(get_db)]
 @router.post("/customer-invoices", response_model=CustomerInvoiceRead, status_code=status.HTTP_201_CREATED)
 def create_customer_invoice(payload: CustomerInvoiceCreate, db: DBSession, user: CurrentUser) -> CustomerInvoiceRead:
     return customer_invoices.create_invoice(db, payload, user)
+
+
+@router.post("/customer-invoices/chat-intake", response_model=ChatInvoiceIntakeResponse)
+def chat_customer_invoice_intake(
+    payload: ChatInvoiceIntakeRequest,
+    db: DBSession,
+    user: CurrentUser,
+) -> ChatInvoiceIntakeResponse:
+    return chat_invoice_intake.import_chat_invoices(db, payload, user)
 
 
 @router.get("/customer-invoices", response_model=CustomerInvoiceList)
