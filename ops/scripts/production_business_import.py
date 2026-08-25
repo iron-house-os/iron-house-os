@@ -29,7 +29,7 @@ def money(value: Any) -> Decimal:
 
 def quote_totals(payload: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal]:
     subtotal = sum(
-        (Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"])))
+        money(Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"])))
         for item in payload["line_items"]
     )
     subtotal = money(subtotal)
@@ -39,7 +39,7 @@ def quote_totals(payload: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal]:
 
 def invoice_totals(payload: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal]:
     subtotal = sum(
-        (Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"])))
+        money(Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"])))
         for item in payload["line_items"]
     )
     subtotal = money(subtotal)
@@ -83,6 +83,9 @@ def validate_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         _require("status" not in payload and "issue_status" not in payload, f"{ref} must use API draft defaults")
         _require(payload.get("project_name") and payload.get("customer_name"), f"{ref} is missing customer/project data")
         _require(payload.get("scope_summary") and payload.get("line_items"), f"{ref} is missing scope or line items")
+        _require(payload.get("quote_date"), f"{ref} quote_date is required before import")
+        _require(payload.get("valid_until"), f"{ref} valid_until is required before import")
+        _require(payload.get("gst_rate") is not None, f"{ref} gst_rate is required before import")
         _require(all(Decimal(str(item["quantity"])) > 0 for item in payload["line_items"]), f"{ref} quantities must be positive")
         marker = f"[{IMPORT_MARKER}:{ref}]"
         _require(marker in (payload.get("notes") or ""), f"{ref} notes must contain {marker}")
@@ -99,6 +102,9 @@ def validate_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         _require(payload.get("invoice_number") == ref, f"{ref} must match invoice_number")
         _require(payload.get("customer_name") and payload.get("customer_address"), f"{ref} client billing data is required")
         _require(payload.get("line_items"), f"{ref} line items are required")
+        _require(payload.get("project_name") and payload.get("site_address"), f"{ref} project/site data is required")
+        _require(payload.get("invoice_date") and payload.get("due_date"), f"{ref} invoice and due dates are required")
+        _require(payload.get("terms") and payload.get("gst_rate") is not None, f"{ref} terms and gst_rate are required")
         _validate_expected(record, invoice_totals(payload), ref)
 
     return {
