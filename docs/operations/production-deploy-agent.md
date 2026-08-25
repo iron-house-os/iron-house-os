@@ -17,6 +17,9 @@ DigitalOcean web console.
   clean recreation of that pinned Compose project. It removes service containers
   and orphans without removing named volumes, retries transient stale-container
   cleanup once, and then fails closed with Compose diagnostics.
+- Scheduled backups remain nonblocking by default. The mandatory post-cutover
+  recovery backup is the only cutover call that waits for an overlapping backup,
+  with a five-minute maximum; timeout remains a deployment failure.
 - The runner account has passwordless sudo access only to the validated
   production deployment wrapper.
 - Before cutover, the workflow verifies that the installed wrapper is owned by
