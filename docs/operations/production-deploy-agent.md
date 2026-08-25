@@ -13,6 +13,10 @@ DigitalOcean web console.
   checkout, missing evidence, and commits not present on `origin/main`.
 - The wrapper discovers and pins the running production Docker Compose project
   name before cutover, preventing a parallel stack from being created.
+- After the pre-cutover backup and maintenance gate, the cutover performs a
+  clean recreation of that pinned Compose project. It removes service containers
+  and orphans without removing named volumes, retries transient stale-container
+  cleanup once, and then fails closed with Compose diagnostics.
 - The runner account has passwordless sudo access only to the validated
   production deployment wrapper.
 - Before cutover, the workflow verifies that the installed wrapper is owned by

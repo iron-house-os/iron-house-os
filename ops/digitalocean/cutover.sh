@@ -157,6 +157,26 @@ fi
 scripts/verify_s3_targets.sh "$IHOS_STORAGE_S3_BUCKET" "$IHOS_BACKUP_S3_BUCKET"
 compose=(docker compose --env-file "$environment_file" -f docker-compose.production.yml)
 "${compose[@]}" config --quiet
+
+recreate_production_stack() {
+  local attempt
+
+  for attempt in 1 2; do
+    if "${compose[@]}" down --remove-orphans --timeout 30; then
+      "${compose[@]}" up -d --no-build --remove-orphans
+      return
+    fi
+    if ((attempt == 1)); then
+      echo "Docker Compose cleanup hit transient container state; retrying once." >&2
+      sleep 2
+    fi
+  done
+
+  echo "Docker Compose cleanup failed after two attempts; refusing to recreate production." >&2
+  "${compose[@]}" ps --all >&2 || true
+  return 1
+}
+
 "${compose[@]}" config --format json | python -c '
 import json, sys
 project = json.load(sys.stdin)
@@ -207,7 +227,7 @@ gateway_mutated=1
 install -m 0644 ops/digitalocean/nginx-maintenance.conf /etc/nginx/sites-available/iron-house-os
 nginx -t
 systemctl reload nginx
-"${compose[@]}" up -d --no-build
+recreate_production_stack
 
 readiness_url="http://127.0.0.1:${IHOS_PORT:-8080}/readiness"
 readiness_file=$(mktemp)

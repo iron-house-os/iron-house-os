@@ -94,19 +94,39 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
         "/etc/nginx/sites-available/iron-house-os"
     )
     compose_build = '"${compose[@]}" build'
-    compose_up = '"${compose[@]}" up -d --no-build'
+    compose_recreate = "\nrecreate_production_stack\n\nreadiness_url="
 
     assert "previous_gateway=$(mktemp)" in cutover
     assert "application_ready=0" in cutover
     assert cutover.index(trap) < cutover.rindex(maintenance)
     assert cutover.index(compose_build) < cutover.rindex(maintenance)
-    assert cutover.rindex(maintenance) < cutover.index(compose_up)
+    assert cutover.rindex(maintenance) < cutover.rindex(compose_recreate)
     assert "release_id != expected" in cutover
     assert "for attempt in $(seq 1 24)" in cutover
     assert "--connect-timeout 5 --max-time 10" in cutover
     assert "within 120 seconds" in cutover
     assert 'up -d --no-build --wait' not in cutover
 
+
+def test_cutover_recreates_compose_stack_without_removing_volumes() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+
+    start = cutover.index("recreate_production_stack()")
+    end = cutover.index('\n"${compose[@]}" config --format json', start)
+    recreate = cutover[start:end]
+
+    compose_down = '"${compose[@]}" down --remove-orphans --timeout 30'
+    compose_up = '"${compose[@]}" up -d --no-build --remove-orphans'
+
+    assert "for attempt in 1 2" in recreate
+    assert compose_down in recreate
+    assert compose_up in recreate
+    assert recreate.index(compose_down) < recreate.index(compose_up)
+    assert "retrying once" in recreate
+    assert "failed after two attempts" in recreate
+    assert "return 1" in recreate
+    assert "--volumes" not in recreate
+    assert " down -v" not in recreate
 
 def test_production_workflow_pins_actions_and_verifies_exact_release() -> None:
     workflow = (ROOT / ".github/workflows/production-deploy.yml").read_text()
