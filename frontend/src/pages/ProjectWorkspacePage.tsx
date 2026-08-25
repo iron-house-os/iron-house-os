@@ -243,16 +243,16 @@ export function ProjectWorkspacePage() {
 
       <div
         className={[
-          "project-workspace-layout grid gap-6 xl:grid-cols-[420px_1fr]",
-          projectId ? "project-workspace-layout--selected" : "",
+          "grid gap-6 xl:grid-cols-[420px_1fr]",
+          projectId ? "[@media(pointer:coarse)]:!grid-cols-1" : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         <div
           className={[
-            "project-workspace-management min-w-0 space-y-6",
-            projectId ? "order-last xl:order-none" : "",
+            "min-w-0 space-y-6",
+            projectId ? "order-last xl:order-none [@media(pointer:coarse)]:!order-last" : "",
           ]
             .filter(Boolean)
             .join(" ")}
