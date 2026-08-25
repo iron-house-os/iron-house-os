@@ -49,3 +49,18 @@ validates its narrow sudoers rule, and exits without registering, restarting,
 or reconfiguring the runner service. Treat the refresh as a production
 infrastructure change: obtain explicit approval and record the exact source
 commit before running it.
+
+## Protected business-import launcher
+
+Approved production cutovers also install
+`/usr/local/sbin/ihos-production-business-import` as `root:root 0755` and a dedicated,
+validated sudoers rule for `ihos-runner`. The launcher is intentionally separate from the
+deployment launcher. It accepts only an exact deployed main SHA, a direct JSON child of
+`ops/production-business-imports/`, and an evidence path inside the restricted runner temporary
+directory. It verifies live readiness reports the same release SHA before sourcing the protected
+environment and passes only IHOS port plus bootstrap credentials to the importer.
+
+Do not grant the runner read access to `/etc/iron-house-os/production.env` and do not add generic
+sudo, shell, Docker, or file-copy privileges. Production imports remain manual and require a second
+protected `production` environment approval after the release deployment.
+
