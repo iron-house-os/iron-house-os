@@ -1,5 +1,9 @@
-import pytest
+from collections.abc import Generator
 
+import pytest
+from sqlalchemy.orm import Session
+
+from conftest import TestingSessionLocal
 from app.core.errors import AppError
 from app.schemas.supplier_import import SupplierImportCommitRequest, SupplierImportPreviewRequest, SupplierImportRow
 from app.services.supplier_import import (
@@ -9,6 +13,12 @@ from app.services.supplier_import import (
     normalize_status,
     preview_supplier_import,
 )
+
+
+@pytest.fixture
+def db_session() -> Generator[Session, None, None]:
+    with TestingSessionLocal() as session:
+        yield session
 
 
 def test_normalize_category_maps_common_aliases() -> None:
@@ -89,7 +99,9 @@ def test_preview_supplier_import_counts_valid_errors_and_warnings() -> None:
 
     assert result.valid_count == 2
     assert result.error_count == 1
-    assert result.warning_count == 1
+    assert result.warning_count == 2
+    assert result.items[1].warnings == ["Missing email"]
+    assert result.items[2].warnings == ["Invalid email format"]
 
 
 def test_commit_supplier_import_skips_invalid_rows(db_session) -> None:
