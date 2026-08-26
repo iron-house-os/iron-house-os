@@ -20,6 +20,7 @@ from app.api.v1.routes import (
     field_operations,
     finance,
     google_calendar,
+    help_coach,
     estimates,
     media,
     municipality,
@@ -77,6 +78,7 @@ protected_router.include_router(equipment.router, prefix="/equipment", tags=["eq
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
 protected_router.include_router(media.router, prefix="/media", tags=["media"])
+protected_router.include_router(help_coach.router, prefix="/help-coach", tags=["help-coach"])
 protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
 protected_router.include_router(
     meeting_minutes.router,

@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.core.config import get_settings
 from app.services.access_control import (
     can_access_employee_receipt_route,
+    can_access_help_coach_route,
     can_access_module,
     required_permission,
 )
@@ -82,6 +83,13 @@ def require_module_access(request: Request, user: CurrentUser) -> AuthenticatedU
         )
     relative_path = path_parts[len(prefix) + 1 :]
     if can_access_employee_receipt_route(
+        user.role,
+        module,
+        request.method,
+        relative_path,
+    ):
+        return user
+    if can_access_help_coach_route(
         user.role,
         module,
         request.method,

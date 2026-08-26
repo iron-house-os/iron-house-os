@@ -1,7 +1,8 @@
-import { ArrowUpRight, CheckCircle2, CircleHelp, Search, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowUpRight, Bot, CheckCircle2, CircleHelp, Search, Send, ShieldCheck } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import { HelpCoachReply, helpCoachApi } from "../api/helpCoach";
 import { useAuth } from "../contexts/AuthContext";
 import {
   contextualHelpArticle,
@@ -71,6 +72,11 @@ export function HelpCenterPage() {
   const { user, portalRole } = useAuth();
   const location = useLocation();
   const [query, setQuery] = useState("");
+  const [coachDraft, setCoachDraft] = useState("");
+  const [coachQuestion, setCoachQuestion] = useState("");
+  const [coachReply, setCoachReply] = useState<HelpCoachReply | null>(null);
+  const [coachError, setCoachError] = useState<string | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
   const projectContext = readEffectiveProjectContext(location.search);
   const sourcePath = new URLSearchParams(location.search).get("from") ?? "";
   const articles = useMemo(
@@ -84,6 +90,24 @@ export function HelpCenterPage() {
   const results = useMemo(() => searchHelpArticles(articles, query), [articles, query]);
   const featured = articles.filter((article) => article.featured).slice(0, 6);
   const projectName = projectContext.projectName;
+
+  async function askCoach(event: FormEvent) {
+    event.preventDefault();
+    const question = coachDraft.trim();
+    if (!question || coachLoading) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    setCoachReply(null);
+    setCoachQuestion(question);
+    try {
+      setCoachReply(await helpCoachApi.send(question, { route: sourcePath, projectName: projectName ?? undefined }));
+      setCoachDraft("");
+    } catch (reason) {
+      setCoachError(reason instanceof Error ? reason.message : "The Help Coach is unavailable.");
+    } finally {
+      setCoachLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -125,6 +149,81 @@ export function HelpCenterPage() {
           <ArticleInstructions article={contextArticle} />
         </section>
       ) : null}
+
+      <section className="rounded-xl border border-brand-gold/40 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="help-coach-heading">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-iron-950 text-brand-gold">
+            <Bot className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-gold-dark">Read-only guidance</div>
+            <h2 id="help-coach-heading" className="mt-1 text-xl font-semibold text-iron-950">Ask the Help Coach</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-iron-600">
+              Type what you are trying to do. The Coach uses only approved instructions for your access level and cannot change, submit, approve or send anything.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={(event) => void askCoach(event)} className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1" htmlFor="help-coach-question">
+            <span className="mb-2 block text-sm font-semibold text-iron-900">What do you need help with?</span>
+            <textarea
+              id="help-coach-question"
+              value={coachDraft}
+              onChange={(event) => setCoachDraft(event.target.value)}
+              rows={2}
+              maxLength={1000}
+              placeholder="For example: How do I enter my time?"
+              className="min-h-14 w-full resize-y rounded-lg border border-iron-200 bg-iron-50 px-4 py-3 text-base text-iron-950 outline-none transition placeholder:text-iron-400 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/30"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={coachLoading || !coachDraft.trim()}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-iron-950 px-5 text-sm font-semibold text-white transition hover:bg-iron-800 disabled:cursor-not-allowed disabled:bg-iron-300"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            {coachLoading ? "Checking Help…" : "Ask Coach"}
+          </button>
+        </form>
+
+        {coachError ? (
+          <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+            {coachError} Use Search Help below while the Coach is unavailable.
+          </div>
+        ) : null}
+
+        {coachReply ? (
+          <div className="mt-5 rounded-xl border border-iron-100 bg-iron-50 p-4" aria-live="polite">
+            <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Your question</div>
+            <div className="mt-1 font-semibold text-iron-950">{coachQuestion}</div>
+            <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-brand-gold-dark">
+              {coachReply.status === "completed" ? "Grounded Help Coach answer" : "Approved built-in guidance"}
+            </div>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-iron-800">{coachReply.answer}</div>
+            {coachReply.sources.length ? (
+              <div className="mt-4 border-t border-iron-200 pt-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Approved sources</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {coachReply.sources.map((source) => (
+                    <Link
+                      key={source.id}
+                      to={modulePathWithProjectContext(source.path, projectContext)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold/50 bg-white px-3 text-sm font-semibold text-iron-900 hover:bg-brand-gold/10"
+                    >
+                      {source.title} <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <p className="mt-4 text-xs leading-5 text-iron-500">
+          Do not enter passwords, SINs, banking, medical, payroll, disciplinary or restricted first-aid information. Stop work and contact your supervisor whenever conditions are unsafe or unclear.
+        </p>
+      </section>
 
       <section className="rounded-xl border border-iron-100 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="help-search-heading">
         <h2 id="help-search-heading" className="text-xl font-semibold text-iron-950">Search Help</h2>
