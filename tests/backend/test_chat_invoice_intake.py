@@ -1,18 +1,28 @@
+from collections.abc import Generator
 from datetime import date
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
+from conftest import TestingSessionLocal
 from app.models.project import Project
 from app.schemas.chat_invoice_intake import (
     ChatInvoiceIntakeRecord,
     ChatInvoiceIntakeRequest,
 )
 from app.schemas.finance import CustomerInvoiceCreate
+from app.services import chat_invoice_intake
 from app.services.auth import AuthenticatedUser
 from app.services.chat_invoice_intake import import_chat_invoices
+
+
+@pytest.fixture
+def db_session() -> Generator[Session, None, None]:
+    with TestingSessionLocal() as session:
+        yield session
 
 
 def _user(role: str = "admin") -> AuthenticatedUser:
@@ -43,6 +53,20 @@ def _invoice(invoice_number: str = "CHAT-001", unit_price: str = "105.00") -> Cu
             }
         ],
     )
+
+
+def _force_first_invoice_lookup_miss(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_find_invoice = chat_invoice_intake._find_invoice
+    lookup_count = 0
+
+    def find_after_race(db_session, invoice_number):
+        nonlocal lookup_count
+        lookup_count += 1
+        if lookup_count == 1:
+            return None
+        return original_find_invoice(db_session, invoice_number)
+
+    monkeypatch.setattr(chat_invoice_intake, "_find_invoice", find_after_race)
 
 
 def test_chat_invoice_intake_creates_project_and_draft_invoice(db_session) -> None:
@@ -105,6 +129,53 @@ def test_chat_invoice_intake_reports_conflicting_invoice_without_project_side_ef
     assert result.items[0].project_created is False
     assert "different data" in (result.items[0].detail or "")
     assert project_count_after_conflict == project_count_before_conflict
+
+
+def test_chat_invoice_intake_reuses_identical_concurrent_winner(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=_invoice())])
+    first = import_chat_invoices(db_session, payload, _user())
+    project_count_before_race = db_session.scalar(select(func.count()).select_from(Project))
+    _force_first_invoice_lookup_miss(monkeypatch)
+
+    result = import_chat_invoices(db_session, payload, _user())
+    project_count_after_race = db_session.scalar(select(func.count()).select_from(Project))
+
+    assert result.reused_count == 1
+    assert result.items[0].status == "reused"
+    assert result.items[0].project_created is False
+    assert result.items[0].project_id == first.items[0].project_id
+    assert project_count_after_race == project_count_before_race
+
+
+def test_chat_invoice_intake_rejects_conflicting_concurrent_winner_without_project_side_effect(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import_chat_invoices(
+        db_session,
+        ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=_invoice())]),
+        _user(),
+    )
+    project_count_before_race = db_session.scalar(select(func.count()).select_from(Project))
+    conflicting = _invoice(unit_price="106.00").model_copy(
+        update={"project_name": "Concurrent Project", "site_address": "1000 Race Road"}
+    )
+    _force_first_invoice_lookup_miss(monkeypatch)
+
+    result = import_chat_invoices(
+        db_session,
+        ChatInvoiceIntakeRequest(items=[ChatInvoiceIntakeRecord(invoice=conflicting)]),
+        _user(),
+    )
+    project_count_after_race = db_session.scalar(select(func.count()).select_from(Project))
+
+    assert result.conflict_count == 1
+    assert result.items[0].status == "conflict"
+    assert result.items[0].project_created is False
+    assert project_count_after_race == project_count_before_race
 
 
 def test_chat_invoice_intake_reuses_matching_project_for_new_invoice(db_session) -> None:
