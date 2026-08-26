@@ -31,6 +31,27 @@ const tabs = [
   "Activity",
 ];
 
+const releaseSmokeNamePattern = /^Release smoke (\d{8}-\d{6})$/;
+const releaseSmokeProjectNumberPattern = /^SMOKE-(\d{8}-\d{6})$/;
+
+function isReleaseSmokeProject(project: Project) {
+  const nameMatch = releaseSmokeNamePattern.exec(project.name);
+  const projectNumberMatch = releaseSmokeProjectNumberPattern.exec(project.project_number ?? "");
+  return Boolean(nameMatch && projectNumberMatch && nameMatch[1] === projectNumberMatch[1]);
+}
+
+function filterProjects(projects: Project[], normalizedSearch: string, releaseSmokeOnly: boolean) {
+  return projects.filter((project) => {
+    const searchable = [project.project_number, project.name, project.municipality, label(project.status)]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleLowerCase();
+    const matchesSearch = !normalizedSearch || searchable.includes(normalizedSearch);
+    const matchesReleaseSmoke = !releaseSmokeOnly || isReleaseSmokeProject(project);
+    return matchesSearch && matchesReleaseSmoke;
+  });
+}
+
 export function ProjectWorkspacePage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -152,30 +173,48 @@ export function ProjectWorkspacePage() {
     await refresh();
   }
 
-  async function moveFilteredSmokeTestsToTrash(filteredProjects: Project[]) {
-    if (!isAdmin || bulkDeleting || filteredProjects.length === 0) return;
-    const confirmed = window.confirm(
-      `Move all ${filteredProjects.length} filtered smoke/test projects to recoverable Trash?\n\nNo other projects will be changed.`,
-    );
-    if (!confirmed) return;
+  async function moveFilteredReleaseSmokeProjectsToTrash() {
+    if (!isAdmin || bulkDeleting) return;
     setBulkDeleting(true);
     setBulkDeleteResult(null);
     setError(null);
     let moved = 0;
+    let failingProject: Project | null = null;
     try {
-      for (const project of filteredProjects) {
+      const currentList = await projectsApi.list(statusFilter, false);
+      const currentProjects = currentList.items.filter((project) => !project.deleted_at);
+      const currentCandidates = filterProjects(currentProjects, normalizedSearch, true);
+      setProjects(currentProjects);
+
+      if (currentCandidates.length === 0) {
+        setBulkDeleteResult("No active release smoke projects remain in the current filter.");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Move ${currentCandidates.length} filtered release smoke ${currentCandidates.length === 1 ? "project" : "projects"} to recoverable Trash?\n\nOnly exact Release smoke records with matching SMOKE job numbers will be changed.`,
+      );
+      if (!confirmed) return;
+
+      for (const project of currentCandidates) {
+        failingProject = project;
         await projectsApi.delete(project.id, project.name);
         moved += 1;
       }
-      setBulkDeleteResult(`${moved} smoke/test projects moved to Trash. They can be restored by an administrator.`);
+      await refresh();
+      setBulkDeleteResult(
+        `${moved} release smoke ${moved === 1 ? "project" : "projects"} moved to Trash. They can be restored by an administrator.`,
+      );
     } catch (currentError) {
+      await refresh();
       setError(
-        `${moved} projects moved to Trash before cleanup stopped. ${
+        `${moved} release smoke ${moved === 1 ? "project" : "projects"} moved to Trash before cleanup stopped${
+          failingProject ? ` at ${failingProject.name} (${failingProject.project_number ?? "no project number"})` : ""
+        }. ${
           currentError instanceof Error ? currentError.message : "Unable to complete smoke/test cleanup."
         }`,
       );
     } finally {
-      await refresh();
       setBulkDeleting(false);
     }
   }
@@ -206,16 +245,7 @@ export function ProjectWorkspacePage() {
   }
 
   const normalizedSearch = searchFilter.trim().toLocaleLowerCase();
-  const smokeTestMarker = /(?:^|[^a-z0-9])(smoke|test)(?:[^a-z0-9]|$)/i;
-  const filteredProjects = projects.filter((project) => {
-    const searchable = [project.project_number, project.name, project.municipality, label(project.status)]
-      .filter(Boolean)
-      .join(" ")
-      .toLocaleLowerCase();
-    const matchesSearch = !normalizedSearch || searchable.includes(normalizedSearch);
-    const matchesSmokeTest = !smokeTestOnly || smokeTestMarker.test(`${project.project_number ?? ""} ${project.name}`);
-    return matchesSearch && matchesSmokeTest;
-  });
+  const filteredProjects = filterProjects(projects, normalizedSearch, smokeTestOnly);
 
   return (
     <section className="space-y-6">
@@ -269,13 +299,13 @@ export function ProjectWorkspacePage() {
             <button
               type="button"
               disabled={bulkDeleting}
-              onClick={() => void moveFilteredSmokeTestsToTrash(filteredProjects)}
+              onClick={() => void moveFilteredReleaseSmokeProjectsToTrash()}
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
               {bulkDeleting
-                ? "Moving smoke/test projects to Trash..."
-                : `Move ${filteredProjects.length} filtered smoke/test projects to Trash`}
+                ? "Moving release smoke projects to Trash..."
+                : `Move ${filteredProjects.length} release smoke projects to Trash`}
             </button>
           ) : null}
           {isAdmin ? (
@@ -369,7 +399,7 @@ function ProjectFilters({
           onChange={(event) => onSmokeTestOnlyChange(event.target.checked)}
           className="h-4 w-4 rounded border-iron-200"
         />
-        Smoke/test projects only
+        Release smoke projects only
       </label>
     </div>
   );

@@ -160,31 +160,47 @@ describe("ProjectWorkspacePage", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  it("filters projects by searchable fields and the smoke/test cleanup control", async () => {
+  it("filters only exact release-smoke records with matching SMOKE job numbers", async () => {
     const smokeProject: Project = {
       ...project,
       id: "33333333-3333-4333-8333-333333333333",
       name: "Release smoke 20260823-100046",
       project_number: "SMOKE-20260823-100046",
     };
-    mockProjectApiWithProjects([project, smokeProject]);
+    const legitimateSmokeProject: Project = {
+      ...project,
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Smoke Test Pump Station Upgrade",
+      project_number: "IH2026002",
+    };
+    const mismatchedReleaseSmoke: Project = {
+      ...project,
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Release smoke 20260823-131404",
+      project_number: "SMOKE-20260823-131405",
+    };
+    mockProjectApiWithProjects([project, smokeProject, legitimateSmokeProject, mismatchedReleaseSmoke]);
     const user = userEvent.setup();
     renderWorkspace("/projects");
 
     expect(await screen.findByText(project.name)).toBeInTheDocument();
     expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
+    expect(screen.getByText(legitimateSmokeProject.name)).toBeInTheDocument();
+    expect(screen.getByText(mismatchedReleaseSmoke.name)).toBeInTheDocument();
 
     await user.type(screen.getByRole("searchbox", { name: "Search projects" }), "100046");
     expect(screen.queryByText(project.name)).not.toBeInTheDocument();
     expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
 
     await user.clear(screen.getByRole("searchbox", { name: "Search projects" }));
-    await user.click(screen.getByRole("checkbox", { name: "Smoke/test projects only" }));
+    await user.click(screen.getByRole("checkbox", { name: "Release smoke projects only" }));
     expect(screen.queryByText(project.name)).not.toBeInTheDocument();
     expect(screen.getByText(smokeProject.name)).toBeInTheDocument();
+    expect(screen.queryByText(legitimateSmokeProject.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(mismatchedReleaseSmoke.name)).not.toBeInTheDocument();
   });
 
-  it("moves only the filtered smoke/test projects to recoverable trash after confirmation", async () => {
+  it("moves only the filtered release smoke projects to recoverable trash after confirmation", async () => {
     const smokeProjects: Project[] = [
       { ...project, id: "33333333-3333-4333-8333-333333333333", name: "Release smoke 20260823-100046", project_number: "SMOKE-20260823-100046" },
       { ...project, id: "44444444-4444-4444-8444-444444444444", name: "Release smoke 20260823-131404", project_number: "SMOKE-20260823-131404" },
@@ -195,16 +211,73 @@ describe("ProjectWorkspacePage", () => {
     renderWorkspace("/projects");
 
     await screen.findByText(project.name);
-    await user.click(screen.getByRole("checkbox", { name: "Smoke/test projects only" }));
-    await user.click(screen.getByRole("button", { name: "Move 2 filtered smoke/test projects to Trash" }));
+    await user.click(screen.getByRole("checkbox", { name: "Release smoke projects only" }));
+    await user.click(screen.getByRole("button", { name: "Move 2 release smoke projects to Trash" }));
 
-    await screen.findByText("2 smoke/test projects moved to Trash. They can be restored by an administrator.");
+    await screen.findByText("2 release smoke projects moved to Trash. They can be restored by an administrator.");
     const deletes = fetchMock.mock.calls.filter(([, options]) => options?.method === "DELETE");
     expect(deletes).toHaveLength(2);
     expect(deletes.map(([, options]) => JSON.parse(String(options?.body)).confirmation_name)).toEqual(
       smokeProjects.map((item) => item.name),
     );
     expect(screen.queryByText(project.name)).not.toBeInTheDocument();
+  });
+
+  it("re-reads the active release-smoke set before confirmation so retries skip already-trashed records", async () => {
+    const staleSmokeProject: Project = {
+      ...project,
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Release smoke 20260823-100046",
+      project_number: "SMOKE-20260823-100046",
+    };
+    const currentSmokeProject: Project = {
+      ...project,
+      id: "44444444-4444-4444-8444-444444444444",
+      name: "Release smoke 20260823-131404",
+      project_number: "SMOKE-20260823-131404",
+    };
+    const fetchMock = mockProjectApiWithProjects([project, staleSmokeProject, currentSmokeProject], {
+      activeProjectsBeforeConfirmation: [project, currentSmokeProject],
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderWorkspace("/projects");
+
+    await screen.findByText(project.name);
+    await user.click(screen.getByRole("checkbox", { name: "Release smoke projects only" }));
+    expect(screen.getByRole("button", { name: "Move 2 release smoke projects to Trash" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Move 2 release smoke projects to Trash" }));
+
+    await screen.findByText("1 release smoke project moved to Trash. They can be restored by an administrator.");
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Move 1 filtered release smoke project"));
+    const deletes = fetchMock.mock.calls.filter(([, options]) => options?.method === "DELETE");
+    expect(deletes).toHaveLength(1);
+    expect(JSON.parse(String(deletes[0][1]?.body)).confirmation_name).toBe(currentSmokeProject.name);
+  });
+
+  it("preserves partial progress and the exact failing record after a cleanup request fails", async () => {
+    const smokeProjects: Project[] = [
+      { ...project, id: "33333333-3333-4333-8333-333333333333", name: "Release smoke 20260823-100046", project_number: "SMOKE-20260823-100046" },
+      { ...project, id: "44444444-4444-4444-8444-444444444444", name: "Release smoke 20260823-131404", project_number: "SMOKE-20260823-131404" },
+      { ...project, id: "55555555-5555-4555-8555-555555555555", name: "Release smoke 20260823-140000", project_number: "SMOKE-20260823-140000" },
+    ];
+    const fetchMock = mockProjectApiWithProjects([project, ...smokeProjects], { failDeleteAt: 2 });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderWorkspace("/projects");
+
+    await screen.findByText(project.name);
+    await user.click(screen.getByRole("checkbox", { name: "Release smoke projects only" }));
+    await user.click(screen.getByRole("button", { name: "Move 3 release smoke projects to Trash" }));
+
+    expect(
+      await screen.findByText(
+        "1 release smoke project moved to Trash before cleanup stopped at Release smoke 20260823-131404 (SMOKE-20260823-131404). Request failed with 500",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Move 2 release smoke projects to Trash" })).toBeInTheDocument();
+    const deletes = fetchMock.mock.calls.filter(([, options]) => options?.method === "DELETE");
+    expect(deletes).toHaveLength(2);
   });
 
   it("creates an awarded project and delegates job-number generation to IHOS", async () => {
@@ -518,17 +591,30 @@ function mockProjectApi(
   return fetchMock;
 }
 
-function mockProjectApiWithProjects(initialProjects: Project[]) {
+function mockProjectApiWithProjects(
+  initialProjects: Project[],
+  mockOptions: { failDeleteAt?: number; activeProjectsBeforeConfirmation?: Project[] } = {},
+) {
   let projects = initialProjects;
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+  let deleteCalls = 0;
+  let listCalls = 0;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, requestOptions?: RequestInit) => {
     const url = input.toString();
-    if (options?.method === "DELETE") {
+    if (requestOptions?.method === "DELETE") {
+      deleteCalls += 1;
+      if (deleteCalls === mockOptions.failDeleteAt) return jsonResponse({ detail: "Cleanup failed" }, 500);
       const deleted = projects.find((item) => url.endsWith(`/projects/${item.id}`));
       if (!deleted) return jsonResponse({ detail: "Not found" }, 404);
       projects = projects.filter((item) => item.id !== deleted.id);
       return jsonResponse({ ...deleted, deleted_at: "2026-08-23T15:00:00Z" });
     }
-    if (url.endsWith("/projects")) return jsonResponse({ items: projects, total: projects.length });
+    if (url.endsWith("/projects")) {
+      listCalls += 1;
+      if (listCalls === 2 && mockOptions.activeProjectsBeforeConfirmation) {
+        projects = mockOptions.activeProjectsBeforeConfirmation;
+      }
+      return jsonResponse({ items: projects, total: projects.length });
+    }
     const dashboardProject = projects.find((item) => url.endsWith(`/projects/${item.id}/dashboard`));
     if (dashboardProject) return jsonResponse({ ...dashboard, project_id: dashboardProject.id });
     throw new Error(`Unhandled request: ${url}`);
