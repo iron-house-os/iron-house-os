@@ -1,4 +1,4 @@
-import { LogOut, Menu, ShoppingCart } from "lucide-react";
+import { CircleHelp, LogOut, Menu, ShoppingCart } from "lucide-react";
 import { PropsWithChildren, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
@@ -6,11 +6,21 @@ import { modules } from "../modules";
 import { useAuth } from "../contexts/AuthContext";
 import { modulePathWithProjectContext, readEffectiveProjectContext } from "../utils/projectContext";
 
+export function buildHelpPath(pathname: string, projectId: string | null, projectName: string | null): string {
+  const params = new URLSearchParams();
+  if (pathname !== "/help") params.set("from", pathname);
+  if (projectId) params.set("projectId", projectId);
+  if (projectName) params.set("projectName", projectName);
+  const search = params.toString();
+  return search ? `/help?${search}` : "/help";
+}
+
 export function AppLayout({ children }: PropsWithChildren) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { user, portalRole, logout } = useAuth();
   const location = useLocation();
   const activeProject = readEffectiveProjectContext(location.search);
+  const helpPath = buildHelpPath(location.pathname, activeProject.projectId, activeProject.projectName);
   const accessLabel =
     user?.role === "viewer"
       ? "Read-only access"
@@ -85,6 +95,15 @@ export function AppLayout({ children }: PropsWithChildren) {
           <div className="hidden text-sm font-medium text-iron-700 lg:block">{user ? `Signed in as ${user.display_name}` : "Signed out"}</div>
           <div className="flex items-center gap-3">
             <div className="hidden text-xs font-medium text-iron-500 sm:block">{accessLabel}</div>
+            <NavLink
+              to={helpPath}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-brand-gold/50 px-3 text-sm font-semibold text-iron-800 transition hover:bg-brand-gold/10"
+              aria-label="Open Help Centre"
+              title="Help Centre"
+            >
+              <CircleHelp className="h-5 w-5" aria-hidden="true" />
+              <span className="hidden sm:inline">Help</span>
+            </NavLink>
             <div className="rounded-md bg-brand-gold px-3 py-1 text-xs font-semibold capitalize text-brand-black">{user?.role.replace("_", " ")}</div>
             <button type="button" onClick={() => void logout()} className="rounded-md border border-iron-100 p-2 text-iron-700 transition hover:border-brand-gold hover:bg-brand-gold/10" aria-label="Sign out" title="Sign out">
               <LogOut className="h-4 w-4" />
