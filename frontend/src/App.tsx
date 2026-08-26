@@ -27,6 +27,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { IronHouseChatPage } from "./pages/IronHouseChatPage";
 import { MeetingMinutesPage } from "./pages/MeetingMinutesPage";
 import { GoogleCalendarPage } from "./pages/GoogleCalendarPage";
+import { HelpCenterPage } from "./pages/HelpCenterPage";
 import { PasswordRecoveryPage } from "./pages/PasswordRecoveryPage";
 import { ProjectOperationsPage } from "./pages/ProjectOperationsPage";
 import { ProjectScopedLauncherPage } from "./pages/ProjectScopedLauncherPage";
@@ -94,7 +95,7 @@ function AuthenticatedApp() {
     const root = isForeman ? "/foreman-portal" : "/employee-portal";
     const sections = isForeman ? ["time", "backups", "receipts", "schedule", "production", "loads", "forms", "safety", "milestones", "small-equipment", "records"] : ["time", "backups", "receipts", "journal", "schedule", "safety", "milestones", "small-equipment", "profile", "records"];
     const Page = isForeman ? ForemanPortalPage : EmployeePortalPage;
-    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} /><Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}{!isForeman ? <><Route path="/employee-portal/operator" element={<EmployeePortalPage section="operator" />} /><Route path="/employee-portal/operator/:operatorSection" element={<EmployeeOperatorRoute />} /><Route path="/operator" element={<LegacyOperatorRoute />} /><Route path="/operator/:section" element={<LegacyOperatorRoute />} /><Route path="/operator-portal" element={<LegacyOperatorRoute />} /><Route path="/operator-portal/:section" element={<LegacyOperatorRoute />} /></> : null}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
+    return <AppLayout><Routes><Route path={root} element={<Page />} /><Route path="/help" element={<HelpCenterPage />} /><Route path="/request-po" element={<PurchaseOrderRequestPage />} /><Route path={`${root}/request-po`} element={<PurchaseOrderRequestPage />} /><Route path="/backups" element={<BackupsPage />} /><Route path="/equipment/field/:equipmentId" element={<EquipmentFieldPage />} />{sections.map((section) => <Route key={section} path={`${root}/${section}`} element={<Page section={section} />} />)}{!isForeman ? <><Route path="/employee-portal/operator" element={<EmployeePortalPage section="operator" />} /><Route path="/employee-portal/operator/:operatorSection" element={<EmployeeOperatorRoute />} /><Route path="/operator" element={<LegacyOperatorRoute />} /><Route path="/operator/:section" element={<LegacyOperatorRoute />} /><Route path="/operator-portal" element={<LegacyOperatorRoute />} /><Route path="/operator-portal/:section" element={<LegacyOperatorRoute />} /></> : null}<Route path="*" element={<Navigate to={root} replace />} /></Routes></AppLayout>;
   }
 
   return (
@@ -102,6 +103,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/help" element={<HelpCenterPage />} />
         <Route path="/request-po" element={<PurchaseOrderRequestPage />} />
         <Route path="/backups" element={<BackupsPage />} />
         <Route path="/employee-portal" element={<EmployeePortalPage />} />
