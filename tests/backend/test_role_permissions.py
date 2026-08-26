@@ -202,9 +202,11 @@ def test_viewer_receipt_intake_does_not_open_sensitive_finance_routes(
 
 
 @pytest.mark.parametrize("role", ["admin", "operations_manager", "estimator", "viewer"])
-def test_supported_roles_can_only_post_to_the_read_only_help_coach(role: str) -> None:
+def test_supported_roles_can_only_post_to_help_messages_and_feedback(role: str) -> None:
     assert can_access_help_coach_route(role, "help-coach", "POST", ["messages"])
+    assert can_access_help_coach_route(role, "help-coach", "POST", ["feedback"])
     assert not can_access_help_coach_route(role, "help-coach", "GET", ["messages"])
+    assert not can_access_help_coach_route(role, "help-coach", "GET", ["improvements"])
     assert not can_access_help_coach_route(role, "help-coach", "POST", ["brain"])
 
 
