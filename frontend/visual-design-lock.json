@@ -1,7 +1,7 @@
 {
   "approved_by": "Jeremie Peters",
-  "baseline_commit": "c24ecec8f7ee7f4b25e4a926759a933cc80000c2",
-  "baseline_date": "2026-08-07",
+  "baseline_commit": "00e9bad73463acc706bba0fb444098ff3842ea85",
+  "baseline_date": "2026-08-26",
   "files": {
     "frontend/public/apple-touch-icon.png": "61238cf4edb72a94ae0bdb0c762db8aaf5bf0e022fc521db8edea033080951de",
     "frontend/public/favicon-32x32.png": "c7c83909f9026f4910f05406fe7d9404904b3dedb81f09aa836b4a909e938423",
@@ -15,7 +15,7 @@
     "frontend/src/pages/LoginPage.tsx": "8cc96693579ea7e18e3fa34b456f259ad47b8479230df8c04bf7de50e3b510fe",
     "frontend/src/styles.css": "d0ed7ee59b1690db07d4d70193cfbf1f3f80d6a5084edfedad786817de4ce58d",
     "frontend/tailwind.config.ts": "3c9eae349df550797ad4590c8cfc905e031639f3eadf883844d4386d037be7e2",
-    "frontend/src/components/AppLayout.tsx": "2f519acb014792ffc11a7b55d810bcbe6ee03739cf2a2cd2a75783676faecf26"
+    "frontend/src/components/AppLayout.tsx": "05b18f6d6b8637a7ae1a094728ce03b4e803678b42925599bbd881ea5f531d80"
   },
   "policy": "docs/visual-design-lock.md",
   "schema_version": 1
