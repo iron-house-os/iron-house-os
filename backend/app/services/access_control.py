@@ -156,12 +156,12 @@ def can_access_help_coach_route(
     method: str,
     relative_path: list[str],
 ) -> bool:
-    """Allow every supported signed-in role to ask the strictly read-only Help Coach."""
+    """Allow supported signed-in roles to ask Help or record isolated Help feedback."""
     return (
         normalize_role(role) in {"admin", "operations_manager", "estimator", "viewer"}
         and module == "help-coach"
         and method.upper() == "POST"
-        and relative_path == ["messages"]
+        and relative_path in (["messages"], ["feedback"])
     )
 
 
