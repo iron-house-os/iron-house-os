@@ -105,6 +105,10 @@ describe("PurchaseOrderRequestPage", () => {
         job_number: "IH-2026-030",
       }),
     })));
+    const createdPo = vi.mocked(fieldOperationsApi.createRecord).mock.calls[0]?.[0] as { details?: Record<string, unknown> } | undefined;
+    const poNumber = String(createdPo?.details?.po_number ?? "");
+    expect(poNumber.match(/-/g)).toHaveLength(1);
+    expect(poNumber.split("-")[1]).toMatch(/^IH\d{7}$/);
     expect(await screen.findByText("Created PO12345678-IH2026030 and sent for approval.")).toBeInTheDocument();
   });
 });

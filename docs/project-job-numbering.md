@@ -4,8 +4,9 @@ IHOS assigns a permanent job number when a project first becomes `awarded`.
 
 ## Number format
 
-- Default: `IH-YYYY-NNN`
-- Example: `IH-2026-001`
+- Canonical new format: `IHYYYYNNN`
+- Example: `IH2026001`
+- Newly generated IHOS job numbers contain no hyphens.
 - The three-digit sequence restarts for each award year using the Iron House BC business date and expands beyond three digits when required.
 
 ## Allocation rules
@@ -18,4 +19,4 @@ IHOS assigns a permanent job number when a project first becomes `awarded`.
 6. The database uniqueness constraint and allocation retry prevent two awarded projects from retaining the same number.
 7. After the permanent number is assigned, IHOS prepares one stable awarded-project workspace manifest using that number.
 
-Existing legacy projects are not renumbered automatically. Any controlled legacy cleanup must be reviewed separately before changing company records.
+Existing legacy projects are not renumbered automatically. IHOS may read preserved legacy values such as `IH-YYYY-NNN`, but it never generates that format for a new job. External or source identifiers, including customer invoice numbers, may retain their original punctuation. Any controlled legacy cleanup must be reviewed separately before changing company records.

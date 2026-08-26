@@ -18,9 +18,17 @@ The employee, operator, foreman, cardholder, or other purchaser is responsible f
 
 ## PO format
 
-IHOS PO numbers contain the job number so accounting and receipt processing can identify the project automatically. Example:
+New IHOS PO numbers use `PO########-IHYYYYNNN`.
 
-`PO-000127-26-014`
+- `PO########` is the generated PO prefix and sequence.
+- `IHYYYYNNN` is the hyphen-free IHOS job number.
+- The PO number contains exactly one hyphen, separating the PO sequence from the job number.
+
+Example:
+
+`PO12345678-IH2026001`
+
+Existing legacy PO or job values remain read-compatible and are not rewritten automatically. External/source identifiers, including supplier invoice numbers, may retain their original punctuation.
 
 ## Exceptions
 
