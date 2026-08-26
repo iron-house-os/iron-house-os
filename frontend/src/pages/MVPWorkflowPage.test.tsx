@@ -172,6 +172,8 @@ describe("MVPWorkflowPage", () => {
 
   it("renders awarded jobs before bounded launch summaries finish and includes legacy jobs", async () => {
     let maxConcurrentLaunches = 0;
+    let releaseLaunches = () => {};
+    const launchGate = new Promise<void>((resolve) => { releaseLaunches = resolve; });
     const jobs = Array.from({ length: 5 }, (_, index) => project({
       id: `legacy-awarded-${index + 1}`,
       name: `Legacy awarded ${index + 1}`,
@@ -183,7 +185,7 @@ describe("MVPWorkflowPage", () => {
     const fetchMock = mockApi({
       projects: jobs,
       launches,
-      launchDelay: 40,
+      launchGate,
       onLaunchActivity: (active) => { maxConcurrentLaunches = Math.max(maxConcurrentLaunches, active); },
     });
 
@@ -195,8 +197,12 @@ describe("MVPWorkflowPage", () => {
 
     await waitFor(() => expect(
       fetchMock.mock.calls.filter(([input]) => String(input).includes("/launch-dashboard")),
-    ).toHaveLength(5));
+    ).toHaveLength(3));
     expect(maxConcurrentLaunches).toBe(3);
+    releaseLaunches();
+    await waitFor(() => expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).includes("/launch-dashboard")),
+    ).toHaveLength(5));
     for (const job of jobs) {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining(`/projects/${job.id}/launch-dashboard`),
@@ -228,6 +234,7 @@ function mockApi({
   launches = {},
   failQuotes = false,
   launchDelay = 0,
+  launchGate,
   onLaunchActivity,
 }: {
   drafts?: (typeof draft)[];
@@ -236,6 +243,7 @@ function mockApi({
   launches?: Record<string, ProjectLaunchDashboard>;
   failQuotes?: boolean;
   launchDelay?: number;
+  launchGate?: Promise<void>;
   onLaunchActivity?: (active: number) => void;
 } = {}) {
   let activeLaunches = 0;
@@ -253,6 +261,7 @@ function mockApi({
       activeLaunches += 1;
       onLaunchActivity?.(activeLaunches);
       try {
+        if (launchGate) await launchGate;
         if (launchDelay) await new Promise((resolve) => window.setTimeout(resolve, launchDelay));
         const launch = launches[launchMatch[1]];
         return launch ? response(launch) : response({ detail: "Unavailable" }, 503);
