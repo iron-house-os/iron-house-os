@@ -61,3 +61,23 @@ class MemoryImportResult(BaseModel):
     updated: int
     skipped: int
     total_project_memories: int
+
+
+class HelpCoachPrompt(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+    route: str = Field(default="", max_length=300, pattern=r"^$|^/[A-Za-z0-9_./:-]*$")
+    project_name: str = Field(default="", max_length=160)
+
+
+class HelpCoachSource(BaseModel):
+    id: str
+    title: str
+    path: str
+
+
+class HelpCoachReply(BaseModel):
+    answer: str
+    status: str
+    audience: str
+    mode: str = "read-only"
+    sources: list[HelpCoachSource]

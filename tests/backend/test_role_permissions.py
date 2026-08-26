@@ -9,6 +9,7 @@ from app.main import app
 from app.services.access_control import (
     ModulePermission,
     can_access_employee_receipt_route,
+    can_access_help_coach_route,
     can_access_module,
     describe_role_access,
 )
@@ -198,6 +199,17 @@ def test_viewer_receipt_intake_does_not_open_sensitive_finance_routes(
     path: list[str],
 ) -> None:
     assert not can_access_employee_receipt_route("viewer", "finance", method, path)
+
+
+@pytest.mark.parametrize("role", ["admin", "operations_manager", "estimator", "viewer"])
+def test_supported_roles_can_only_post_to_the_read_only_help_coach(role: str) -> None:
+    assert can_access_help_coach_route(role, "help-coach", "POST", ["messages"])
+    assert not can_access_help_coach_route(role, "help-coach", "GET", ["messages"])
+    assert not can_access_help_coach_route(role, "help-coach", "POST", ["brain"])
+
+
+def test_unknown_role_cannot_access_help_coach() -> None:
+    assert not can_access_help_coach_route("unknown", "help-coach", "POST", ["messages"])
 
 
 def test_viewer_can_list_only_their_receipts_but_cannot_access_finance_admin() -> None:

@@ -11,6 +11,7 @@ class ModulePermission(StrEnum):
 
 
 BUSINESS_MODULES = (
+    "help-coach",
     "iron-house-chat",
     "backups",
     "meeting-minutes",
@@ -147,6 +148,21 @@ def can_access_employee_receipt_route(
     if len(relative_path) == 2:
         return normalized_method in {"GET", "PUT"}
     return relative_path[2] == "submit" and normalized_method == "POST"
+
+
+def can_access_help_coach_route(
+    role: str | None,
+    module: str,
+    method: str,
+    relative_path: list[str],
+) -> bool:
+    """Allow every supported signed-in role to ask the strictly read-only Help Coach."""
+    return (
+        normalize_role(role) in {"admin", "operations_manager", "estimator", "viewer"}
+        and module == "help-coach"
+        and method.upper() == "POST"
+        and relative_path == ["messages"]
+    )
 
 
 def describe_role_access(role: str | None) -> dict[str, list[str]]:
