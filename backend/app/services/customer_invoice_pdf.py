@@ -19,6 +19,7 @@ def render_customer_invoice_pdf(invoice: CustomerInvoiceRead) -> bytes:
         "",
     ]
     for item in invoice.line_items:
-        lines.extend(wrap(f"{item['description']}: {item['quantity']} x ${item['unit_price']} = ${item['amount']}", 96, break_long_words=False))
+        quantity = f"{item['quantity']} {item.get('unit', '')}".strip()
+        lines.extend(wrap(f"{item['description']}: {quantity} x ${item['unit_price']} = ${item['amount']}", 96, break_long_words=False))
     lines.extend(["", f"Subtotal: ${invoice.subtotal}", f"GST ({invoice.gst_rate}%): ${invoice.gst}", f"TOTAL CAD: ${invoice.total}", "", "Thank you for your business."])
     return _build_pdf([lines])

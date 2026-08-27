@@ -11,6 +11,7 @@ import {
   ProjectLaunchDashboard,
   ProjectStartChecklist,
 } from "../api/projects";
+import { ProjectInvoicePackageReadiness } from "../api/finance";
 import { ProjectWorkspacePage } from "./ProjectWorkspacePage";
 
 vi.mock("../contexts/AuthContext", () => ({
@@ -132,6 +133,24 @@ function closeoutChecklist(projectId = awardedProject.id): ProjectCloseoutCheckl
     completed_count: 0,
     total_count: items.length,
     next_incomplete_control: items[0],
+    items,
+  };
+}
+
+function readyCloseoutChecklist(projectId = awardedProject.id): ProjectCloseoutChecklist {
+  const checklist = closeoutChecklist(projectId);
+  const items = checklist.items.map((item) => ({
+    ...item,
+    completed: true,
+    evidence: `Verified evidence for ${item.code}`,
+    changed_by: "test-admin@ironhousecontracting.com",
+    changed_at: "2026-08-27T15:00:00Z",
+  }));
+  return {
+    ...checklist,
+    status: "ready",
+    completed_count: items.length,
+    next_incomplete_control: null,
     items,
   };
 }
@@ -528,6 +547,139 @@ describe("ProjectWorkspacePage", () => {
       ([url, options]) => url.toString().endsWith(`/projects/${legacyConstructionProject.id}/closeout-checklist`) && options?.method === "POST",
     )).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => url.toString().endsWith("/workspace"))).toBe(false);
+  });
+
+  it("generates one traceable draft package from an exact completed-work source group", async () => {
+    const completedProject: Project = {
+      ...awardedProject,
+      status: "completed",
+      client_owner: "Verified Customer Reference",
+      project_address: "100 Verified Site Road",
+    };
+    const sourceGroup = {
+      source_import_key: "verified-source-2026-08-27",
+      source_invoice_number: "SOURCE-100",
+      source_drive_file_id: "verified-drive-file-id",
+      source_invoice_date: "2026-08-21",
+      line_count: 1,
+      subtotal: "550.00",
+      ready: true,
+      blockers: [],
+      lines: [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        work_date: "2026-08-20",
+        source_line_key: "line-01",
+        source_invoice_number: "SOURCE-100",
+        description: "Verified excavation work",
+        quantity: "2.5",
+        unit: "hour",
+        billable_rate: "220.00",
+        billable_amount: "550.00",
+      }],
+      existing_invoice_id: null,
+      existing_invoice_number: null,
+      existing_invoice_status: null,
+    };
+    let invoiceReadiness: ProjectInvoicePackageReadiness = {
+      project_id: completedProject.id,
+      project_number: completedProject.project_number,
+      project_name: completedProject.name,
+      project_status: "completed",
+      site_address: completedProject.project_address,
+      customer_reference: completedProject.client_owner,
+      closeout_status: "ready",
+      ready: true,
+      blockers: [],
+      groups: [sourceGroup],
+    };
+    const fetchMock = mockProjectApi(
+      completedProject,
+      awardedWorkspace,
+      awardedStartChecklist,
+      false,
+      awardedLaunchDashboard,
+      readyCloseoutChecklist(completedProject.id),
+    );
+    const originalImplementation = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = input.toString();
+      if (url.endsWith(`/finance/projects/${completedProject.id}/invoice-package-readiness`)) {
+        return jsonResponse(invoiceReadiness);
+      }
+      if (url.endsWith(`/finance/projects/${completedProject.id}/invoice-package`) && options?.method === "POST") {
+        invoiceReadiness = {
+          ...invoiceReadiness,
+          groups: [{
+            ...sourceGroup,
+            existing_invoice_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            existing_invoice_number: "IH2026901INV1",
+            existing_invoice_status: "draft",
+          }],
+        };
+        return jsonResponse({
+          created: true,
+          idempotent: false,
+          generated_at: "2026-08-27T16:00:00Z",
+          invoice: {
+            id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            invoice_number: "IH2026901INV1",
+            project_id: completedProject.id,
+            project_name: completedProject.name,
+            site_address: completedProject.project_address,
+            customer_name: "Verified Customer Legal Name",
+            customer_address: "200 Verified Billing Avenue",
+            customer_phone: null,
+            invoice_date: "2026-08-27",
+            due_date: "2026-09-26",
+            terms: "Net 30",
+            status: "draft",
+            line_items: [{ description: "Verified excavation work", quantity: "2.5", unit: "hour", unit_price: "220.00", amount: "550.00" }],
+            subtotal: "550.00",
+            gst_rate: "5.00",
+            gst: "27.50",
+            total: "577.50",
+            development_seed_key: null,
+          },
+        });
+      }
+      if (!originalImplementation) throw new Error("Project API mock is unavailable");
+      return originalImplementation(input, options);
+    });
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${completedProject.id}`);
+
+    const packageCard = await screen.findByRole("region", { name: "Draft invoice package" });
+    expect(packageCard).toHaveTextContent("Verified excavation work");
+    expect(within(packageCard).getByLabelText("Customer legal / billing name")).toHaveValue("Verified Customer Reference");
+    await user.clear(within(packageCard).getByLabelText("Customer legal / billing name"));
+    await user.type(within(packageCard).getByLabelText("Customer legal / billing name"), "Verified Customer Legal Name");
+    await user.type(within(packageCard).getByLabelText("Invoice number"), "IH2026901INV1");
+    await user.type(within(packageCard).getByLabelText("Customer billing address"), "200 Verified Billing Avenue");
+    await user.click(within(packageCard).getByRole("button", { name: "Generate traceable draft" }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([url, options]) => url.toString().endsWith(`/finance/projects/${completedProject.id}/invoice-package`) && options?.method === "POST",
+      );
+      expect(createCall).toBeDefined();
+      const payload = JSON.parse(String(createCall?.[1]?.body));
+      expect(payload).toMatchObject({
+        source_import_key: "verified-source-2026-08-27",
+        invoice_number: "IH2026901INV1",
+        customer_name: "Verified Customer Legal Name",
+        customer_address: "200 Verified Billing Avenue",
+        terms: "Net 30",
+        gst_rate: "5.00",
+      });
+      expect(payload).not.toHaveProperty("line_items");
+      expect(payload).not.toHaveProperty("project_name");
+    });
+    expect(await within(packageCard).findByRole("link", { name: "Open draft PDF" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/finance/customer-invoices/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/pdf"),
+    );
+    expect(packageCard).toHaveTextContent("Status: Draft");
+    expect(packageCard).toHaveTextContent("does not approve, issue, send, export, mark paid, release holdback");
   });
 
   it("renders dashboard widgets for project readiness", async () => {
