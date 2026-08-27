@@ -47,12 +47,17 @@ def validate_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     require(project.get("name") and project.get("client_owner") and project.get("project_address"), "project identity is required")
     metadata = project.get("metadata") or {}
     require(metadata.get("source_import_key") == bundle["import_key"], "project metadata must carry source_import_key")
+    require(metadata.get("source_drive_file_id"), "project metadata must carry source_drive_file_id")
+    require(metadata.get("source_drive_modified_at"), "project metadata must carry source_drive_modified_at")
     invoice = bundle.get("invoice") or {}
     ref = invoice.get("external_reference")
     payload = invoice.get("payload") or {}
     require(ref and payload.get("invoice_number") == ref, "invoice external reference must match invoice_number")
+    require(metadata.get("source_invoice_number") == ref, "project metadata source invoice must match invoice reference")
     require("status" not in payload, "invoice must use API draft default")
     require(payload.get("customer_name") and payload.get("customer_address") and payload.get("line_items"), "invoice billing and line items are required")
+    require(payload.get("project_name") and payload.get("invoice_date") and payload.get("due_date") and payload.get("terms"), "invoice project, dates and terms are required")
+    require(all(Decimal(str(item["quantity"])) > 0 for item in payload["line_items"]), "invoice quantities must be positive")
     calculated = invoice_totals(payload)
     expected = tuple(money(invoice[k]) for k in ("expected_subtotal", "expected_gst", "expected_total"))
     require(calculated == expected, f"invoice totals mismatch: calculated={calculated}, expected={expected}")

@@ -41,6 +41,28 @@ class AwardedInvoiceImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "totals mismatch"):
             MODULE.validate_bundle(bundle)
 
+    def test_final_drive_revision_is_staged_exactly(self):
+        bundle = valid_bundle()
+        project = bundle["project"]["payload"]
+        invoice = bundle["invoice"]
+        payload = invoice["payload"]
+        metadata = project["metadata"]
+        self.assertEqual(metadata["source_drive_file_id"], "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS")
+        self.assertEqual(metadata["source_drive_modified_at"], "2026-08-27T00:41:46.422Z")
+        self.assertEqual(payload["customer_name"], "Zakaria Tadrous")
+        self.assertEqual(payload["due_date"], "2026-08-15")
+        self.assertEqual(payload["terms"], "Due upon receipt")
+        self.assertEqual([item["unit_price"] for item in payload["line_items"][:4]], ["220.00"] * 4)
+        self.assertEqual(invoice["expected_subtotal"], "10622.40")
+        self.assertEqual(invoice["expected_gst"], "531.12")
+        self.assertEqual(invoice["expected_total"], "11153.52")
+
+    def test_source_provenance_is_required(self):
+        bundle = valid_bundle()
+        del bundle["project"]["payload"]["metadata"]["source_drive_file_id"]
+        with self.assertRaisesRegex(ValueError, "source_drive_file_id"):
+            MODULE.validate_bundle(bundle)
+
     def test_job_number_rejects_hyphens(self):
         with self.assertRaisesRegex(RuntimeError, "invalid"):
             MODULE.verify_job_number("IH-2026-001")
