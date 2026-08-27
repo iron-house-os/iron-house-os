@@ -14,6 +14,7 @@ import {
   projectStatuses,
   projectsApi,
 } from "../api/projects";
+import { financeApi, ProjectInvoicePackageReadiness, ProjectInvoicePackageResult } from "../api/finance";
 import { useAuth } from "../contexts/AuthContext";
 import { modulePathWithProjectContext, storeActiveProject, withProjectContext } from "../utils/projectContext";
 
@@ -66,6 +67,7 @@ export function ProjectWorkspacePage() {
   const [launchDashboard, setLaunchDashboard] = useState<ProjectLaunchDashboard | null>(null);
   const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
   const [closeoutChecklist, setCloseoutChecklist] = useState<ProjectCloseoutChecklist | null>(null);
+  const [invoicePackageReadiness, setInvoicePackageReadiness] = useState<ProjectInvoicePackageReadiness | null>(null);
   const [projectLoadWarning, setProjectLoadWarning] = useState<string | null>(null);
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [savingCloseoutCode, setSavingCloseoutCode] = useState<string | null>(null);
@@ -102,22 +104,27 @@ export function ProjectWorkspacePage() {
         setLaunchDashboard(null);
         setStartChecklist(null);
         setCloseoutChecklist(null);
+        setInvoicePackageReadiness(null);
 
         const closeoutEligible = Boolean(
           detail.project_number && ["awarded", "construction", "completed"].includes(detail.status),
         );
-        const [workspaceResult, checklistResult, launchResult, closeoutResult] = await Promise.allSettled([
+        const [workspaceResult, checklistResult, launchResult, closeoutResult, invoicePackageResult] = await Promise.allSettled([
           detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
           detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
           detail.workspace_root && detail.status === "awarded"
             ? projectsApi.launchDashboard(projectId)
             : Promise.resolve(null),
           closeoutEligible ? projectsApi.closeoutChecklist(projectId) : Promise.resolve(null),
+          isManagement && detail.status === "completed"
+            ? financeApi.getProjectInvoicePackageReadiness(projectId)
+            : Promise.resolve(null),
         ]);
         setWorkspace(workspaceResult.status === "fulfilled" ? workspaceResult.value : null);
         setStartChecklist(checklistResult.status === "fulfilled" ? checklistResult.value : null);
         setLaunchDashboard(launchResult.status === "fulfilled" ? launchResult.value : null);
         setCloseoutChecklist(closeoutResult.status === "fulfilled" ? closeoutResult.value : null);
+        setInvoicePackageReadiness(invoicePackageResult.status === "fulfilled" ? invoicePackageResult.value : null);
 
         const unavailable = [
           detail.workspace_root && workspaceResult.status === "rejected" ? "workspace summary" : null,
@@ -126,6 +133,9 @@ export function ProjectWorkspacePage() {
             ? "launch dashboard"
             : null,
           closeoutEligible && closeoutResult.status === "rejected" ? "closeout checklist" : null,
+          isManagement && detail.status === "completed" && invoicePackageResult.status === "rejected"
+            ? "draft invoice package readiness"
+            : null,
         ].filter(Boolean);
         if (unavailable.length) {
           setProjectLoadWarning(
@@ -139,13 +149,14 @@ export function ProjectWorkspacePage() {
         setLaunchDashboard(null);
         setStartChecklist(null);
         setCloseoutChecklist(null);
+        setInvoicePackageReadiness(null);
       }
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load projects");
     } finally {
       setIsLoading(false);
     }
-  }, [projectId, showTrash, statusFilter]);
+  }, [isManagement, projectId, showTrash, statusFilter]);
 
   useEffect(() => {
     // This effect synchronizes the project workspace with route and filter changes.
@@ -171,6 +182,12 @@ export function ProjectWorkspacePage() {
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to update project status");
     }
+  }
+
+  async function refreshInvoicePackageReadiness() {
+    if (!selectedProject || selectedProject.status !== "completed" || !isManagement) return;
+    const readiness = await financeApi.getProjectInvoicePackageReadiness(selectedProject.id);
+    setInvoicePackageReadiness(readiness);
   }
 
   async function archiveProject() {
@@ -377,6 +394,7 @@ export function ProjectWorkspacePage() {
             launchDashboard={launchDashboard}
             startChecklist={startChecklist}
             closeoutChecklist={closeoutChecklist}
+            invoicePackageReadiness={invoicePackageReadiness}
             savingChecklistCode={savingChecklistCode}
             savingCloseoutCode={savingCloseoutCode}
             initializingCloseout={initializingCloseout}
@@ -390,6 +408,7 @@ export function ProjectWorkspacePage() {
             onStartChecklistChange={(code, completed) => void updateStartChecklistItem(code, completed)}
             onInitializeCloseout={() => void initializeCloseoutChecklist()}
             onCloseoutChecklistChange={(code, completed, evidence) => void updateCloseoutChecklistItem(code, completed, evidence)}
+            onInvoicePackageGenerated={() => refreshInvoicePackageReadiness()}
           />
         ) : (
           <div className="rounded-md border border-iron-100 bg-white p-6">
@@ -617,6 +636,7 @@ function ProjectDetail({
   launchDashboard,
   startChecklist,
   closeoutChecklist,
+  invoicePackageReadiness,
   savingChecklistCode,
   savingCloseoutCode,
   initializingCloseout,
@@ -630,6 +650,7 @@ function ProjectDetail({
   onStartChecklistChange,
   onInitializeCloseout,
   onCloseoutChecklistChange,
+  onInvoicePackageGenerated,
 }: {
   project: Project;
   dashboard: ProjectDashboard;
@@ -637,6 +658,7 @@ function ProjectDetail({
   launchDashboard: ProjectLaunchDashboard | null;
   startChecklist: ProjectStartChecklist | null;
   closeoutChecklist: ProjectCloseoutChecklist | null;
+  invoicePackageReadiness: ProjectInvoicePackageReadiness | null;
   savingChecklistCode: string | null;
   savingCloseoutCode: string | null;
   initializingCloseout: boolean;
@@ -650,6 +672,7 @@ function ProjectDetail({
   onStartChecklistChange: (code: string, completed: boolean) => void;
   onInitializeCloseout: () => void;
   onCloseoutChecklistChange: (code: string, completed: boolean, evidence?: string | null) => void;
+  onInvoicePackageGenerated: () => Promise<void>;
 }) {
   return (
     <div className="space-y-6">
@@ -713,6 +736,12 @@ function ProjectDetail({
         <CloseoutInitializationCard
           initializing={initializingCloseout}
           onInitialize={onInitializeCloseout}
+        />
+      ) : null}
+      {project.status === "completed" && canManageCloseout && invoicePackageReadiness ? (
+        <ProjectInvoicePackageCard
+          readiness={invoicePackageReadiness}
+          onGenerated={onInvoicePackageGenerated}
         />
       ) : null}
       <DashboardWidgets dashboard={dashboard} project={project} />
@@ -1039,6 +1068,235 @@ function ProjectCloseoutChecklistCard({
       </p>
     </section>
   );
+}
+
+function ProjectInvoicePackageCard({
+  readiness,
+  onGenerated,
+}: {
+  readiness: ProjectInvoicePackageReadiness;
+  onGenerated: () => Promise<void>;
+}) {
+  const initialGroup = readiness.groups.find((group) => group.ready && !group.existing_invoice_id) ?? readiness.groups[0];
+  const [sourceImportKey, setSourceImportKey] = useState(initialGroup?.source_import_key ?? "");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [customerName, setCustomerName] = useState(readiness.customer_reference ?? "");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(todayIsoDate());
+  const [dueDate, setDueDate] = useState(addDaysIso(todayIsoDate(), 30));
+  const [terms, setTerms] = useState("Net 30");
+  const [gstRate, setGstRate] = useState("5.00");
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<ProjectInvoicePackageResult | null>(null);
+  const [packageError, setPackageError] = useState<string | null>(null);
+  const selectedGroup = readiness.groups.find((group) => group.source_import_key === sourceImportKey) ?? null;
+  const canGenerate = Boolean(
+    readiness.ready
+      && selectedGroup?.ready
+      && !selectedGroup.existing_invoice_id
+      && invoiceNumber.trim()
+      && customerName.trim()
+      && customerAddress.trim()
+      && invoiceDate
+      && dueDate
+      && terms.trim()
+      && gstRate.trim(),
+  );
+
+  async function generate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canGenerate || saving) return;
+    setSaving(true);
+    setPackageError(null);
+    try {
+      const generated = await financeApi.generateProjectInvoicePackage(readiness.project_id, {
+        source_import_key: sourceImportKey,
+        invoice_number: invoiceNumber.trim(),
+        customer_name: customerName.trim(),
+        customer_address: customerAddress.trim(),
+        customer_phone: customerPhone.trim() || null,
+        invoice_date: invoiceDate,
+        due_date: dueDate,
+        terms: terms.trim(),
+        gst_rate: gstRate.trim(),
+      });
+      setResult(generated);
+      await onGenerated();
+    } catch (currentError) {
+      setPackageError(currentError instanceof Error ? currentError.message : "Unable to generate draft invoice package");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section aria-label="Draft invoice package" className="rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <FileStack className="h-5 w-5 text-brand-gold" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-iron-950">Draft invoice package</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
+            Select one exact completed-work source group, confirm the billing identity, and generate a traceable draft for review.
+          </p>
+        </div>
+        <span className={[
+          "w-fit rounded-md px-3 py-2 text-xs font-semibold",
+          readiness.ready ? "bg-signal-green/10 text-signal-green" : "bg-brand-gold/10 text-iron-800",
+        ].join(" ")}>
+          {readiness.ready ? "Source package ready" : "Source package blocked"}
+        </span>
+      </div>
+
+      {readiness.blockers.length ? (
+        <ul className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {readiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+        </ul>
+      ) : null}
+
+      {readiness.groups.length ? (
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+          <div>
+            <Field label="Completed-work source group">
+              <select
+                aria-label="Completed-work source group"
+                value={sourceImportKey}
+                onChange={(event) => {
+                  setSourceImportKey(event.target.value);
+                  setResult(null);
+                  setPackageError(null);
+                }}
+                className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              >
+                {readiness.groups.map((group) => (
+                  <option key={group.source_import_key} value={group.source_import_key}>
+                    {group.source_invoice_number ?? group.source_import_key} · {group.line_count} line(s) · {formatCurrency(Number(group.subtotal))}{group.existing_invoice_id ? " · draft exists" : group.ready ? " · ready" : " · blocked"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {selectedGroup ? (
+              <div className="mt-4 rounded-md border border-iron-100">
+                <div className="grid gap-2 border-b border-iron-100 bg-iron-50 p-3 text-xs text-iron-600 sm:grid-cols-3">
+                  <span>Source: {selectedGroup.source_invoice_number ?? "No source invoice number"}</span>
+                  <span>Date: {selectedGroup.source_invoice_date ?? "Not recorded"}</span>
+                  <span>Total: {formatCurrency(Number(selectedGroup.subtotal))}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-iron-100 text-xs uppercase tracking-wide text-iron-500">
+                        <th className="p-3">Completed work</th>
+                        <th className="p-3">Quantity</th>
+                        <th className="p-3">Rate</th>
+                        <th className="p-3">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedGroup.lines.map((line) => (
+                        <tr key={line.id} className="border-b border-iron-100 last:border-b-0">
+                          <td className="p-3 text-iron-900">{line.description}</td>
+                          <td className="p-3 text-iron-700">{line.quantity} {line.unit}</td>
+                          <td className="p-3 text-iron-700">{formatCurrency(Number(line.billable_rate))}</td>
+                          <td className="p-3 font-semibold text-iron-900">{formatCurrency(Number(line.billable_amount))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedGroup.blockers.length ? (
+                  <ul className="border-t border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                    {selectedGroup.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {selectedGroup?.existing_invoice_id ? (
+            <div className="rounded-md border border-signal-green/30 bg-signal-green/5 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-signal-green">Existing invoice package</div>
+              <p className="mt-2 text-lg font-semibold text-iron-950">{selectedGroup.existing_invoice_number}</p>
+              <p className="mt-1 text-sm text-iron-600">Status: {label(selectedGroup.existing_invoice_status ?? "draft")}</p>
+              <a
+                href={financeApi.customerInvoicePdfUrl(selectedGroup.existing_invoice_id)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex min-h-11 items-center rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Open draft PDF
+              </a>
+            </div>
+          ) : (
+            <form onSubmit={generate} className="rounded-md border border-iron-100 p-4">
+              <h3 className="text-sm font-semibold text-iron-950">Confirm draft billing details</h3>
+              <p className="mt-1 text-xs leading-5 text-iron-500">
+                Project and source-work values are locked to verified records. Confirm all customer billing fields before generating.
+              </p>
+              <div className="mt-4 space-y-3">
+                <Field label="Invoice number">
+                  <input aria-label="Invoice number" required maxLength={80} value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                </Field>
+                <Field label="Customer legal / billing name">
+                  <input aria-label="Customer legal / billing name" required maxLength={255} value={customerName} onChange={(event) => setCustomerName(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                </Field>
+                <Field label="Customer billing address">
+                  <textarea aria-label="Customer billing address" required maxLength={500} rows={2} value={customerAddress} onChange={(event) => setCustomerAddress(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                </Field>
+                <Field label="Customer phone (if known)">
+                  <input aria-label="Customer phone (if known)" maxLength={40} value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Invoice date">
+                    <input aria-label="Invoice date" required type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                  </Field>
+                  <Field label="Due date">
+                    <input aria-label="Due date" required type="date" min={invoiceDate} value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Terms">
+                    <input aria-label="Terms" required maxLength={80} value={terms} onChange={(event) => setTerms(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                  </Field>
+                  <Field label="GST rate (%)">
+                    <input aria-label="GST rate (%)" required inputMode="decimal" maxLength={20} value={gstRate} onChange={(event) => setGstRate(event.target.value)} className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm" />
+                  </Field>
+                </div>
+              </div>
+              {packageError ? <p role="alert" className="mt-3 text-sm text-red-700">{packageError}</p> : null}
+              {result ? (
+                <div role="status" className="mt-3 rounded-md border border-signal-green/30 bg-signal-green/5 p-3 text-sm text-iron-800">
+                  Draft {result.invoice.invoice_number} generated. It remains unapproved and unissued.
+                </div>
+              ) : null}
+              <button type="submit" disabled={!canGenerate || saving} className="mt-4 min-h-11 w-full rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {saving ? "Generating draft…" : "Generate traceable draft"}
+              </button>
+            </form>
+          )}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-md border border-iron-100 bg-iron-50 p-4 text-sm text-iron-600">
+          No completed-work source groups are available for this project.
+        </p>
+      )}
+      <p className="mt-4 text-xs leading-5 text-iron-500">
+        Generated packages are drafts only. This action does not approve, issue, send, export, mark paid, release holdback, or infer customer acceptance.
+      </p>
+    </section>
+  );
+}
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIso(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function CloseoutChecklistItemControl({

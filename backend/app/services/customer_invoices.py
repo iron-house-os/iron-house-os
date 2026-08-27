@@ -88,6 +88,8 @@ def _decimal(value: str, label: str) -> Decimal:
         parsed = Decimal(value)
     except InvalidOperation as exc:
         raise HTTPException(status_code=422, detail=f"{label} must be a decimal number.") from exc
+    if not parsed.is_finite():
+        raise HTTPException(status_code=422, detail=f"{label} must be a finite decimal number.")
     if parsed < 0:
         raise HTTPException(status_code=422, detail=f"{label} cannot be negative.")
     return parsed
@@ -101,7 +103,15 @@ def _calculated_values(payload: CustomerInvoiceCreate) -> dict:
         unit_price = _decimal(item.unit_price, "Unit price")
         amount = (quantity * unit_price).quantize(MONEY, rounding=ROUND_HALF_UP)
         subtotal += amount
-        items.append({"description": item.description, "quantity": str(quantity), "unit_price": f"{unit_price.quantize(MONEY):.2f}", "amount": f"{amount:.2f}"})
+        items.append(
+            {
+                "description": item.description,
+                "quantity": str(quantity),
+                **({"unit": item.unit} if item.unit else {}),
+                "unit_price": f"{unit_price.quantize(MONEY):.2f}",
+                "amount": f"{amount:.2f}",
+            }
+        )
     subtotal = subtotal.quantize(MONEY, rounding=ROUND_HALF_UP)
     gst_rate = _decimal(payload.gst_rate, "GST rate")
     gst = (subtotal * gst_rate / Decimal("100")).quantize(MONEY, rounding=ROUND_HALF_UP)
@@ -119,6 +129,11 @@ def _read(invoice: CustomerInvoice) -> CustomerInvoiceRead:
         line_items=invoice.line_items_json, subtotal=f"{Decimal(invoice.subtotal):.2f}",
         gst_rate=f"{Decimal(invoice.gst_rate):.2f}", gst=f"{Decimal(invoice.gst):.2f}",
         total=f"{Decimal(invoice.total):.2f}", development_seed_key=invoice.development_seed_key,
+        source_package_key=invoice.source_package_key, source_import_key=invoice.source_import_key,
+        source_record_ids=invoice.source_record_ids_json,
+        closeout_snapshot=invoice.closeout_snapshot_json,
+        package_generated_by=invoice.package_generated_by,
+        package_generated_at=invoice.package_generated_at,
         created_by=invoice.created_by, issued_by=invoice.issued_by, issued_at=invoice.issued_at,
         created_at=invoice.created_at, updated_at=invoice.updated_at,
     )

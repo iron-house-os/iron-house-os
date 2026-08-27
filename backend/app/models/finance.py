@@ -149,7 +149,10 @@ class ReceiptAuditEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class CustomerInvoice(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "customer_invoices"
-    __table_args__ = (UniqueConstraint("invoice_number"),)
+    __table_args__ = (
+        UniqueConstraint("invoice_number"),
+        UniqueConstraint("source_package_key", name="uq_customer_invoices_source_package_key"),
+    )
 
     invoice_number: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
@@ -168,6 +171,12 @@ class CustomerInvoice(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     gst: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     development_seed_key: Mapped[str | None] = mapped_column(String(80), unique=True)
+    source_package_key: Mapped[str | None] = mapped_column(String(80), index=True)
+    source_import_key: Mapped[str | None] = mapped_column(String(255), index=True)
+    source_record_ids_json: Mapped[list | None] = mapped_column(JSONType)
+    closeout_snapshot_json: Mapped[dict | None] = mapped_column(JSONType)
+    package_generated_by: Mapped[str | None] = mapped_column(String(255))
+    package_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     issued_by: Mapped[str | None] = mapped_column(String(255))
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

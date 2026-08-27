@@ -106,6 +106,7 @@ InvoiceStatus = Literal["draft", "approved", "issued", "paid", "void"]
 class CustomerInvoiceLine(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     quantity: str = Field(default="1", min_length=1, max_length=30)
+    unit: str | None = Field(default=None, min_length=1, max_length=30)
     unit_price: str = Field(min_length=1, max_length=30)
 
 
@@ -150,6 +151,12 @@ class CustomerInvoiceRead(BaseModel):
     gst: str
     total: str
     development_seed_key: str | None
+    source_package_key: str | None
+    source_import_key: str | None
+    source_record_ids: list[str] | None
+    closeout_snapshot: dict | None
+    package_generated_by: str | None
+    package_generated_at: datetime | None
     created_by: str
     issued_by: str | None
     issued_at: datetime | None

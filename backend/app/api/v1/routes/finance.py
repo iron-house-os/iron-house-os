@@ -28,11 +28,17 @@ from app.schemas.finance import (
     StartupExpenseSummary,
     StartupExpenseUpdate,
 )
+from app.schemas.project_invoice_package import (
+    ProjectInvoicePackageCreate,
+    ProjectInvoicePackageReadiness,
+    ProjectInvoicePackageResult,
+)
 from app.services import (
     backups,
     chat_invoice_intake,
     customer_invoices,
     finance,
+    project_invoice_packages,
     receipt_extraction,
     receipts,
 )
@@ -167,6 +173,31 @@ def startup_quickbooks_export(db: DBSession, user: CurrentUser) -> Response:
 @router.post("/projects/{project_id}/import-estimate", response_model=ProjectFinancialSummary)
 def import_estimate(project_id: UUID, payload: EstimateBudgetImportRequest, db: DBSession, user: CurrentUser) -> ProjectFinancialSummary:
     return finance.import_estimate_budget(db, project_id, payload, user)
+
+
+@router.get(
+    "/projects/{project_id}/invoice-package-readiness",
+    response_model=ProjectInvoicePackageReadiness,
+)
+def project_invoice_package_readiness(
+    project_id: UUID,
+    db: DBSession,
+    user: CurrentUser,
+) -> ProjectInvoicePackageReadiness:
+    return project_invoice_packages.get_readiness(db, project_id, user)
+
+
+@router.post(
+    "/projects/{project_id}/invoice-package",
+    response_model=ProjectInvoicePackageResult,
+)
+def generate_project_invoice_package(
+    project_id: UUID,
+    payload: ProjectInvoicePackageCreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> ProjectInvoicePackageResult:
+    return project_invoice_packages.generate_package(db, project_id, payload, user)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectFinancialSummary)
