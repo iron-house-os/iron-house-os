@@ -104,6 +104,26 @@ export type ProjectStartChecklist = {
   items: ProjectStartChecklistItem[];
 };
 
+export type ProjectCloseoutChecklistItem = {
+  code: string;
+  category: string;
+  label: string;
+  sort_order: number;
+  completed: boolean;
+  evidence: string | null;
+  changed_by: string | null;
+  changed_at: string | null;
+};
+
+export type ProjectCloseoutChecklist = {
+  project_id: string;
+  status: "ready" | "not_ready";
+  completed_count: number;
+  total_count: number;
+  next_incomplete_control: ProjectCloseoutChecklistItem | null;
+  items: ProjectCloseoutChecklistItem[];
+};
+
 export type ProjectLaunchNextControl = {
   code: string;
   category: string;
@@ -144,7 +164,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    let message = `Request failed with ${response.status}`;
+    try {
+      const body = await response.json() as { error?: { message?: string }; detail?: string };
+      message = body.error?.message ?? body.detail ?? message;
+    } catch {
+      // Keep the status fallback when the response is not JSON.
+    }
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
@@ -209,5 +236,15 @@ export const projectsApi = {
     request<ProjectStartChecklist>(`/projects/${id}/start-checklist/${encodeURIComponent(code)}`, {
       method: "PATCH",
       body: JSON.stringify({ completed }),
+    }),
+  closeoutChecklist: (id: string) => requestOptional<ProjectCloseoutChecklist>(`/projects/${id}/closeout-checklist`),
+  initializeCloseoutChecklist: (id: string) =>
+    request<ProjectCloseoutChecklist>(`/projects/${id}/closeout-checklist`, {
+      method: "POST",
+    }),
+  updateCloseoutChecklistItem: (id: string, code: string, completed: boolean, evidence?: string | null) =>
+    request<ProjectCloseoutChecklist>(`/projects/${id}/closeout-checklist/${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ completed, evidence: evidence || null }),
     }),
 };

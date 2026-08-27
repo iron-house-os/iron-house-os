@@ -13,7 +13,17 @@ from app.core.errors import AppError
 from app.core.workflow_values import workflow_enum
 from app.models.bid import Bid
 from app.models.document import Document, Drawing
-from app.models.project import Project, ProjectStartChecklistItem, ProjectSupplier
+from app.models.project import (
+    Project,
+    ProjectCloseoutChecklistItem,
+    ProjectStartChecklistItem,
+    ProjectSupplier,
+)
+from app.schemas.project_closeout import (
+    ProjectCloseoutChecklistItemRead,
+    ProjectCloseoutChecklistRead,
+    ProjectCloseoutChecklistUpdate,
+)
 from app.models.rfq import RFQPackage
 from app.schemas.project import (
     ProjectCreate,
@@ -29,6 +39,7 @@ from app.schemas.project_start import (
     ProjectStartChecklistRead,
 )
 from app.services import project_folders
+from app.services.auth import AuthenticatedUser
 
 JOB_NUMBER_PREFIX = "IH"
 JOB_NUMBER_WIDTH = 3
@@ -82,10 +93,69 @@ PROJECT_START_CHECKLIST: tuple[tuple[str, str, str], ...] = (
         "Quality, inspection, testing, and as-built requirements are assigned.",
     ),
 )
+PROJECT_CLOSEOUT_CHECKLIST: tuple[tuple[str, str, str], ...] = (
+    (
+        "deficiencies",
+        "Quality",
+        "Deficiencies are closed or carried forward with an owner, due date, and documented basis.",
+    ),
+    (
+        "testing_inspections",
+        "Quality",
+        "Required testing and inspection records are complete and saved to the project record.",
+    ),
+    (
+        "permit_authority_finals",
+        "Administration",
+        "Permit, municipal, utility, or other authority final records are saved when applicable.",
+    ),
+    (
+        "asbuilts_redlines",
+        "Documents",
+        "As-builts, redlines, and final drawing revisions are complete and indexed.",
+    ),
+    (
+        "turnover_warranty",
+        "Turnover",
+        "O&M information, warranties, training, and spare-material obligations are complete or recorded as not applicable.",
+    ),
+    (
+        "demobilization",
+        "Delivery",
+        "Demobilization, cleanup, environmental controls, and remaining site obligations are complete.",
+    ),
+    (
+        "changes_commitments",
+        "Cost control",
+        "Final changes, purchase orders, subcontract commitments, and unresolved exposure are reconciled.",
+    ),
+    (
+        "billing_holdback",
+        "Finance",
+        "Final billing package and holdback status are recorded without inferring issue, payment, or release.",
+    ),
+    (
+        "acceptance_evidence",
+        "Contract",
+        "Client or consultant acceptance, substantial completion, or other contract completion evidence is saved when applicable.",
+    ),
+    (
+        "turnover_index",
+        "Documents",
+        "The closeout package is indexed in the project record with remaining actions clearly assigned.",
+    ),
+)
+PROJECT_CLOSEOUT_CODES = frozenset(code for code, _category, _label in PROJECT_CLOSEOUT_CHECKLIST)
+MANAGEMENT_PROJECT_ROLES = {"admin", "operations_manager"}
 
 
 def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     values = _project_values(payload)
+    if values.get("status") == ProjectStatus.completed.value:
+        raise AppError(
+            "Create the project through the awarded workflow and complete its closeout controls before marking it complete.",
+            status_code=409,
+        )
     if values.get("status") == ProjectStatus.awarded.value and not _has_job_number(
         values.get("project_number")
     ):
@@ -121,7 +191,12 @@ def get_project(db: Session, project_id: UUID) -> ProjectRead:
     return _to_schema(_load_project(db, project_id))
 
 
-def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> ProjectRead:
+def update_project(
+    db: Session,
+    project_id: UUID,
+    payload: ProjectUpdate,
+    user: AuthenticatedUser,
+) -> ProjectRead:
     project = _load_project(db, project_id)
     was_awarded = project.status == ProjectStatus.awarded.value
     update_data = _project_values(payload)
@@ -130,6 +205,17 @@ def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> Pro
     supplier_ids = payload.supplier_ids if "supplier_ids" in payload.model_fields_set else None
     resulting_status = update_data.get("status", project.status)
     resulting_number = update_data.get("project_number", project.project_number)
+    status_changed = resulting_status != project.status
+    if status_changed and ProjectStatus.completed.value in {project.status, resulting_status}:
+        if user.role not in MANAGEMENT_PROJECT_ROLES:
+            raise AppError(
+                "Management access is required to complete or reopen a project.",
+                status_code=403,
+            )
+    completing_project = status_changed and resulting_status == ProjectStatus.completed.value
+    reopening_project = status_changed and project.status == ProjectStatus.completed.value
+    if completing_project:
+        _require_project_closeout_ready(db, project_id)
     if resulting_status == ProjectStatus.awarded.value and not _has_job_number(resulting_number):
         return _update_awarded_project(db, project_id, update_data, supplier_ids)
 
@@ -137,6 +223,20 @@ def update_project(db: Session, project_id: UUID, payload: ProjectUpdate) -> Pro
         setattr(project, key, value)
     if not was_awarded and project.status == ProjectStatus.awarded.value:
         _provision_awarded_workspace(db, project)
+    if completing_project or reopening_project:
+        metadata = dict(project.metadata_json or {})
+        if completing_project:
+            metadata["closeout_completion"] = {
+                "completed_by": user.email,
+                "completed_at": datetime.now(UTC).isoformat(),
+            }
+        else:
+            metadata["closeout_reopening"] = {
+                "reopened_by": user.email,
+                "reopened_at": datetime.now(UTC).isoformat(),
+                "reopened_to_status": resulting_status,
+            }
+        project.metadata_json = metadata
     if supplier_ids is not None:
         _replace_suppliers(db, project.id, supplier_ids)
     db.commit()
@@ -237,6 +337,7 @@ def _provision_awarded_workspace(db: Session, project: Project) -> None:
         project.workspace_manifest_json = manifest.model_dump(mode="json")
         project.workspace_provisioned_at = datetime.now(UTC)
     _provision_project_start_checklist(db, project.id)
+    _provision_project_closeout_checklist(db, project.id)
 
 
 def _provision_project_start_checklist(db: Session, project_id: UUID) -> None:
@@ -265,6 +366,40 @@ def _provision_project_start_checklist(db: Session, project_id: UUID) -> None:
         try:
             with db.begin_nested():
                 db.add(ProjectStartChecklistItem(**value))
+                db.flush()
+        except IntegrityError:
+            continue
+
+
+def _provision_project_closeout_checklist(db: Session, project_id: UUID) -> None:
+    values = [
+        {
+            "project_id": project_id,
+            "code": code,
+            "category": category,
+            "label": label,
+            "sort_order": sort_order,
+            "completed": False,
+        }
+        for sort_order, (code, category, label) in enumerate(
+            PROJECT_CLOSEOUT_CHECKLIST,
+            start=1,
+        )
+    ]
+    dialect_name = db.get_bind().dialect.name
+    if dialect_name == "postgresql":
+        statement = postgresql_insert(ProjectCloseoutChecklistItem).values(values)
+        db.execute(statement.on_conflict_do_nothing(index_elements=["project_id", "code"]))
+        return
+    if dialect_name == "sqlite":
+        statement = sqlite_insert(ProjectCloseoutChecklistItem).values(values)
+        db.execute(statement.on_conflict_do_nothing(index_elements=["project_id", "code"]))
+        return
+
+    for value in values:
+        try:
+            with db.begin_nested():
+                db.add(ProjectCloseoutChecklistItem(**value))
                 db.flush()
         except IntegrityError:
             continue
@@ -371,6 +506,134 @@ def _project_start_checklist_schema(
             for item in items
         ],
     )
+
+
+def initialize_project_closeout_checklist(
+    db: Session,
+    project_id: UUID,
+    user: AuthenticatedUser,
+) -> ProjectCloseoutChecklistRead:
+    if user.role not in MANAGEMENT_PROJECT_ROLES:
+        raise AppError(
+            "Management access is required to initialize project closeout controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id)
+    if (
+        project.status
+        not in {
+            ProjectStatus.awarded.value,
+            ProjectStatus.construction.value,
+            ProjectStatus.completed.value,
+        }
+        or not project.project_number
+    ):
+        raise AppError(
+            "Closeout controls are available only for awarded jobs with a permanent job number.",
+            status_code=409,
+        )
+    _provision_project_closeout_checklist(db, project_id)
+    db.commit()
+    return get_project_closeout_checklist(db, project_id)
+
+
+def get_project_closeout_checklist(
+    db: Session,
+    project_id: UUID,
+) -> ProjectCloseoutChecklistRead:
+    _load_project(db, project_id)
+    items = list(
+        db.scalars(
+            select(ProjectCloseoutChecklistItem)
+            .where(ProjectCloseoutChecklistItem.project_id == project_id)
+            .order_by(ProjectCloseoutChecklistItem.sort_order)
+        ).all()
+    )
+    if not items:
+        raise AppError("Project closeout checklist not found", status_code=404)
+    return _project_closeout_checklist_schema(project_id, items)
+
+
+def update_project_closeout_checklist_item(
+    db: Session,
+    project_id: UUID,
+    code: str,
+    payload: ProjectCloseoutChecklistUpdate,
+    user: AuthenticatedUser,
+) -> ProjectCloseoutChecklistRead:
+    if user.role not in MANAGEMENT_PROJECT_ROLES:
+        raise AppError(
+            "Management access is required to update project closeout controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id)
+    if project.status == ProjectStatus.completed.value and not payload.completed:
+        raise AppError(
+            "Reopen the project before reopening a completed closeout control.",
+            status_code=409,
+        )
+    item = db.scalar(
+        select(ProjectCloseoutChecklistItem).where(
+            ProjectCloseoutChecklistItem.project_id == project_id,
+            ProjectCloseoutChecklistItem.code == code,
+        )
+    )
+    if item is None:
+        raise AppError("Project closeout checklist item not found", status_code=404)
+    item.completed = payload.completed
+    item.evidence = payload.evidence if payload.completed else None
+    item.changed_by = user.email
+    item.changed_at = datetime.now(UTC)
+    db.commit()
+    return get_project_closeout_checklist(db, project_id)
+
+
+def _project_closeout_checklist_schema(
+    project_id: UUID,
+    items: list[ProjectCloseoutChecklistItem],
+) -> ProjectCloseoutChecklistRead:
+    completed_count = sum(1 for item in items if item.completed)
+    next_item = next((item for item in items if not item.completed), None)
+    item_schemas = [
+        ProjectCloseoutChecklistItemRead(
+            code=item.code,
+            category=item.category,
+            label=item.label,
+            sort_order=item.sort_order,
+            completed=item.completed,
+            evidence=item.evidence,
+            changed_by=item.changed_by,
+            changed_at=item.changed_at,
+        )
+        for item in items
+    ]
+    total_count = len(items)
+    has_exact_controls = {item.code for item in items} == PROJECT_CLOSEOUT_CODES
+    return ProjectCloseoutChecklistRead(
+        project_id=project_id,
+        status=("ready" if has_exact_controls and completed_count == total_count else "not_ready"),
+        completed_count=completed_count,
+        total_count=total_count,
+        next_incomplete_control=(
+            next((item for item in item_schemas if item.code == next_item.code), None) if next_item else None
+        ),
+        items=item_schemas,
+    )
+
+
+def _require_project_closeout_ready(db: Session, project_id: UUID) -> None:
+    items = list(
+        db.scalars(
+            select(ProjectCloseoutChecklistItem).where(ProjectCloseoutChecklistItem.project_id == project_id)
+        ).all()
+    )
+    if {item.code for item in items} != PROJECT_CLOSEOUT_CODES or any(
+        not item.completed or not str(item.evidence or "").strip() for item in items
+    ):
+        raise AppError(
+            "Complete every project closeout control with evidence before marking the project complete.",
+            status_code=409,
+        )
 
 
 def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:

@@ -21,7 +21,12 @@ from app.models.finance import (
 from app.models.help_feedback import HelpFeedback, HelpImprovement
 from app.models.media import MediaAsset, MediaRecordLink, MediaVersion
 from app.models.municipality import Municipality
-from app.models.project import Project, ProjectStartChecklistItem, ProjectSupplier
+from app.models.project import (
+    Project,
+    ProjectCloseoutChecklistItem,
+    ProjectStartChecklistItem,
+    ProjectSupplier,
+)
 from app.models.rfq import (
     RFQ,
     Quote,
@@ -72,6 +77,7 @@ __all__ = [
     "MediaVersion",
     "Municipality",
     "Project",
+    "ProjectCloseoutChecklistItem",
     "ProjectStartChecklistItem",
     "ProjectSupplier",
     "Quote",

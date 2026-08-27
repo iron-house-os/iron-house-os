@@ -6,7 +6,7 @@ import { Project, ProjectLaunchDashboard, projectsApi } from "../api/projects";
 import { WorkflowDraft, workflowDraftsApi } from "../api/workflowDrafts";
 import { modulePathWithProjectContext, readEffectiveProjectContext, withProjectContext } from "../utils/projectContext";
 
-const flowStages = ["Capture quote", "Record decision", "Award + job number", "Launch controls", "Deliver"];
+const flowStages = ["Capture quote", "Record decision", "Award + job number", "Launch controls", "Deliver + closeout"];
 
 const tenderTools = [
   { label: "Project workspace", path: "/projects", detail: "Open a formal tender or an existing project." },
@@ -334,7 +334,7 @@ export function buildMvpWorkQueue(
         title: project.name,
         reference: project.project_number ?? "Active job",
         stage: "Active delivery",
-        detail: "This job is in construction. Continue field delivery, cost control, safety, documents, and daily records in project context.",
+        detail: "Continue field delivery, cost control, safety, documents, and daily records. When physical work is ending, complete the evidence-backed closeout controls before management marks the project complete.",
         nextLabel: "Continue project operations",
         nextPath: withProjectContext("/project-operations", projectContext),
         secondaryActions: [
@@ -342,6 +342,7 @@ export function buildMvpWorkQueue(
           { label: "PO requests", path: withProjectContext("/request-po", projectContext) },
           { label: "Safety", path: withProjectContext("/safety-operations", projectContext) },
           { label: "Documents", path: withProjectContext("/documents", projectContext) },
+          { label: "Closeout controls", path: `/projects/${project.id}` },
         ],
       });
     } else {

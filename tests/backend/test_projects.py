@@ -1,18 +1,40 @@
 from datetime import UTC, datetime
 from unittest.mock import patch
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
-from app.models.project import Project, ProjectStartChecklistItem
-from app.services.projects import _provision_project_start_checklist
+from app.models.project import Project, ProjectCloseoutChecklistItem, ProjectStartChecklistItem
+from app.services.auth import AuthenticatedUser
+from app.services.projects import (
+    _provision_project_closeout_checklist,
+    _provision_project_start_checklist,
+)
 from conftest import TestingSessionLocal
 
 
 client = TestClient(app)
 IRON_HOUSE_TIME_ZONE = ZoneInfo("America/Vancouver")
+
+
+def _authenticate_as(role: str) -> None:
+    def override(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000088"),
+            email=f"{role}@ironhousecontracting.com",
+            display_name=f"Test {role.replace('_', ' ').title()}",
+            role=role,
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = override
 
 
 def create_project(name: str = "King George Utility Upgrade") -> dict:
@@ -68,6 +90,150 @@ def test_awarded_project_creation_generates_sequential_job_numbers() -> None:
     assert second.json()["project_number"] == f"IH{year}002"
     assert first.json()["workspace_root"] == f"IH{year}001_FirstAward"
     assert second.json()["workspace_root"] == f"IH{year}002_SecondAward"
+
+
+def test_new_awarded_project_has_evidence_backed_closeout_controls() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Closeout Controlled Award", "status": "awarded"},
+    ).json()
+
+    response = client.get(f"/api/v1/projects/{project['id']}/closeout-checklist")
+
+    assert response.status_code == 200
+    checklist = response.json()
+    assert checklist["status"] == "not_ready"
+    assert checklist["completed_count"] == 0
+    assert checklist["total_count"] == 10
+    assert checklist["next_incomplete_control"]["code"] == "deficiencies"
+    assert [item["code"] for item in checklist["items"]] == [
+        "deficiencies",
+        "testing_inspections",
+        "permit_authority_finals",
+        "asbuilts_redlines",
+        "turnover_warranty",
+        "demobilization",
+        "changes_commitments",
+        "billing_holdback",
+        "acceptance_evidence",
+        "turnover_index",
+    ]
+
+
+def test_project_completion_requires_all_closeout_evidence_and_management() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Controlled Completion", "status": "awarded"},
+    ).json()
+    construction = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"status": "construction"},
+    )
+    assert construction.status_code == 200
+
+    blocked = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"status": "completed"},
+    )
+    assert blocked.status_code == 409
+    assert "every project closeout control" in blocked.json()["error"]["message"]
+
+    checklist = client.get(f"/api/v1/projects/{project['id']}/closeout-checklist").json()
+    missing_evidence = client.patch(
+        f"/api/v1/projects/{project['id']}/closeout-checklist/{checklist['items'][0]['code']}",
+        json={"completed": True},
+    )
+    assert missing_evidence.status_code == 422
+
+    for item in checklist["items"]:
+        updated = client.patch(
+            f"/api/v1/projects/{project['id']}/closeout-checklist/{item['code']}",
+            json={
+                "completed": True,
+                "evidence": f"Controlled source record for {item['code']}",
+            },
+        )
+        assert updated.status_code == 200
+
+    ready = updated.json()
+    assert ready["status"] == "ready"
+    assert ready["completed_count"] == ready["total_count"] == 10
+    assert ready["next_incomplete_control"] is None
+    assert all(item["changed_by"] == "test-admin@ironhousecontracting.com" for item in ready["items"])
+    assert all(item["changed_at"] for item in ready["items"])
+
+    _authenticate_as("estimator")
+    denied = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"status": "completed"},
+    )
+    assert denied.status_code == 403
+
+    _authenticate_as("operations_manager")
+    completed = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "completed"
+    completion = completed.json()["metadata"]["closeout_completion"]
+    assert completion["completed_by"] == "operations_manager@ironhousecontracting.com"
+    assert completion["completed_at"]
+
+    cannot_reopen_item = client.patch(
+        f"/api/v1/projects/{project['id']}/closeout-checklist/deficiencies",
+        json={"completed": False},
+    )
+    assert cannot_reopen_item.status_code == 409
+
+    reopened = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"status": "construction"},
+    )
+    assert reopened.status_code == 200
+    reopening = reopened.json()["metadata"]["closeout_reopening"]
+    assert reopening["reopened_by"] == "operations_manager@ironhousecontracting.com"
+    assert reopening["reopened_at"]
+    assert reopening["reopened_to_status"] == "construction"
+
+    reopened_item = client.patch(
+        f"/api/v1/projects/{project['id']}/closeout-checklist/deficiencies",
+        json={"completed": False},
+    )
+    assert reopened_item.status_code == 200
+    assert reopened_item.json()["items"][0]["evidence"] is None
+
+
+def test_management_can_initialize_legacy_job_closeout_without_automatic_backfill() -> None:
+    with TestingSessionLocal() as db:
+        project = Project(
+            name="Legacy Construction Job",
+            status="construction",
+            project_number="IH2025001",
+        )
+        db.add(project)
+        db.commit()
+        project_id = project.id
+
+    assert client.get(f"/api/v1/projects/{project_id}/closeout-checklist").status_code == 404
+
+    _authenticate_as("viewer")
+    assert client.post(f"/api/v1/projects/{project_id}/closeout-checklist").status_code == 403
+
+    _authenticate_as("operations_manager")
+    initialized = client.post(f"/api/v1/projects/{project_id}/closeout-checklist")
+    assert initialized.status_code == 201
+    assert initialized.json()["total_count"] == 10
+    assert initialized.json()["completed_count"] == 0
+
+
+def test_project_cannot_be_created_directly_as_completed() -> None:
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "Bypassed Closeout", "status": "completed"},
+    )
+
+    assert response.status_code == 409
 
 
 def test_transition_to_awarded_generates_job_number() -> None:
@@ -182,6 +348,29 @@ def test_checklist_provisioning_is_conflict_safe_before_commit() -> None:
             select(func.count())
             .select_from(ProjectStartChecklistItem)
             .where(ProjectStartChecklistItem.project_id == project.id)
+        )
+
+    assert count == 10
+
+
+def test_closeout_checklist_provisioning_is_conflict_safe_before_commit() -> None:
+    with TestingSessionLocal() as db:
+        project = Project(
+            name="Concurrent Closeout Checklist",
+            status="awarded",
+            project_number="IH2026099",
+        )
+        db.add(project)
+        db.flush()
+
+        _provision_project_closeout_checklist(db, project.id)
+        _provision_project_closeout_checklist(db, project.id)
+        db.flush()
+
+        count = db.scalar(
+            select(func.count())
+            .select_from(ProjectCloseoutChecklistItem)
+            .where(ProjectCloseoutChecklistItem.project_id == project.id)
         )
 
     assert count == 10
