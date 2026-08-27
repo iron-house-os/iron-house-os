@@ -64,6 +64,32 @@ def _project() -> dict:
     return response.json()
 
 
+def _completed_work_payload(project_id: str) -> dict:
+    return {
+        "record_type": "completed_work",
+        "project_id": project_id,
+        "work_date": "2026-08-11",
+        "title": "Common excavation - Tuesday, August 11, 2026",
+        "details": {
+            "source_import_key": "bowline-rawlison-2026-08-25",
+            "source_line_key": "01-common-excavation-2026-08-11",
+            "source_line_position": 1,
+            "source_invoice_number": "BOW-2026-0811",
+            "source_invoice_date": "2026-08-15",
+            "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+            "description": "Common excavation - Tuesday, August 11, 2026",
+            "quantity": "12.5",
+            "unit": "hour",
+            "billable_rate": "220.00",
+            "billable_amount": "2750.00",
+            "record_date_basis": "source_work_date",
+            "source_work_date": "2026-08-11",
+            "cost_status": "internal_cost_unverified",
+            "revenue_trace_only": True,
+        },
+    }
+
+
 def _invoice_document(project_id: str, name: str = "invoice.pdf") -> str:
     with TestingSessionLocal() as db:
         document = Document(
@@ -233,6 +259,55 @@ def test_flagged_inspection_alerts_management_and_accepts_signature() -> None:
     )
     assert signed.status_code == 200
     assert signed.json()["signatures"][0]["employee_name"] == "Crew Member"
+
+
+def test_completed_work_is_management_only_source_exact_and_idempotent() -> None:
+    project = _project()
+    payload = _completed_work_payload(project["id"])
+
+    created = client.post("/api/v1/field-operations/records", json=payload)
+    assert created.status_code == 201, created.text
+    assert created.json()["status"] == "recorded"
+    assert created.json()["details"]["cost_status"] == "internal_cost_unverified"
+
+    repeated = client.post("/api/v1/field-operations/records", json=payload)
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["id"] == created.json()["id"]
+
+    listed = client.get(
+        "/api/v1/field-operations/completed-work",
+        params={"project_id": project["id"], "source_import_key": payload["details"]["source_import_key"]},
+    )
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [created.json()["id"]]
+
+    conflict_payload = {**payload, "title": "Conflicting description"}
+    conflict = client.post("/api/v1/field-operations/records", json=conflict_payload)
+    assert conflict.status_code == 409
+    assert "different content" in conflict.json()["error"]["message"]
+
+    _authenticate_as("viewer")
+    assert client.post("/api/v1/field-operations/records", json=payload).status_code == 403
+    assert client.get(
+        "/api/v1/field-operations/completed-work",
+        params={"project_id": project["id"], "source_import_key": payload["details"]["source_import_key"]},
+    ).status_code == 403
+    assert created.json()["id"] not in {
+        item["id"] for item in client.get("/api/v1/field-operations/bootstrap").json()["records"]
+    }
+
+
+def test_completed_work_rejects_inexact_revenue_or_invented_actual_cost() -> None:
+    project = _project()
+    payload = _completed_work_payload(project["id"])
+    payload["details"]["billable_amount"] = "1.00"
+    inexact = client.post("/api/v1/field-operations/records", json=payload)
+    assert inexact.status_code == 422
+
+    payload = _completed_work_payload(project["id"])
+    payload["details"]["internal_cost_amount"] = "1000.00"
+    invented_cost = client.post("/api/v1/field-operations/records", json=payload)
+    assert invented_cost.status_code == 422
 
 
 def test_safety_control_records_require_evidence_for_release_and_keep_history() -> None:

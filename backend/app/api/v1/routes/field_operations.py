@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -106,6 +106,16 @@ def create_time_entry(payload: TimeEntryCreate, db: DBSession, user: CurrentUser
 @router.post("/records", response_model=FieldRecordRead, status_code=status.HTTP_201_CREATED)
 def create_field_record(payload: FieldRecordCreate, db: DBSession, user: CurrentUser) -> FieldRecordRead:
     return field_operations.create_field_record(db, payload, user)
+
+
+@router.get("/completed-work", response_model=list[FieldRecordRead])
+def list_completed_work(
+    project_id: UUID,
+    source_import_key: Annotated[str, Query(min_length=1, max_length=255)],
+    db: DBSession,
+    user: CurrentUser,
+) -> list[FieldRecordRead]:
+    return field_operations.list_completed_work(db, project_id, source_import_key, user)
 
 
 @router.post("/records/{record_id}/invoice", response_model=FieldRecordRead)

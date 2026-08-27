@@ -2,7 +2,7 @@ import csv
 from datetime import UTC, date, datetime, timedelta
 from io import StringIO
 import secrets
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
@@ -180,6 +180,8 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     vehicle_logs = list(db.scalars(select(VehicleLog).order_by(VehicleLog.entry_date.desc()).limit(100)))
     time_entries = list(db.scalars(select(TimeEntry).order_by(TimeEntry.work_date.desc()).limit(200)))
     records_query = select(FieldRecord)
+    if user.role not in MANAGEMENT_ROLES:
+        records_query = records_query.where(FieldRecord.record_type != "completed_work")
     if user.role == "estimator" or (
         user.role == "viewer" and field_role in {"foreman", "management"}
     ):
@@ -798,6 +800,13 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
         alerts = MANAGEMENT_ALERT_RECIPIENTS
     values = payload.model_dump()
     profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
+    if payload.record_type == "completed_work":
+        if user.role not in MANAGEMENT_ROLES:
+            raise AppError("Management access is required to create completed-work records.", status_code=403)
+        existing = _find_completed_work_record(db, payload)
+        if existing is not None:
+            _verify_completed_work_record(existing, payload)
+            return FieldRecordRead.model_validate(existing)
     if user.role == "viewer":
         if profile is None:
             raise AppError("Your employee profile is not linked to this account.", status_code=400)
@@ -914,13 +923,106 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             "recorded_by": user.display_name,
             "recorded_at": datetime.now(UTC).isoformat(),
         }
+    if payload.record_type == "completed_work":
+        values["status"] = "recorded"
     values["document_ids"] = [str(document_id) for document_id in payload.document_ids]
     values["alert_recipients"] = alerts
-    item = FieldRecord(**values, submitted_by=user.email)
+    if payload.record_type == "completed_work":
+        item_id = uuid5(
+            NAMESPACE_URL,
+            ":".join((
+                "ihos-completed-work",
+                str(payload.project_id),
+                str(payload.details["source_import_key"]),
+                str(payload.details["source_line_key"]),
+            )),
+        )
+    else:
+        item_id = None
+    item = FieldRecord(**values, submitted_by=user.email, **({"id": item_id} if item_id else {}))
     db.add(item)
-    commit(db)
+    if payload.record_type == "completed_work":
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            concurrent = db.get(FieldRecord, item_id)
+            if concurrent is None:
+                raise AppError("Unable to save the completed-work record.", status_code=409) from exc
+            _verify_completed_work_record(concurrent, payload)
+            return FieldRecordRead.model_validate(concurrent)
+    else:
+        commit(db)
     db.refresh(item)
     return FieldRecordRead.model_validate(item)
+
+
+def list_completed_work(
+    db: Session,
+    project_id: UUID,
+    source_import_key: str,
+    user: AuthenticatedUser,
+) -> list[FieldRecordRead]:
+    if user.role not in MANAGEMENT_ROLES:
+        raise AppError("Management access is required to view completed-work imports.", status_code=403)
+    require_exists(db, Project, project_id, "Project")
+    records = list(db.scalars(
+        select(FieldRecord)
+        .where(
+            FieldRecord.project_id == project_id,
+            FieldRecord.record_type == "completed_work",
+        )
+        .order_by(FieldRecord.work_date, FieldRecord.created_at, FieldRecord.id)
+    ))
+    matches = [
+        item
+        for item in records
+        if str((item.details or {}).get("source_import_key") or "") == source_import_key
+    ]
+    return [FieldRecordRead.model_validate(item) for item in matches]
+
+
+def _find_completed_work_record(db: Session, payload: FieldRecordCreate) -> FieldRecord | None:
+    records = list(db.scalars(
+        select(FieldRecord).where(
+            FieldRecord.project_id == payload.project_id,
+            FieldRecord.record_type == "completed_work",
+        )
+    ))
+    matches = [
+        item
+        for item in records
+        if str((item.details or {}).get("source_import_key") or "") == str(payload.details["source_import_key"])
+        and str((item.details or {}).get("source_line_key") or "") == str(payload.details["source_line_key"])
+    ]
+    if len(matches) > 1:
+        raise AppError("Multiple completed-work records match the same source line; manual review is required.", status_code=409)
+    return matches[0] if matches else None
+
+
+def _verify_completed_work_record(item: FieldRecord, payload: FieldRecordCreate) -> None:
+    expected = {
+        "project_id": payload.project_id,
+        "record_type": payload.record_type,
+        "work_date": payload.work_date,
+        "title": payload.title,
+        "status": "recorded",
+        "severity": payload.severity,
+        "cost_code": payload.cost_code,
+        "employee_id": payload.employee_id,
+        "equipment_id": payload.equipment_id,
+        "supplier_id": payload.supplier_id,
+        "details": payload.details,
+        "document_ids": [str(value) for value in payload.document_ids],
+        "signatures": payload.signatures,
+        "alert_recipients": payload.alert_recipients,
+    }
+    mismatches = [key for key, value in expected.items() if getattr(item, key) != value]
+    if mismatches:
+        raise AppError(
+            "Completed-work source key already exists with different content; manual review is required.",
+            status_code=409,
+        )
 
 
 def attach_purchase_order_invoice(
