@@ -15,6 +15,9 @@ from app.schemas.receipt import (
     ReceiptList, ReceiptRead, ReceiptUpdate,
 )
 from app.schemas.finance import (
+    CompletedWorkCostCreate,
+    CompletedWorkCostCreateResult,
+    CompletedWorkCostLedger,
     CustomerInvoiceCreate,
     CustomerInvoiceList,
     CustomerInvoiceRead,
@@ -37,6 +40,7 @@ from app.services import (
     backups,
     chat_invoice_intake,
     customer_invoices,
+    completed_work_costs,
     finance,
     project_invoice_packages,
     receipt_extraction,
@@ -173,6 +177,31 @@ def startup_quickbooks_export(db: DBSession, user: CurrentUser) -> Response:
 @router.post("/projects/{project_id}/import-estimate", response_model=ProjectFinancialSummary)
 def import_estimate(project_id: UUID, payload: EstimateBudgetImportRequest, db: DBSession, user: CurrentUser) -> ProjectFinancialSummary:
     return finance.import_estimate_budget(db, project_id, payload, user)
+
+
+@router.get(
+    "/projects/{project_id}/completed-work-costs",
+    response_model=CompletedWorkCostLedger,
+)
+def completed_work_cost_ledger(
+    project_id: UUID,
+    db: DBSession,
+    user: CurrentUser,
+) -> CompletedWorkCostLedger:
+    return completed_work_costs.get_ledger(db, project_id, user)
+
+
+@router.post(
+    "/projects/{project_id}/completed-work-costs",
+    response_model=CompletedWorkCostCreateResult,
+)
+def create_completed_work_cost(
+    project_id: UUID,
+    payload: CompletedWorkCostCreate,
+    db: DBSession,
+    user: CurrentUser,
+) -> CompletedWorkCostCreateResult:
+    return completed_work_costs.create_cost(db, project_id, payload, user)
 
 
 @router.get(

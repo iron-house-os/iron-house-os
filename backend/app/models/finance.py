@@ -11,6 +11,14 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class FinancialEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "financial_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_type",
+            "source_id",
+            "source_key",
+            name="uq_financial_entries_source_allocation",
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     cost_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -23,6 +31,7 @@ class FinancialEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text)
     source_type: Mapped[str] = mapped_column(String(40), default="manual", nullable=False)
     source_id: Mapped[UUID | None]
+    source_key: Mapped[str | None] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(40), default="posted", nullable=False, index=True)
     metadata_json: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)

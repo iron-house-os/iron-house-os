@@ -15,6 +15,7 @@ import {
   projectsApi,
 } from "../api/projects";
 import { financeApi, ProjectInvoicePackageReadiness, ProjectInvoicePackageResult } from "../api/finance";
+import { CompletedWorkCostPanel } from "../components/CompletedWorkCostPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { modulePathWithProjectContext, storeActiveProject, withProjectContext } from "../utils/projectContext";
 
@@ -744,6 +745,7 @@ function ProjectDetail({
           onGenerated={onInvoicePackageGenerated}
         />
       ) : null}
+      {canManageCloseout ? <CompletedWorkCostPanel projectId={project.id} /> : null}
       <DashboardWidgets dashboard={dashboard} project={project} />
       <CommandCenter project={project} dashboard={dashboard} />
 

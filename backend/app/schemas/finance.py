@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -29,6 +30,7 @@ class FinancialEntryRead(FinancialEntryCreate):
     id: UUID
     source_type: str
     source_id: UUID | None
+    source_key: str | None
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -94,6 +96,54 @@ class ProjectFinancialSummary(BaseModel):
     forecast_margin_percent: float
     entries: list[FinancialEntryRead]
     cost_codes: list[CostCodeFinancialSummary]
+
+
+class CompletedWorkCostCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    completed_work_id: UUID
+    idempotency_key: UUID
+    cost_code: str = Field(min_length=1, max_length=32)
+    category: FinancialCategory
+    amount: Decimal = Field(gt=0, le=999_999_999, decimal_places=2)
+    entry_date: date
+    vendor_name: str | None = Field(default=None, max_length=255)
+    reference: str | None = Field(default=None, max_length=120)
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class CompletedWorkCostCreateResult(BaseModel):
+    entry: FinancialEntryRead
+    created: bool
+    idempotent: bool
+
+
+class CompletedWorkCostLine(BaseModel):
+    id: UUID
+    work_date: date
+    source_import_key: str
+    source_line_key: str
+    source_invoice_number: str | None
+    source_drive_file_id: str | None
+    description: str
+    quantity: str
+    unit: str
+    billable_rate: str
+    billable_amount: str
+    internal_cost_status: str
+    linked_actual_cost_total: float
+    linked_entries: list[FinancialEntryRead]
+
+
+class CompletedWorkCostLedger(BaseModel):
+    project_id: UUID
+    project_name: str
+    source_line_count: int
+    linked_line_count: int
+    unlinked_line_count: int
+    linked_actual_cost_total: float
+    warning: str
+    lines: list[CompletedWorkCostLine]
 
 
 class EstimateBudgetImportRequest(BaseModel):
