@@ -318,3 +318,34 @@ jobs:
         run: >-
           scripts/restore.sh
           --backup /tmp/ihos-scheduled-backups/release-readiness
+          --confirm-restore
+          --skip-safety-backup
+      - name: Verify restored database and upload
+        run: >-
+          python scripts/recovery_probe.py verify
+          --base-url http://127.0.0.1:8080
+          --email "$BOOTSTRAP_ADMIN_EMAIL"
+          --password "$BOOTSTRAP_ADMIN_PASSWORD"
+          --input /tmp/ihos-recovery-probe.json
+      - name: Build release-candidate evidence
+        run: >-
+          python scripts/release_candidate_evidence.py
+          --output release-candidate-evidence
+          --release-id "$GITHUB_SHA"
+          --gate ci=passed
+          --gate browser_mobile_accessibility=passed
+          --gate production_stack_smoke=passed
+          --gate backup_restore=passed
+      - name: Upload release-candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-evidence-${{ github.sha }}
+          path: release-candidate-evidence
+          if-no-files-found: error
+          retention-days: 30
+      - name: Show production logs on failure
+        if: failure()
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml logs --no-color
+      - name: Stop production stack
+        if: always()
+        run: docker compose --env-file .env.production.example -f docker-compose.production.yml down --volumes
