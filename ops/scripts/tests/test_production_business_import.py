@@ -38,14 +38,34 @@ class BundleValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "API draft defaults"):
             MODULE.validate_bundle(bundle)
 
-    def test_options_quote_total_excludes_mutually_exclusive_options(self):
+    def test_options_quote_preserves_mutually_exclusive_prices_without_summing_them(self):
         bundle = valid_bundle()
         options = bundle["quotes"][2]
         subtotal, gst, total = MODULE.quote_totals(options["payload"])
-        self.assertEqual(str(subtotal), "9769.23")
-        self.assertEqual(str(gst), "488.46")
-        self.assertEqual(str(total), "10257.69")
+        self.assertEqual(str(subtotal), "0.00")
+        self.assertEqual(str(gst), "0.00")
+        self.assertEqual(str(total), "0.00")
+        self.assertEqual(
+            [item["total"] for item in options["selection_options"]],
+            ["3990.00", "8561.54", "8960.00"],
+        )
         self.assertIn("must not be added together", options["payload"]["notes"])
+
+    def test_final_drive_revisions_and_customer_totals_are_staged(self):
+        bundle = valid_bundle()
+        asphalt, concrete, options = bundle["quotes"]
+        self.assertEqual(asphalt["external_reference"], "BV-20260824-A Rev 1")
+        self.assertEqual(asphalt["expected_total"], "20223.68")
+        self.assertEqual(concrete["expected_total"], "38080.00")
+        self.assertEqual(options["external_reference"], "BV-20260824-O Rev 1")
+        self.assertNotIn("m2", " ".join(item["description"] for item in asphalt["payload"]["line_items"]).lower())
+        self.assertNotIn("m2", " ".join(item["description"] for item in concrete["payload"]["line_items"]).lower())
+
+    def test_selection_option_total_mismatch_is_rejected(self):
+        bundle = valid_bundle()
+        bundle["quotes"][2]["selection_options"][1]["total"] = "1.00"
+        with self.assertRaisesRegex(ValueError, "total must equal subtotal plus GST"):
+            MODULE.validate_bundle(bundle)
 
     def test_total_mismatch_is_rejected(self):
         bundle = copy.deepcopy(valid_bundle())
