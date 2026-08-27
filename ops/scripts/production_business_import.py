@@ -57,6 +57,29 @@ def _validate_expected(record: dict[str, Any], calculated: tuple[Decimal, Decima
     _require(calculated == expected, f"{label} totals mismatch: calculated={calculated}, expected={expected}")
 
 
+def _validate_selection_options(record: dict[str, Any], label: str) -> None:
+    if not record.get("selection_required"):
+        _require(not record.get("selection_options"), f"{label} selection_options require selection_required")
+        return
+
+    options = record.get("selection_options") or []
+    _require(len(options) == 3, f"{label} must contain exactly three mutually exclusive options")
+    names = [option.get("name") for option in options]
+    _require(all(names) and len(set(names)) == len(names), f"{label} option names must be present and unique")
+    for option in options:
+        subtotal = money(option["subtotal"])
+        gst = money(option["gst"])
+        total = money(option["total"])
+        _require(subtotal > 0, f"{label} {option['name']} subtotal must be positive")
+        _require(gst == money(subtotal * Decimal("0.05")), f"{label} {option['name']} GST must be 5%")
+        _require(total == money(subtotal + gst), f"{label} {option['name']} total must equal subtotal plus GST")
+
+    expected = tuple(money(record[key]) for key in ("expected_subtotal", "expected_gst", "expected_total"))
+    _require(expected == (Decimal("0.00"),) * 3, f"{label} calculated draft totals must remain zero until selection")
+    notes = (record.get("payload") or {}).get("notes") or ""
+    _require("must not be added together" in notes, f"{label} notes must prohibit adding mutually exclusive options")
+
+
 def validate_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     _require(bundle.get("schema_version") == 1, "schema_version must be 1")
     _require(isinstance(bundle.get("issue_number"), int) and bundle["issue_number"] > 0, "issue_number is required")
@@ -90,6 +113,7 @@ def validate_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         marker = f"[{IMPORT_MARKER}:{ref}]"
         _require(marker in (payload.get("notes") or ""), f"{ref} notes must contain {marker}")
         _validate_expected(record, quote_totals(payload), ref)
+        _validate_selection_options(record, ref)
 
     invoices = bundle.get("invoices") or []
     _require(len(invoices) == 1, "this intake bundle must contain exactly one draft invoice")
