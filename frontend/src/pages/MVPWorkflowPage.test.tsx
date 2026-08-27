@@ -292,6 +292,7 @@ function customerQuote(overrides: Partial<CustomerQuote>): CustomerQuote {
   return {
     id: "quote-1",
     project_id: "project-1",
+    source_estimate_workspace_id: null,
     project_name: "Customer project",
     quote_number: "Q-2026-001",
     customer_name: "Customer",

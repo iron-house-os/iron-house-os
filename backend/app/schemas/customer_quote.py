@@ -91,6 +91,7 @@ class CustomerQuoteIssueUpdate(BaseModel):
 class CustomerQuoteRead(BaseModel):
     id: UUID
     project_id: UUID
+    source_estimate_workspace_id: UUID | None = None
     project_name: str
     quote_number: str
     customer_name: str

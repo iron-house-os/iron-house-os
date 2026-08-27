@@ -87,6 +87,7 @@ export function EstimatingPage() {
   const [exclusions, setExclusions] = useState(["Permits, bonds, and design fees unless listed"]);
   const [rateLibrary, setRateLibrary] = useState<ProductionRate[]>([]);
   const [summary, setSummary] = useState<EstimateSummary | null>(null);
+  const [quoteReadyEstimate, setQuoteReadyEstimate] = useState<string | null>(null);
   const [loadedQuoteHandoff, setLoadedQuoteHandoff] = useState(false);
   const [isLoadingRates, setIsLoadingRates] = useState(true);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
@@ -128,6 +129,7 @@ export function EstimatingPage() {
     [assumptions, baseHourlyWage, bonding, contingency, disposal, exclusions, insurance, labourMultiplier, lineItems, mobilization, overhead, overrideReason, plannedShifts, profit, projectCode, projectName, riskAmount, riskProbability, targetMargin],
   );
   const serializedEstimate = JSON.stringify(payload);
+  const quoteReadySummary = quoteReadyEstimate === serializedEstimate ? summary : null;
 
   useEffect(() => {
     if (!isLoadingProject && baselineEstimate === null) {
@@ -235,6 +237,7 @@ export function EstimatingPage() {
       setAssumptions(["Normal working hours", "No contaminated soils unless noted"]);
       setExclusions(["Permits, bonds, and design fees unless listed"]);
       setSummary(null);
+      setQuoteReadyEstimate(null);
       setLoadedQuoteHandoff(false);
     }
 
@@ -265,6 +268,7 @@ export function EstimatingPage() {
       setAssumptions(estimate.assumptions);
       setExclusions(estimate.exclusions);
       setSummary(readSavedSummary(workspace));
+      setQuoteReadyEstimate(null);
       setLoadedQuoteHandoff(workspace.estimate.source === "quote_estimate_handoff");
     }
 
@@ -302,6 +306,7 @@ export function EstimatingPage() {
     setAssumptions(estimate.assumptions);
     setExclusions(estimate.exclusions);
     setSummary(null);
+    setQuoteReadyEstimate(null);
   }
 
   function hasValidProjectName() {
@@ -316,7 +321,9 @@ export function EstimatingPage() {
     setIsCalculating(true);
     setError(null);
     try {
-      setSummary(await estimatesApi.summary({ ...payload, project_name: projectName.trim() }));
+      const activeEstimate = { ...payload, project_name: projectName.trim() };
+      setSummary(await estimatesApi.summary(activeEstimate));
+      setQuoteReadyEstimate(JSON.stringify(activeEstimate));
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to calculate estimate");
     } finally {
@@ -482,7 +489,7 @@ export function EstimatingPage() {
             </div>
           </div>
           <SummaryPanel summary={summary} isBusy={isCalculating || isLoadingRates} />
-          <EstimateWorkspacePanel projectId={selectedProjectId || null} estimate={payload} summary={summary} />
+          <EstimateWorkspacePanel projectId={selectedProjectId || null} estimate={payload} summary={quoteReadySummary} />
         </aside>
       </form>
     </section>
