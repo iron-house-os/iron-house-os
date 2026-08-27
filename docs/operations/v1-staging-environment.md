@@ -101,6 +101,14 @@ IHOS_STAGING_ENV_FILE=.env.staging.example scripts/staging-compose.sh down --vol
 
 The example credentials are for configuration and disposable testing only. They are not acceptable for a deployed staging host.
 
+## Queue ordering guard
+
+The GitHub staging workflow deploys only the exact current `origin/main` release. A queued run for
+an older ancestor records a notice and skips every staging mutation and verification step. The
+build/deploy step fetches `main` and repeats the equality check immediately before Docker Compose
+can recreate the staging stack. This prevents an older push that starts late from rolling staging
+back after a newer release has already passed.
+
 ## Deployment blockers
 
 - No staging host or domain has been approved.

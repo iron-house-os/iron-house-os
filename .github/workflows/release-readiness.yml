@@ -13,6 +13,7 @@ on:
       - ".env.production.example"
       - "scripts/**"
       - "ops/**"
+      - ".github/workflows/staging-deploy.yml"
       - ".github/workflows/release-readiness.yml"
   pull_request:
     branches: [main, release/v1-staging]
@@ -25,6 +26,7 @@ on:
       - ".env.production.example"
       - "scripts/**"
       - "ops/**"
+      - ".github/workflows/staging-deploy.yml"
       - ".github/workflows/release-readiness.yml"
 
 permissions:
