@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal
 from uuid import UUID
 
@@ -32,7 +33,11 @@ RecordType = Literal[
     "emergency_action_card",
     "incident",
     "first_aid_record",
+    "completed_work",
 ]
+
+
+MONEY = Decimal("0.01")
 
 
 class EmployeeCreate(BaseModel):
@@ -264,6 +269,70 @@ class FieldRecordCreate(BaseModel):
                 "transported_for_further_assessment",
             }:
                 raise ValueError("Select the recorded outcome.")
+        if self.record_type == "completed_work":
+            if not self.project_id:
+                raise ValueError("Completed work requires a project.")
+            if self.severity != "none" or self.alert_recipients:
+                raise ValueError("Completed-work revenue records cannot carry safety severity or alerts.")
+            required = {
+                "source_import_key": "Completed work requires a source import key.",
+                "source_line_key": "Completed work requires a source line key.",
+                "source_invoice_number": "Completed work requires a source invoice number.",
+                "source_drive_file_id": "Completed work requires a source Drive file ID.",
+                "source_invoice_date": "Completed work requires a source invoice date.",
+                "description": "Completed work requires a description.",
+                "unit": "Completed work requires a unit.",
+            }
+            for key, message in required.items():
+                if not str(self.details.get(key) or "").strip():
+                    raise ValueError(message)
+            if self.details.get("cost_status") != "internal_cost_unverified":
+                raise ValueError("Completed work must identify internal cost as unverified.")
+            if self.details.get("revenue_trace_only") is not True:
+                raise ValueError("Completed work must be marked as revenue trace only.")
+            prohibited_cost_fields = {
+                "actual_cost",
+                "actual_cost_amount",
+                "internal_cost_amount",
+                "internal_cost_rate",
+            }
+            if prohibited_cost_fields.intersection(self.details):
+                raise ValueError("Unverified completed work cannot include internal actual-cost values.")
+            try:
+                quantity = Decimal(str(self.details.get("quantity")))
+                billable_rate = Decimal(str(self.details.get("billable_rate")))
+                billable_amount = Decimal(str(self.details.get("billable_amount")))
+            except (InvalidOperation, TypeError, ValueError) as exc:
+                raise ValueError("Completed-work quantity, billable rate, and billable amount must be numbers.") from exc
+            if not all(value.is_finite() for value in (quantity, billable_rate, billable_amount)):
+                raise ValueError("Completed-work quantity, billable rate, and billable amount must be finite.")
+            if quantity <= 0 or billable_rate <= 0 or billable_amount <= 0:
+                raise ValueError("Completed-work quantity, billable rate, and billable amount must be greater than zero.")
+            if billable_rate != billable_rate.quantize(MONEY) or billable_amount != billable_amount.quantize(MONEY):
+                raise ValueError("Completed-work billable rate and amount must use two-decimal currency precision.")
+            expected_amount = (quantity * billable_rate).quantize(MONEY, rounding=ROUND_HALF_UP)
+            if billable_amount != expected_amount:
+                raise ValueError("Completed-work billable amount must equal quantity times billable rate.")
+            try:
+                invoice_date = date.fromisoformat(str(self.details["source_invoice_date"]))
+            except ValueError as exc:
+                raise ValueError("Completed work requires a valid source invoice date.") from exc
+            date_basis = self.details.get("record_date_basis")
+            source_work_date = self.details.get("source_work_date")
+            if date_basis == "source_work_date":
+                try:
+                    parsed_work_date = date.fromisoformat(str(source_work_date or ""))
+                except ValueError as exc:
+                    raise ValueError("Source-dated completed work requires a valid source work date.") from exc
+                if parsed_work_date != self.work_date:
+                    raise ValueError("Completed-work date must match the source work date.")
+            elif date_basis == "invoice_date_reference_only":
+                if source_work_date:
+                    raise ValueError("Invoice-date reference records cannot claim a source work date.")
+                if self.work_date != invoice_date:
+                    raise ValueError("Invoice-date reference records must use the source invoice date.")
+            else:
+                raise ValueError("Completed work requires a valid record date basis.")
         return self
 
 

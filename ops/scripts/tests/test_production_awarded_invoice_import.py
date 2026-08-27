@@ -16,12 +16,72 @@ def valid_bundle():
     return json.loads((ROOT / "ops" / "production-awarded-invoice-imports" / "2026-08-25-bowline-rawlison.json").read_text())
 
 
+class FakeClient:
+    def __init__(self) -> None:
+        self.projects = []
+        self.invoices = []
+        self.completed_work = []
+        self.logged_in = False
+
+    def login(self):
+        self.logged_in = True
+
+    def request(self, path, method="GET", body=None, expected=(200,)):
+        assert self.logged_in
+        if path == "/api/v1/projects" and method == "GET":
+            return {"items": copy.deepcopy(self.projects)}
+        if path == "/api/v1/projects" and method == "POST":
+            record = {
+                **copy.deepcopy(body),
+                "id": "project-1",
+                "project_number": "IH2026001",
+            }
+            self.projects.append(record)
+            return copy.deepcopy(record)
+        if path == "/api/v1/finance/customer-invoices" and method == "GET":
+            return {"items": copy.deepcopy(self.invoices)}
+        if path == "/api/v1/finance/customer-invoices" and method == "POST":
+            subtotal, gst, total = MODULE.invoice_totals(body)
+            record = {
+                **copy.deepcopy(body),
+                "id": "invoice-1",
+                "status": "draft",
+                "subtotal": str(subtotal),
+                "gst": str(gst),
+                "total": str(total),
+            }
+            self.invoices.append(record)
+            return copy.deepcopy(record)
+        if path.startswith("/api/v1/field-operations/completed-work?") and method == "GET":
+            return copy.deepcopy(self.completed_work)
+        if path == "/api/v1/field-operations/records" and method == "POST":
+            record = {
+                **copy.deepcopy(body),
+                "id": f"completed-{len(self.completed_work) + 1}",
+                "status": "recorded",
+                "severity": body.get("severity", "none"),
+                "cost_code": body.get("cost_code"),
+                "employee_id": body.get("employee_id"),
+                "equipment_id": body.get("equipment_id"),
+                "supplier_id": body.get("supplier_id"),
+                "document_ids": body.get("document_ids", []),
+                "signatures": body.get("signatures", []),
+                "alert_recipients": body.get("alert_recipients", []),
+            }
+            self.completed_work.append(record)
+            return copy.deepcopy(record)
+        raise AssertionError(f"Unexpected request: {method} {path}")
+
+
 class AwardedInvoiceImportTests(unittest.TestCase):
     def test_bowline_bundle_validates(self):
         result = MODULE.validate_bundle(valid_bundle())
         self.assertTrue(result["validated"])
         self.assertEqual(result["project_count"], 1)
         self.assertEqual(result["invoice_count"], 1)
+        self.assertEqual(result["issue_number"], 353)
+        self.assertEqual(result["completed_work_count"], 7)
+        self.assertEqual(result["completed_work_billable_total"], "10622.40")
 
     def test_bundle_cannot_supply_job_number(self):
         bundle = valid_bundle()
@@ -62,6 +122,40 @@ class AwardedInvoiceImportTests(unittest.TestCase):
         del bundle["project"]["payload"]["metadata"]["source_drive_file_id"]
         with self.assertRaisesRegex(ValueError, "source_drive_file_id"):
             MODULE.validate_bundle(bundle)
+
+    def test_completed_work_must_match_invoice_and_cannot_invent_actual_cost(self):
+        bundle = valid_bundle()
+        bundle["completed_work_records"][0]["details"]["billable_amount"] = "1.00"
+        with self.assertRaisesRegex(ValueError, "billable amount mismatch"):
+            MODULE.validate_bundle(bundle)
+
+        bundle = valid_bundle()
+        bundle["completed_work_records"][0]["details"]["internal_cost_amount"] = "1000.00"
+        with self.assertRaisesRegex(ValueError, "actual-cost"):
+            MODULE.validate_bundle(bundle)
+
+    def test_import_creates_then_verifies_all_completed_work_idempotently(self):
+        client = FakeClient()
+        first = MODULE.import_bundle(valid_bundle(), client)
+        self.assertEqual(first["completed_work"]["created"], 7)
+        self.assertEqual(first["completed_work"]["verified_existing"], 0)
+        self.assertEqual(first["completed_work"]["billable_total"], "10622.40")
+        self.assertEqual(first["completed_work"]["cost_status"], "internal_cost_unverified")
+        self.assertEqual(len(client.completed_work), 7)
+
+        second = MODULE.import_bundle(valid_bundle(), client)
+        self.assertEqual(second["project"]["operation"], "verified_existing")
+        self.assertEqual(second["invoice"]["operation"], "verified_existing")
+        self.assertEqual(second["completed_work"]["created"], 0)
+        self.assertEqual(second["completed_work"]["verified_existing"], 7)
+        self.assertEqual(len(client.completed_work), 7)
+
+    def test_import_fails_closed_when_source_line_key_content_differs(self):
+        client = FakeClient()
+        MODULE.import_bundle(valid_bundle(), client)
+        client.completed_work[0]["title"] = "Conflicting historical claim"
+        with self.assertRaisesRegex(RuntimeError, "differs in: title"):
+            MODULE.import_bundle(valid_bundle(), client)
 
     def test_job_number_rejects_hyphens(self):
         with self.assertRaisesRegex(RuntimeError, "invalid"):

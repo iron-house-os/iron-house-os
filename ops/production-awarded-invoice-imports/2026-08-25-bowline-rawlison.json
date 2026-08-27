@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "issue_number": 351,
+  "issue_number": 353,
   "import_key": "bowline-rawlison-2026-08-25",
   "requested_at": "2026-08-27",
   "project": {
@@ -16,6 +16,7 @@
         "source_import_key": "bowline-rawlison-2026-08-25",
         "source_issue": 322,
         "correction_issue": 351,
+        "completed_work_issue": 353,
         "source_invoice_number": "BOW-2026-0811",
         "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
         "source_drive_modified_at": "2026-08-27T00:41:46.422Z",
@@ -54,5 +55,158 @@
     "expected_subtotal": "10622.40",
     "expected_gst": "531.12",
     "expected_total": "11153.52"
-  }
+  },
+  "completed_work_records": [
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-11",
+      "title": "Common excavation - Tuesday, August 11, 2026",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "01-common-excavation-2026-08-11",
+        "source_line_position": 1,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Common excavation - Tuesday, August 11, 2026",
+        "quantity": "12.5",
+        "unit": "hour",
+        "billable_rate": "220.00",
+        "billable_amount": "2750.00",
+        "record_date_basis": "source_work_date",
+        "source_work_date": "2026-08-11",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-12",
+      "title": "Common excavation - Wednesday, August 12, 2026",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "02-common-excavation-2026-08-12",
+        "source_line_position": 2,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Common excavation - Wednesday, August 12, 2026",
+        "quantity": "12.0",
+        "unit": "hour",
+        "billable_rate": "220.00",
+        "billable_amount": "2640.00",
+        "record_date_basis": "source_work_date",
+        "source_work_date": "2026-08-12",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-13",
+      "title": "Common excavation - Thursday, August 13, 2026",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "03-common-excavation-2026-08-13",
+        "source_line_position": 3,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Common excavation - Thursday, August 13, 2026",
+        "quantity": "9.0",
+        "unit": "hour",
+        "billable_rate": "220.00",
+        "billable_amount": "1980.00",
+        "record_date_basis": "source_work_date",
+        "source_work_date": "2026-08-13",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-14",
+      "title": "Common excavation - Friday, August 14, 2026",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "04-common-excavation-2026-08-14",
+        "source_line_position": 4,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Common excavation - Friday, August 14, 2026",
+        "quantity": "6.0",
+        "unit": "hour",
+        "billable_rate": "220.00",
+        "billable_amount": "1320.00",
+        "record_date_basis": "source_work_date",
+        "source_work_date": "2026-08-14",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-15",
+      "title": "Mini excavator - footings and plumbing",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "05-mini-excavator-footings-plumbing",
+        "source_line_position": 5,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Mini excavator - footings and plumbing",
+        "quantity": "4.0",
+        "unit": "hour",
+        "billable_rate": "130.00",
+        "billable_amount": "520.00",
+        "record_date_basis": "invoice_date_reference_only",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-15",
+      "title": "Mobilize In",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "06-mobilize-in",
+        "source_line_position": 6,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Mobilize In",
+        "quantity": "1",
+        "unit": "each",
+        "billable_rate": "706.20",
+        "billable_amount": "706.20",
+        "record_date_basis": "invoice_date_reference_only",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    },
+    {
+      "record_type": "completed_work",
+      "work_date": "2026-08-15",
+      "title": "Mobilize Out",
+      "details": {
+        "source_import_key": "bowline-rawlison-2026-08-25",
+        "source_line_key": "07-mobilize-out",
+        "source_line_position": 7,
+        "source_invoice_number": "BOW-2026-0811",
+        "source_invoice_date": "2026-08-15",
+        "source_drive_file_id": "1laUuqBbgcU5ck8rIz0Qd3N-Gd6I8U5ZS",
+        "description": "Mobilize Out",
+        "quantity": "1",
+        "unit": "each",
+        "billable_rate": "706.20",
+        "billable_amount": "706.20",
+        "record_date_basis": "invoice_date_reference_only",
+        "cost_status": "internal_cost_unverified",
+        "revenue_trace_only": true
+      }
+    }
+  ]
 }
