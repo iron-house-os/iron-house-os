@@ -13,10 +13,10 @@ class FinancialEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "financial_entries"
     __table_args__ = (
         UniqueConstraint(
+            "project_id",
             "source_type",
-            "source_id",
             "source_key",
-            name="uq_financial_entries_source_allocation",
+            name="uq_financial_entries_project_source_key",
         ),
     )
 
