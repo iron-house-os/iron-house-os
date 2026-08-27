@@ -9,11 +9,18 @@ from app.services.bennett_strata_staging_import import (
     SOURCE_REVISION,
 )
 from app.services.drive_tender_import import ImportValidationError
-from app.tools.bennett_estimate_quote_staging_pilot import run_pilot
+from app.tools.bennett_estimate_quote_staging_pilot import STAGING_BASE_URL, _parser, run_pilot
 
 PROJECT_ID = "11111111-1111-4111-8111-111111111111"
 WORKSPACE_ID = "22222222-2222-4222-8222-222222222222"
 QUOTE_ID = "33333333-3333-4333-8333-333333333333"
+
+
+def test_cli_defaults_to_secure_live_staging_origin() -> None:
+    args = _parser().parse_args(["--operator", "GitHub staging pilot"])
+
+    assert args.base_url == STAGING_BASE_URL
+    assert args.base_url == "https://staging.os.ironhousecivil.com"
 
 
 class FakeApi:

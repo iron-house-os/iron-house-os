@@ -22,6 +22,7 @@ from app.services.drive_tender_import import ImportValidationError
 EXPECTED_SUBTOTAL = "36266.67"
 EXPECTED_GST = "1813.33"
 EXPECTED_TOTAL = "38080.00"
+STAGING_BASE_URL = "https://staging.os.ironhousecivil.com"
 
 
 class Api(Protocol):
@@ -228,7 +229,7 @@ def run_pilot(
 def _parser() -> ArgumentParser:
     parser = ArgumentParser(description="Run the authenticated Bennett draft-quote staging pilot.")
     parser.add_argument("--operator", required=True)
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--base-url", default=STAGING_BASE_URL)
     return parser
 
 

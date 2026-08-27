@@ -6,7 +6,7 @@ Prove the issue #268 saved-estimate to customer-quote handoff against the authen
 
 ## Current scope
 
-The pilot is intentionally draft-only. Human merge of Build 225 authorized the shared-staging data plan recorded in `ops/staging-pilots/2026-08-27-bennett-draft-pilot.json`, but GitHub rejected run `33110981733` before any job or data action because `runner.temp` is unsupported in job-level `env`. Human merge of the exact Build 226 repair authorizes the same bounded proof to resume after the repair release deploys successfully to staging.
+The pilot is intentionally draft-only. Human merge of Build 225 authorized the shared-staging data plan recorded in `ops/staging-pilots/2026-08-27-bennett-draft-pilot.json`, but GitHub rejected run `33110981733` before any job or data action because `runner.temp` is unsupported in job-level `env`. Build 226 repaired the workflow and run `33112675388` created the opportunity and immutable estimate workspaces, then blocked before quote creation because the staging Secure session cookie could not be sent over the tool's HTTP loopback origin. Human merge of the exact Build 227 repair authorizes the same bounded proof to resume through the live HTTPS staging origin.
 
 The workflow:
 
