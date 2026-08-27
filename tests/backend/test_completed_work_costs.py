@@ -35,7 +35,10 @@ def _project(name: str = "Completed Work Cost Test") -> dict:
     return response.json()
 
 
-def _completed_work(project_id: str) -> dict:
+def _completed_work(
+    project_id: str,
+    source_line_key: str = "01-common-excavation-2026-08-11",
+) -> dict:
     response = client.post(
         "/api/v1/field-operations/records",
         json={
@@ -45,7 +48,7 @@ def _completed_work(project_id: str) -> dict:
             "title": "Common excavation - Tuesday, August 11, 2026",
             "details": {
                 "source_import_key": "bowline-rawlison-2026-08-25",
-                "source_line_key": "01-common-excavation-2026-08-11",
+                "source_line_key": source_line_key,
                 "source_line_position": 1,
                 "source_invoice_number": "BOW-2026-0811",
                 "source_invoice_date": "2026-08-15",
@@ -143,6 +146,45 @@ def test_explicit_actual_cost_is_source_linked_idempotent_and_visible_in_summary
     financials = client.get(f"/api/v1/finance/projects/{project['id']}").json()
     assert financials["actual"] == 1225
     assert financials["actual"] != float(ledger["lines"][0]["billable_amount"])
+
+
+def test_idempotency_key_rejects_different_completed_work_in_same_project() -> None:
+    project = _project()
+    first_record = _completed_work(project["id"])
+    second_record = _completed_work(
+        project["id"],
+        source_line_key="02-common-excavation-2026-08-12",
+    )
+    url = f"/api/v1/finance/projects/{project['id']}/completed-work-costs"
+    key = "55555555-5555-4555-8555-555555555555"
+
+    created = client.post(url, json=_cost_payload(first_record["id"], key))
+    assert created.status_code == 200, created.text
+
+    conflict = client.post(url, json=_cost_payload(second_record["id"], key))
+    assert conflict.status_code == 409
+    assert "different completed-work cost content" in conflict.json()["detail"]
+
+
+def test_idempotency_key_is_independent_between_projects() -> None:
+    first_project = _project()
+    second_project = _project("Other Project")
+    first_record = _completed_work(first_project["id"])
+    second_record = _completed_work(second_project["id"])
+    key = "66666666-6666-4666-8666-666666666666"
+
+    first = client.post(
+        f"/api/v1/finance/projects/{first_project['id']}/completed-work-costs",
+        json=_cost_payload(first_record["id"], key),
+    )
+    second = client.post(
+        f"/api/v1/finance/projects/{second_project['id']}/completed-work-costs",
+        json=_cost_payload(second_record["id"], key),
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["entry"]["id"] != second.json()["entry"]["id"]
 
 
 def test_completed_work_cost_rejects_wrong_project_and_non_completed_work_source() -> None:

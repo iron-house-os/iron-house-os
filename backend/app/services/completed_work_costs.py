@@ -126,7 +126,7 @@ def create_cost(
         raise HTTPException(status_code=400, detail="The completed-work record must belong to the selected project.")
 
     source_key = str(payload.idempotency_key)
-    existing = _find_by_source_key(db, record.id, source_key)
+    existing = _find_by_source_key(db, project_id, source_key)
     if existing is not None:
         _verify_exact_retry(existing, project_id, payload)
         return CompletedWorkCostCreateResult(
@@ -167,7 +167,7 @@ def create_cost(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        concurrent = _find_by_source_key(db, record.id, source_key)
+        concurrent = _find_by_source_key(db, project_id, source_key)
         if concurrent is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -187,11 +187,11 @@ def create_cost(
     )
 
 
-def _find_by_source_key(db: Session, record_id: UUID, source_key: str) -> FinancialEntry | None:
+def _find_by_source_key(db: Session, project_id: UUID, source_key: str) -> FinancialEntry | None:
     return db.scalar(
         select(FinancialEntry).where(
+            FinancialEntry.project_id == project_id,
             FinancialEntry.source_type == SOURCE_TYPE,
-            FinancialEntry.source_id == record_id,
             FinancialEntry.source_key == source_key,
         )
     )
@@ -204,6 +204,7 @@ def _verify_exact_retry(
 ) -> None:
     expected = {
         "project_id": project_id,
+        "source_id": payload.completed_work_id,
         "cost_code": payload.cost_code,
         "entry_type": "actual",
         "category": payload.category,
