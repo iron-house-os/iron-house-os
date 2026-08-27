@@ -12,7 +12,7 @@
       "project_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
       "contract_value": 0,
       "status": "opportunity",
-      "notes": "Draft estimating and quoting intake only. Three customer quotes are retained separately. Options A, B and C in quote BV-20260824-O apply to the same 4 m x 2 m area and are mutually exclusive. No award, authorization or job number is implied.",
+      "notes": "Draft estimating and quoting intake only. The August 27 Drive revisions are authoritative. Three customer quotes are retained separately. Options A, B and C in quote BV-20260824-O Rev 1 apply to the same paver area and are mutually exclusive. No award, authorization or job number is implied.",
       "metadata": {
         "source_import_key": "coho-blueberry-vale-bennett-2026-08-25",
         "source_issue": 314,
@@ -26,27 +26,32 @@
         "billing_address": "200-2955 Virtual Way, Vancouver, BC V5M 4X6",
         "website": "www.coho.bc.ca",
         "estimate_basis": {
-          "target_true_profit_margin_percent": 35,
-          "sell_formula": "direct cost / (1 - 35%)",
+          "source_revision_checked_at": "2026-08-27",
           "asphalt": {
-            "direct_cost": 11150,
-            "asphalt_material": "8 tonnes at $200/tonne",
-            "concrete_tie_in_allowance": 2000,
-            "rebar_and_dowels_allowance": 650,
-            "labour": "24 crew-hours at $75/hour",
-            "subgrade_allowance": 1500,
-            "risk_reserve": 750,
-            "warranty_reserve": 500
+            "source_workbook_drive_file_id": "1FhTwm2CkzEbjoZFbUf3KbgxXkFzQ_w8e",
+            "pavement_direct_cost": "11150.00",
+            "pavement_sell_price": "12980.00",
+            "skirts_direct_cost": "6350.00",
+            "skirts_sell_price": "6280.65",
+            "combined_direct_cost": "17500.00",
+            "combined_sell_price": "19260.65",
+            "combined_implied_profit_margin_percent": "9.14"
           },
           "concrete": {
-            "direct_cost": 27200,
-            "concrete_supply_allowance": 2000,
-            "rebar_and_dowels_allowance": 3250,
-            "labour": "96 crew-hours at $75/hour",
-            "placement_and_finishing_allowance": 3500,
-            "subgrade_allowance": 4750,
-            "risk_reserve": 1500,
-            "warranty_reserve": 1000
+            "source_workbook_drive_file_id": "1WCXHUomb_HtErdwgkXgg74u33qNHedd2",
+            "direct_cost": "27200.00",
+            "target_true_profit_margin_percent": "25.00",
+            "sell_formula": "direct cost / (1 - 25%)",
+            "sell_price": "36266.67"
+          },
+          "paver_options": {
+            "source_workbook_drive_file_id": "1ytDFbYaw4TGcLUxK_esRA-5hOnVMNL6Y",
+            "option_a_direct_cost": "2470.00",
+            "option_a_target_profit_margin_percent": "35.00",
+            "option_b_direct_cost": "5300.00",
+            "option_b_target_profit_margin_percent": "35.00",
+            "option_c_direct_cost": "6400.00",
+            "option_c_target_profit_margin_percent": "25.00"
           }
         },
         "site_address_aliases": [
@@ -56,7 +61,7 @@
         "source_artifacts": [
           {
             "type": "quote_pdf",
-            "external_reference": "BV-20260824-A",
+            "external_reference": "BV-20260824-A Rev 1",
             "drive_file_id": "1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt",
             "url": "https://drive.google.com/file/d/1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt/view?usp=drivesdk"
           },
@@ -68,7 +73,7 @@
           },
           {
             "type": "quote_pdf",
-            "external_reference": "BV-20260824-O",
+            "external_reference": "BV-20260824-O Rev 1",
             "drive_file_id": "1iCAhFHBUv_yu8AC98pceJwWAykThcKX8",
             "url": "https://drive.google.com/file/d/1iCAhFHBUv_yu8AC98pceJwWAykThcKX8/view?usp=drivesdk"
           },
@@ -84,107 +89,141 @@
   },
   "quotes": [
     {
-      "external_reference": "BV-20260824-A",
-      "expected_subtotal": "17153.85",
-      "expected_gst": "857.69",
-      "expected_total": "18011.54",
+      "external_reference": "BV-20260824-A Rev 1",
+      "expected_subtotal": "19260.65",
+      "expected_gst": "963.03",
+      "expected_total": "20223.68",
       "payload": {
         "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
-        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_name": "COHO Management Services Society",
         "customer_email": "nlanto@coho.bc.ca",
         "customer_phone": "604-879-5771 ext. 187",
         "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
-        "scope_summary": "Sawcut and remove failed pavement; prepare base; supply, place and compact 2 in asphalt; clean up. Approx. 62 m2.",
+        "scope_summary": "Existing pavement and pothole asphalt restoration, plus garage and walkway skirts converted from concrete to asphalt.",
         "line_items": [
           {
-            "description": "Asphalt restoration - sawcut and remove failed pavement, prepare base, supply/place/compact 2 in asphalt, and clean up; approx. 62 m2",
+            "description": "Existing pavement and pothole asphalt restoration",
             "quantity": "1",
             "unit": "LS",
-            "unit_price": "17153.85"
+            "unit_price": "12980.00"
+          },
+          {
+            "description": "Garage and walkway skirts - remove concrete; prepare base; place and compact asphalt",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "6280.65"
           }
         ],
         "assumptions": [
-          "Price includes the described asphalt restoration scope and normal site access.",
-          "Final schedule, access and asphalt availability are to be confirmed before mobilization."
+          "Pricing is based on the described asphalt restoration scope.",
+          "Quote valid 30 days."
         ],
         "exclusions": [
-          "Hidden or failed subgrade, unsuitable material, buried obstructions or work beyond included allowances requires written change authorization.",
-          "Warranty applies to workmanship only and excludes failure caused by existing or concealed subgrade, drainage, structures or work by others."
+          "Pull-and-pour concrete is excluded and remains covered by separate quote BV-20260824-C."
         ],
         "gst_rate": "5.00",
-        "quote_date": "2026-08-24",
-        "valid_until": "2026-09-23",
-        "notes": "External quote reference BV-20260824-A. Drive PDF ID 1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt. [IHOS_IMPORT_REF:BV-20260824-A]"
+        "quote_date": "2026-08-26",
+        "valid_until": "2026-09-25",
+        "notes": "External quote reference BV-20260824-A Rev 1. Drive PDF ID 1iGg9t6KOnWfvJAQwNwYCmMagNywcQRbt, modified 2026-08-27T00:20:59.996Z. [IHOS_IMPORT_REF:BV-20260824-A Rev 1]"
       }
     },
     {
       "external_reference": "BV-20260824-C",
-      "expected_subtotal": "41846.15",
-      "expected_gst": "2092.31",
-      "expected_total": "43938.46",
+      "expected_subtotal": "36266.67",
+      "expected_gst": "1813.33",
+      "expected_total": "38080.00",
       "payload": {
         "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
-        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_name": "COHO Management Services Society",
         "customer_email": "nlanto@coho.bc.ca",
         "customer_phone": "604-879-5771 ext. 187",
         "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
-        "scope_summary": "Sawcut and remove existing concrete; prepare base; form, reinforce, place and finish 4 in concrete; clean up. Approx. 108.6 m2.",
+        "scope_summary": "Concrete pull-and-pour split between the main scope and garage and walkway skirts; total price unchanged.",
         "line_items": [
           {
-            "description": "Concrete pull-and-pour - removal, base preparation, forming, reinforcement, placement and finishing of 4 in concrete; approx. 108.6 m2",
+            "description": "Main concrete pull-and-pour - sawcut and remove existing concrete; prepare base; form, reinforce, place and finish 4 in concrete; clean up",
             "quantity": "1",
             "unit": "LS",
-            "unit_price": "41846.15"
+            "unit_price": "26248.25"
+          },
+          {
+            "description": "Garage and walkway skirts - remove existing concrete; prepare base; form, reinforce, place and finish 4 in concrete; clean up",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "10018.42"
           }
         ],
         "assumptions": [
-          "Price is based on approximately 108.6 m2 of 4 in concrete and the described pull-and-pour scope.",
-          "Concrete mix, reinforcing detail, pump requirements, construction joints, finishing requirements and schedule are subject to final confirmation."
+          "The existing concrete price is split between the main scope and garage and walkway skirts; total price is unchanged.",
+          "Concrete mix, reinforcement, pump requirements, joints, finish and schedule remain subject to confirmation."
         ],
         "exclusions": [
-          "Hidden or failed subgrade, buried obstructions or work beyond included allowances requires written change authorization.",
-          "Warranty applies to workmanship only and excludes movement or failure caused by existing or concealed conditions."
+          "Hidden or failed subgrade, buried obstructions or extra work require written change authorization.",
+          "Workmanship warranty excludes movement from concealed or existing conditions."
         ],
         "gst_rate": "5.00",
         "quote_date": "2026-08-24",
         "valid_until": "2026-09-23",
-        "notes": "External quote reference BV-20260824-C. Drive PDF ID 15KabOkLbiFYBlSDyOKJUvspOfl-5gYqp. [IHOS_IMPORT_REF:BV-20260824-C]"
+        "notes": "External quote reference BV-20260824-C. Drive PDF ID 15KabOkLbiFYBlSDyOKJUvspOfl-5gYqp, modified 2026-08-27T00:49:06.244Z. [IHOS_IMPORT_REF:BV-20260824-C]"
       }
     },
     {
-      "external_reference": "BV-20260824-O",
-      "expected_subtotal": "9769.23",
-      "expected_gst": "488.46",
-      "expected_total": "10257.69",
+      "external_reference": "BV-20260824-O Rev 1",
+      "selection_required": true,
+      "selection_options": [
+        {
+          "name": "Option A",
+          "description": "Pull pavers, prepare base, and place asphalt",
+          "subtotal": "3800.00",
+          "gst": "190.00",
+          "total": "3990.00"
+        },
+        {
+          "name": "Option B",
+          "description": "Remove existing pavers; reprepare base; install new 2 ft x 2 ft pavers",
+          "subtotal": "8153.85",
+          "gst": "407.69",
+          "total": "8561.54"
+        },
+        {
+          "name": "Option C",
+          "description": "Pull pavers; prepare, form, reinforce, place and finish concrete",
+          "subtotal": "8533.33",
+          "gst": "426.67",
+          "total": "8960.00"
+        }
+      ],
+      "expected_subtotal": "0.00",
+      "expected_gst": "0.00",
+      "expected_total": "0.00",
       "payload": {
         "project_name": "Blueberry Vale - Bennett Road Pavement Restoration",
-        "customer_name": "COHO Management Services Society - Blueberry Vale",
+        "customer_name": "COHO Management Services Society",
         "customer_email": "nlanto@coho.bc.ca",
         "customer_phone": "604-879-5771 ext. 187",
         "site_address": "61-8640 Bennett Rd, Richmond, BC V6Y 3T9",
-        "scope_summary": "Base scope: remove concrete, prepare and place asphalt at the 17 m x 1.2 m garage skirt and 8 m x 1.2 m walkway skirt, total 30.0 m2. One mutually exclusive alternative may be selected for the same 4 m x 2 m paver area.",
+        "scope_summary": "Select one mutually exclusive alternative for the paver area. Garage and walkway skirts are excluded and included in asphalt quote BV-20260824-A Rev 1.",
         "line_items": [
           {
-            "description": "BASE ONLY - remove concrete and prepare/place asphalt at garage and walkway skirts; approx. 30.0 m2",
+            "description": "Selection required - choose Option A, B or C before issue",
             "quantity": "1",
             "unit": "LS",
-            "unit_price": "9769.23"
+            "unit_price": "0.00"
           }
         ],
         "assumptions": [
-          "Option A: pull pavers, prepare base, place and compact asphalt at the 4 m x 2 m area - $3,800.00 before GST.",
-          "Option B: carefully pull pavers, re-prepare, align, cut and reinstall pavers at the same area - $7,230.77 before GST.",
-          "Option C: pull pavers, prepare, form, reinforce, place and finish concrete at the same area - $9,846.15 before GST.",
-          "Existing pavers are assumed reusable; replacement pavers beyond the included allowance are extra."
+          "Option A - pull pavers, prepare base, and place asphalt: $3,800.00 before GST; $3,990.00 including GST.",
+          "Option B - remove existing pavers, reprepare base, and install new 2 ft x 2 ft pavers: $8,153.85 before GST; $8,561.54 including GST.",
+          "Option C - pull pavers, prepare, form, reinforce, place and finish concrete: $8,533.33 before GST; $8,960.00 including GST."
         ],
         "exclusions": [
-          "Options A, B and C are mutually exclusive alternatives for the same 4 m x 2 m area and are excluded from the calculated base total until the customer selects one.",
-          "Hidden or failed subgrade, buried obstructions or work beyond the described allowances requires written change authorization."
+          "Options A, B and C are mutually exclusive and are excluded from the calculated draft total until the customer selects one.",
+          "Garage and walkway skirts are excluded and included in asphalt quote BV-20260824-A Rev 1."
         ],
         "gst_rate": "5.00",
-        "quote_date": "2026-08-24",
-        "valid_until": "2026-09-23",
-        "notes": "Base scope is priced separately. Options A, B and C are alternatives for the same location and must not be added together. GST applies to the base plus the one selected option. External quote reference BV-20260824-O. Drive PDF ID 1iCAhFHBUv_yu8AC98pceJwWAykThcKX8. [IHOS_IMPORT_REF:BV-20260824-O]"
+        "quote_date": "2026-08-26",
+        "valid_until": "2026-09-25",
+        "notes": "Selection-required draft: subtotal remains $0 until one mutually exclusive option is selected. The three source option prices must not be added together. External quote reference BV-20260824-O Rev 1. Drive PDF ID 1iCAhFHBUv_yu8AC98pceJwWAykThcKX8, modified 2026-08-27T00:21:02.524Z. [IHOS_IMPORT_REF:BV-20260824-O Rev 1]"
       }
     }
   ],
