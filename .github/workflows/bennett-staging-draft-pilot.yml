@@ -20,13 +20,13 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      contains(github.event.workflow_run.head_commit.message, 'Build 225: repair Bennett staging pilot prerequisites and prove draft handoff')
+      contains(github.event.workflow_run.head_commit.message, 'Build 226: repair Bennett staging pilot workflow and resume draft proof')
     runs-on: [self-hosted, linux, ihos-staging]
     timeout-minutes: 45
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-      EVIDENCE_DIR: ${{ runner.temp }}/bennett-staging-draft-pilot-evidence
-      PILOT_OPERATOR: Iron House OS GitHub staging pilot issue 365
+      EVIDENCE_DIR: /tmp/iron-house-os-bennett-staging-draft-pilot-${{ github.run_id }}-${{ github.run_attempt }}
+      PILOT_OPERATOR: Iron House OS GitHub staging pilot issue 367
     steps:
       - name: Initialize evidence directory
         run: mkdir -p "$EVIDENCE_DIR"
