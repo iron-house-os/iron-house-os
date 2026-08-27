@@ -5,7 +5,10 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
+from app.models.bid import Bid
+from app.models.customer_quote import CustomerQuote
 from app.services.auth import AuthenticatedUser
+from conftest import TestingSessionLocal
 
 client = TestClient(app)
 
@@ -52,6 +55,48 @@ def _create_quote() -> dict:
     return response.json()
 
 
+def _estimate_workspace(
+    *,
+    customer_name: str | None = "Bennett Strata",
+    direct_cost: float = 10000,
+    include_summary: bool = True,
+) -> tuple[dict, dict]:
+    project = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Bennett Road concrete repair",
+            "client_owner": customer_name,
+            "project_address": "Bennett Road, Richmond, BC",
+            "status": "opportunity",
+        },
+    ).json()
+    estimate = {
+        "project_name": "Bennett Road concrete repair",
+        "line_items": [
+            {
+                "description": "Concrete pull and pour",
+                "quantity": 1,
+                "unit": "LS",
+                "direct_unit_cost": direct_cost,
+            }
+        ],
+        "markup": {"profit_percent": 20},
+        "assumptions": ["Normal weekday access"],
+        "exclusions": ["Hazardous material removal"],
+    }
+    summary = client.post("/api/v1/estimates/summary", json=estimate).json()
+    workspace = client.post(
+        "/api/v1/estimates/workspace",
+        json={
+            "project_id": project["id"],
+            "status": "draft",
+            "estimate": estimate,
+            "summary": summary if include_summary else None,
+        },
+    ).json()
+    return project, workspace
+
+
 def test_verbal_quote_creates_a_durable_opportunity_without_job_number() -> None:
     created = _create_quote()
 
@@ -76,6 +121,150 @@ def test_verbal_quote_creates_a_durable_opportunity_without_job_number() -> None
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content.startswith(b"%PDF")
+
+
+def test_saved_estimate_creates_a_provenance_linked_draft_quote_without_reentry() -> None:
+    project, workspace = _estimate_workspace()
+
+    response = client.post(f"/api/v1/customer-quotes/from-estimate/{workspace['id']}")
+
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert created["project_id"] == project["id"]
+    assert created["source_estimate_workspace_id"] == workspace["id"]
+    assert created["project_name"] == "Bennett Road concrete repair"
+    assert created["customer_name"] == "Bennett Strata"
+    assert created["site_address"] == "Bennett Road, Richmond, BC"
+    assert created["scope_summary"] == "Bennett Road concrete repair — Concrete pull and pour"
+    assert created["line_items"] == [
+        {
+            "description": "Bennett Road concrete repair",
+            "quantity": "1",
+            "unit": "LS",
+            "unit_price": "12000.00",
+            "amount": "12000.00",
+        }
+    ]
+    assert created["assumptions"] == ["Normal weekday access"]
+    assert created["exclusions"] == ["Hazardous material removal"]
+    assert created["subtotal"] == "12000.00"
+    assert created["gst"] == "600.00"
+    assert created["total"] == "12600.00"
+    assert created["status"] == "draft"
+    assert created["issue_status"] == "draft"
+    assert created["job_number"] is None
+
+    with TestingSessionLocal() as db:
+        quote = db.get(CustomerQuote, UUID(created["id"]))
+        assert quote is not None
+        assert quote.source_estimate_hash is not None
+        snapshot = quote.source_estimate_snapshot_json
+        assert snapshot["workspace_id"] == workspace["id"]
+        assert snapshot["project_id"] == project["id"]
+        assert snapshot["bid_json"]["summary"]["final_price"] == 12000.0
+
+    edited = client.patch(
+        f"/api/v1/customer-quotes/{created['id']}",
+        json={"expected_revision": 1, "scope_summary": "Customer-facing scope wording"},
+    )
+    assert edited.status_code == 200
+    with TestingSessionLocal() as db:
+        quote = db.get(CustomerQuote, UUID(created["id"]))
+        assert quote is not None
+        assert quote.source_estimate_snapshot_json == snapshot
+
+
+def test_estimate_quote_conversion_is_idempotent_across_identical_workspaces() -> None:
+    project, first_workspace = _estimate_workspace()
+    first = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{first_workspace['id']}"
+    ).json()
+
+    exact_retry = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{first_workspace['id']}"
+    )
+    assert exact_retry.status_code == 201
+    assert exact_retry.json()["id"] == first["id"]
+
+    duplicate_workspace = client.post(
+        "/api/v1/estimates/workspace",
+        json={
+            "project_id": project["id"],
+            "status": first_workspace["status"],
+            "estimate": first_workspace["estimate"]["estimate"],
+            "summary": first_workspace["estimate"]["summary"],
+        },
+    ).json()
+    content_retry = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{duplicate_workspace['id']}"
+    )
+    assert content_retry.status_code == 201
+    assert content_retry.json()["id"] == first["id"]
+    assert content_retry.json()["source_estimate_workspace_id"] == first_workspace["id"]
+
+    quotes = client.get("/api/v1/customer-quotes").json()
+    assert quotes["total"] == 1
+
+    with TestingSessionLocal() as db:
+        workspace = db.get(Bid, UUID(first_workspace["id"]))
+        assert workspace is not None
+        changed = dict(workspace.bid_json)
+        changed_summary = dict(changed["summary"])
+        changed_summary["final_price"] = 13000
+        changed["summary"] = changed_summary
+        workspace.bid_json = changed
+        db.commit()
+    changed_source = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{first_workspace['id']}"
+    )
+    assert changed_source.status_code == 409
+    assert "changed after" in changed_source.json()["error"]["message"].lower()
+
+
+def test_estimate_quote_conversion_rejects_incomplete_or_ineligible_sources() -> None:
+    _, no_customer = _estimate_workspace(customer_name=None)
+    missing_customer = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{no_customer['id']}"
+    )
+    assert missing_customer.status_code == 409
+    assert "customer name" in missing_customer.json()["error"]["message"].lower()
+
+    _, no_summary = _estimate_workspace(include_summary=False)
+    missing_summary = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{no_summary['id']}"
+    )
+    assert missing_summary.status_code == 409
+    assert "calculate and save" in missing_summary.json()["error"]["message"].lower()
+
+    _, zero_price = _estimate_workspace(direct_cost=0)
+    invalid_price = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{zero_price['id']}"
+    )
+    assert invalid_price.status_code == 409
+    assert "greater than zero" in invalid_price.json()["error"]["message"].lower()
+
+    _, invalid_summary = _estimate_workspace()
+    with TestingSessionLocal() as db:
+        workspace = db.get(Bid, UUID(invalid_summary["id"]))
+        assert workspace is not None
+        malformed = dict(workspace.bid_json)
+        malformed["summary"] = {"project_name": "Incomplete summary"}
+        workspace.bid_json = malformed
+        db.commit()
+    invalid = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{invalid_summary['id']}"
+    )
+    assert invalid.status_code == 409
+    assert "summary is invalid" in invalid.json()["error"]["message"].lower()
+
+    project, archived_workspace = _estimate_workspace()
+    archived = client.post(f"/api/v1/projects/{project['id']}/archive")
+    assert archived.status_code == 200
+    blocked = client.post(
+        f"/api/v1/customer-quotes/from-estimate/{archived_workspace['id']}"
+    )
+    assert blocked.status_code == 409
+    assert "archived" in blocked.json()["error"]["message"].lower()
 
 
 def test_sent_quote_remains_non_binding_and_stale_edits_are_rejected() -> None:

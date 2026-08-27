@@ -42,6 +42,19 @@ def list_customer_quotes(
     return customer_quotes.list_customer_quotes(db, quote_status=quote_status)
 
 
+@router.post(
+    "/from-estimate/{workspace_id}",
+    response_model=CustomerQuoteRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_customer_quote_from_estimate(
+    workspace_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> CustomerQuoteRead:
+    return customer_quotes.create_customer_quote_from_estimate(db, workspace_id, user.email)
+
+
 @router.get("/{quote_id}", response_model=CustomerQuoteRead)
 def read_customer_quote(quote_id: UUID, db: DBSession) -> CustomerQuoteRead:
     return customer_quotes.get_customer_quote(db, quote_id)

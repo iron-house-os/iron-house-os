@@ -205,6 +205,11 @@ describe("EstimatingPage", () => {
     expect(submitted.risks).toEqual([
       expect.objectContaining({ amount: 0, probability: 1 }),
     ]);
+
+    expect(screen.getByRole("button", { name: "Create quote draft" })).toBeEnabled();
+    await user.clear(quantity);
+    await user.type(quantity, "26");
+    expect(screen.getByRole("button", { name: "Create quote draft" })).toBeDisabled();
   });
 
   it("loads the durable quote handoff and saves the active estimate from the main page", async () => {

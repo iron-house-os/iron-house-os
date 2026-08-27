@@ -1,13 +1,17 @@
+import hashlib
+import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.models.bid import Bid
 from app.models.customer_quote import CustomerQuote
 from app.models.document import Document
 from app.models.project import Project
@@ -23,6 +27,7 @@ from app.schemas.customer_quote import (
     CustomerQuoteStatusUpdate,
     CustomerQuoteUpdate,
 )
+from app.schemas.estimate import EstimateSummary
 from app.schemas.project import ProjectStatus
 from app.services import projects
 
@@ -171,10 +176,79 @@ def _load_project(db: Session, project_id: UUID, *, for_update: bool = False) ->
     return project
 
 
+def _find_estimate_quote(
+    db: Session,
+    *,
+    workspace_id: UUID,
+    project_id: UUID,
+    estimate_hash: str,
+) -> CustomerQuote | None:
+    workspace_quote = db.scalar(
+        select(CustomerQuote).where(
+            CustomerQuote.source_estimate_workspace_id == workspace_id,
+        )
+    )
+    if workspace_quote:
+        if workspace_quote.source_estimate_hash != estimate_hash:
+            raise AppError(
+                "The saved estimate changed after its quote draft was created. Save a new estimate workspace before creating another quote.",
+                status_code=409,
+            )
+        return workspace_quote
+    return db.scalar(
+        select(CustomerQuote).where(
+            CustomerQuote.project_id == project_id,
+            CustomerQuote.source_estimate_hash == estimate_hash,
+        )
+    )
+
+
+def _estimate_quote_source(bid: Bid) -> tuple[EstimateSummary, str, dict]:
+    bid_json = bid.bid_json or {}
+    estimate_json = bid_json.get("estimate")
+    summary_json = bid_json.get("summary")
+    if not isinstance(estimate_json, dict) or not isinstance(summary_json, dict):
+        raise AppError(
+            "Calculate and save the estimate before creating a customer quote draft.",
+            status_code=409,
+        )
+    try:
+        summary = EstimateSummary.model_validate(summary_json)
+    except ValidationError as error:
+        raise AppError(
+            "The saved estimate summary is invalid. Recalculate and save it before creating a quote.",
+            status_code=409,
+        ) from error
+    if summary.final_price <= 0:
+        raise AppError(
+            "The saved estimate final price must be greater than zero before creating a quote.",
+            status_code=409,
+        )
+
+    canonical_source = {"estimate": estimate_json, "summary": summary_json}
+    estimate_hash = hashlib.sha256(
+        json.dumps(
+            canonical_source,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    snapshot = {
+        "workspace_id": str(bid.id),
+        "project_id": str(bid.project_id),
+        "workspace_status": bid.status,
+        "workspace_created_at": bid.created_at.isoformat(),
+        "bid_json": bid_json,
+    }
+    return summary, estimate_hash, snapshot
+
+
 def _read(quote: CustomerQuote, project: Project) -> CustomerQuoteRead:
     return CustomerQuoteRead(
         id=quote.id,
         project_id=quote.project_id,
+        source_estimate_workspace_id=quote.source_estimate_workspace_id,
         project_name=project.name,
         quote_number=quote.quote_number,
         customer_name=quote.customer_name,
@@ -219,6 +293,10 @@ def create_customer_quote(
     db: Session,
     payload: CustomerQuoteCreate,
     actor_email: str,
+    *,
+    source_estimate_workspace_id: UUID | None = None,
+    source_estimate_hash: str | None = None,
+    source_estimate_snapshot: dict | None = None,
 ) -> CustomerQuoteRead:
     line_items, subtotal, gst, total = _totals(payload.line_items, payload.gst_rate)
     for _ in range(QUOTE_NUMBER_RETRY_LIMIT):
@@ -242,6 +320,9 @@ def create_customer_quote(
 
             quote = CustomerQuote(
                 project_id=project.id,
+                source_estimate_workspace_id=source_estimate_workspace_id,
+                source_estimate_hash=source_estimate_hash,
+                source_estimate_snapshot_json=source_estimate_snapshot,
                 quote_number=_next_quote_number(db),
                 customer_name=payload.customer_name.strip(),
                 customer_email=payload.customer_email.strip() if payload.customer_email else None,
@@ -269,8 +350,81 @@ def create_customer_quote(
             return _read(quote, project)
         except IntegrityError:
             db.rollback()
+            if source_estimate_workspace_id and source_estimate_hash and payload.project_id:
+                existing = _find_estimate_quote(
+                    db,
+                    workspace_id=source_estimate_workspace_id,
+                    project_id=payload.project_id,
+                    estimate_hash=source_estimate_hash,
+                )
+                if existing:
+                    return _read(existing, _load_project(db, existing.project_id))
             continue
     raise AppError("Unable to allocate a unique quote number. Try again.", status_code=409)
+
+
+def create_customer_quote_from_estimate(
+    db: Session,
+    workspace_id: UUID,
+    actor_email: str,
+) -> CustomerQuoteRead:
+    workspace = db.get(Bid, workspace_id)
+    if workspace is None:
+        raise AppError("Estimate workspace not found.", status_code=404)
+    project = _load_project(db, workspace.project_id)
+    if project.status == ProjectStatus.archived.value:
+        raise AppError("Archived projects cannot receive quotes.", status_code=409)
+    customer_name = (project.client_owner or "").strip()
+    if not customer_name:
+        raise AppError(
+            "Add the customer name to the project before creating a quote draft.",
+            status_code=409,
+        )
+
+    summary, estimate_hash, snapshot = _estimate_quote_source(workspace)
+    existing = _find_estimate_quote(
+        db,
+        workspace_id=workspace.id,
+        project_id=workspace.project_id,
+        estimate_hash=estimate_hash,
+    )
+    if existing:
+        return _read(existing, project)
+
+    description = summary.project_name.strip() or project.name
+    scope_items = [item.description.strip() for item in summary.line_items if item.description.strip()]
+    scope_summary = description
+    if scope_items:
+        scope_summary = f"{description} — {'; '.join(scope_items)}"
+    scope_summary = scope_summary[:10_000].rstrip()
+    payload = CustomerQuoteCreate(
+        project_id=project.id,
+        project_name=project.name,
+        customer_name=customer_name,
+        site_address=project.project_address,
+        scope_summary=scope_summary,
+        line_items=[
+            CustomerQuoteLineItem(
+                description=description,
+                quantity=Decimal("1"),
+                unit="LS",
+                unit_price=Decimal(str(summary.final_price)),
+            )
+        ],
+        assumptions=summary.assumptions,
+        exclusions=summary.exclusions,
+        gst_rate=Decimal("5.00"),
+        quote_date=date.today(),
+        notes="Draft generated from a saved estimate. Review customer details, scope, and terms before issue.",
+    )
+    return create_customer_quote(
+        db,
+        payload,
+        actor_email,
+        source_estimate_workspace_id=workspace.id,
+        source_estimate_hash=estimate_hash,
+        source_estimate_snapshot=snapshot,
+    )
 
 
 def list_customer_quotes(db: Session, quote_status: str | None = None) -> CustomerQuoteList:

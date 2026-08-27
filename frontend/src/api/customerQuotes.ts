@@ -14,6 +14,7 @@ export type CustomerQuoteLineItem = {
 export type CustomerQuote = {
   id: string;
   project_id: string;
+  source_estimate_workspace_id: string | null;
   project_name: string;
   quote_number: string;
   customer_name: string;
@@ -97,6 +98,8 @@ export const customerQuotesApi = {
     method: "POST",
     body: JSON.stringify(payload),
   }),
+  fromEstimate: (workspaceId: string) =>
+    request<CustomerQuote>(`/customer-quotes/from-estimate/${workspaceId}`, { method: "POST" }),
   update: (quoteId: string, revision: number, payload: CustomerQuoteInput) =>
     request<CustomerQuote>(`/customer-quotes/${quoteId}`, {
       method: "PATCH",

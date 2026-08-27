@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,8 +12,22 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class CustomerQuote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "customer_quotes"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_estimate_workspace_id",
+            name="uq_customer_quotes_source_estimate_workspace",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "source_estimate_hash",
+            name="uq_customer_quotes_project_estimate_hash",
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    source_estimate_workspace_id: Mapped[UUID | None] = mapped_column(ForeignKey("bids.id"), index=True)
+    source_estimate_hash: Mapped[str | None] = mapped_column(String(64))
+    source_estimate_snapshot_json: Mapped[dict | None] = mapped_column(JSONType)
     quote_number: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
     customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     customer_email: Mapped[str | None] = mapped_column(String(320))
