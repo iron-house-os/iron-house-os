@@ -1,7 +1,7 @@
 import { BackupsIntake, BackupsReviewDestination } from "./backups";
 import { apiFetch } from "./client";
 
-export type FinancialEntry = { id: string; project_id: string; cost_code: string; entry_type: string; category: string; amount: number; entry_date: string; vendor_name: string | null; vendor_address: string | null; reference: string | null; description: string | null; status: string };
+export type FinancialEntry = { id: string; project_id: string; cost_code: string; entry_type: string; category: string; amount: number; entry_date: string; vendor_name: string | null; vendor_address: string | null; reference: string | null; description: string | null; status: string; source_type?: string; source_id?: string | null; source_key?: string | null; metadata_json?: Record<string, unknown> };
 export type FinancialSummary = { project_id: string; project_name: string; contract_value: number; budget: number; committed: number; actual: number; forecast_cost: number; cost_variance: number; forecast_profit: number; forecast_margin_percent: number; entries: FinancialEntry[]; cost_codes: Array<{ cost_code: string; budget: number; committed: number; actual: number; forecast: number; variance: number }> };
 export type StartupExpense = { id: string; expense_date: string; vendor_name: string; description: string; amount: number; category: string; reference: string | null; source_email: string | null; funding_source: string; owner_name: string | null; tax_treatment: string; status: string; receipt_metadata: Record<string, unknown> };
 
@@ -16,6 +16,9 @@ export type ProjectInvoiceSourceLine = { id: string; work_date: string; source_l
 export type ProjectInvoiceSourceGroup = { source_import_key: string; source_invoice_number: string | null; source_drive_file_id: string | null; source_invoice_date: string | null; line_count: number; subtotal: string; ready: boolean; blockers: string[]; lines: ProjectInvoiceSourceLine[]; existing_invoice_id: string | null; existing_invoice_number: string | null; existing_invoice_status: string | null };
 export type ProjectInvoicePackageReadiness = { project_id: string; project_number: string | null; project_name: string; project_status: string; site_address: string | null; customer_reference: string | null; closeout_status: "ready" | "not_ready" | "missing"; ready: boolean; blockers: string[]; groups: ProjectInvoiceSourceGroup[] };
 export type ProjectInvoicePackageResult = { invoice: CustomerInvoice; created: boolean; idempotent: boolean; generated_at: string };
+export type CompletedWorkCostLine = { id: string; work_date: string; source_import_key: string; source_line_key: string; source_invoice_number: string | null; source_drive_file_id: string | null; description: string; quantity: string; unit: string; billable_rate: string; billable_amount: string; internal_cost_status: string; linked_actual_cost_total: number; linked_entries: FinancialEntry[] };
+export type CompletedWorkCostLedger = { project_id: string; project_name: string; source_line_count: number; linked_line_count: number; unlinked_line_count: number; linked_actual_cost_total: number; warning: string; lines: CompletedWorkCostLine[] };
+export type CompletedWorkCostCreateResult = { entry: FinancialEntry; created: boolean; idempotent: boolean };
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 async function request<T>(path: string, options?: RequestInit): Promise<T> { const response = await apiFetch(BASE + path, { headers: { "Content-Type": "application/json", ...options?.headers }, ...options }); if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? "Financial request failed"); } return response.json() as Promise<T>; }
 export const financeApi = {
@@ -25,6 +28,8 @@ export const financeApi = {
   customerInvoicePdfUrl: (id: string) => `${BASE}/finance/customer-invoices/${id}/pdf`,
   getProjectInvoicePackageReadiness: (projectId: string) => request<ProjectInvoicePackageReadiness>(`/finance/projects/${projectId}/invoice-package-readiness`),
   generateProjectInvoicePackage: (projectId: string, payload: Record<string, unknown>) => request<ProjectInvoicePackageResult>(`/finance/projects/${projectId}/invoice-package`, { method: "POST", body: JSON.stringify(payload) }),
+  getCompletedWorkCosts: (projectId: string) => request<CompletedWorkCostLedger>(`/finance/projects/${projectId}/completed-work-costs`),
+  createCompletedWorkCost: (projectId: string, payload: Record<string, unknown>) => request<CompletedWorkCostCreateResult>(`/finance/projects/${projectId}/completed-work-costs`, { method: "POST", body: JSON.stringify(payload) }),
   getBackupsReview: (destination: BackupsReviewDestination) => request<{ items: BackupsIntake[]; total: number }>(`/finance/backups-review?destination=${encodeURIComponent(destination)}`),
   getProject: (id: string) => request<FinancialSummary>(`/finance/projects/${id}`),
   importEstimate: (id: string) => request<FinancialSummary>(`/finance/projects/${id}/import-estimate`, { method: "POST", body: "{}" }),
