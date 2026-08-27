@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AwardedProjectWorkspace,
   Project,
+  ProjectCloseoutChecklist,
   ProjectDashboard,
   ProjectLaunchDashboard,
   ProjectStartChecklist,
@@ -100,6 +101,40 @@ const awardedStartChecklist: ProjectStartChecklist = {
     changed_at: null,
   })),
 };
+
+const closeoutChecklistDefinitions = [
+  ["deficiencies", "Quality", "Deficiencies are closed or carried forward with an owner, due date, and documented basis."],
+  ["testing_inspections", "Quality", "Required testing and inspection records are complete and saved to the project record."],
+  ["permit_authority_finals", "Administration", "Permit, municipal, utility, or other authority final records are saved when applicable."],
+  ["asbuilts_redlines", "Documents", "As-builts, redlines, and final drawing revisions are complete and indexed."],
+  ["turnover_warranty", "Turnover", "O&M information, warranties, training, and spare-material obligations are complete or recorded as not applicable."],
+  ["demobilization", "Delivery", "Demobilization, cleanup, environmental controls, and remaining site obligations are complete."],
+  ["changes_commitments", "Cost control", "Final changes, purchase orders, subcontract commitments, and unresolved exposure are reconciled."],
+  ["billing_holdback", "Finance", "Final billing package and holdback status are recorded without inferring issue, payment, or release."],
+  ["acceptance_evidence", "Contract", "Client or consultant acceptance, substantial completion, or other contract completion evidence is saved when applicable."],
+  ["turnover_index", "Documents", "The closeout package is indexed in the project record with remaining actions clearly assigned."],
+] as const;
+
+function closeoutChecklist(projectId = awardedProject.id): ProjectCloseoutChecklist {
+  const items = closeoutChecklistDefinitions.map(([code, category, label], index) => ({
+    code,
+    category,
+    label,
+    sort_order: index + 1,
+    completed: false,
+    evidence: null,
+    changed_by: null,
+    changed_at: null,
+  }));
+  return {
+    project_id: projectId,
+    status: "not_ready",
+    completed_count: 0,
+    total_count: items.length,
+    next_incomplete_control: items[0],
+    items,
+  };
+}
 
 const awardedLaunchDashboard: ProjectLaunchDashboard = {
   project_id: awardedProject.id,
@@ -272,7 +307,7 @@ describe("ProjectWorkspacePage", () => {
 
     expect(
       await screen.findByText(
-        "1 release smoke project moved to Trash before cleanup stopped at Release smoke 20260823-131404 (SMOKE-20260823-131404). Request failed with 500",
+        "1 release smoke project moved to Trash before cleanup stopped at Release smoke 20260823-131404 (SMOKE-20260823-131404). Cleanup failed",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move 2 release smoke projects to Trash" })).toBeInTheDocument();
@@ -437,6 +472,64 @@ describe("ProjectWorkspacePage", () => {
     });
   });
 
+  it("requires and records evidence for project closeout controls", async () => {
+    const fetchMock = mockProjectApi(
+      awardedProject,
+      awardedWorkspace,
+      awardedStartChecklist,
+      false,
+      awardedLaunchDashboard,
+      closeoutChecklist(),
+    );
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const checklist = await screen.findByRole("region", { name: "Project closeout checklist" });
+    expect(checklist).toHaveTextContent("Not ready");
+    expect(checklist).toHaveTextContent("0 of 10");
+    const evidence = within(checklist).getByRole("textbox", { name: /Evidence for Deficiencies are closed/ });
+    const confirm = within(checklist).getAllByRole("button", { name: "Confirm complete" })[0];
+    expect(confirm).toBeDisabled();
+
+    await user.type(evidence, "Deficiency log CL-001, reviewed 2026-08-27");
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(
+        ([url, options]) => url.toString().endsWith("/closeout-checklist/deficiencies") && options?.method === "PATCH",
+      );
+      expect(updateCall).toBeDefined();
+      expect(JSON.parse(String(updateCall?.[1]?.body))).toEqual({
+        completed: true,
+        evidence: "Deficiency log CL-001, reviewed 2026-08-27",
+      });
+      expect(checklist).toHaveTextContent("1 of 10");
+      expect(checklist).toHaveTextContent("Recorded by test-admin@ironhousecontracting.com");
+    });
+  });
+
+  it("lets management explicitly initialize closeout controls for a legacy job without a workspace manifest", async () => {
+    const legacyConstructionProject: Project = {
+      ...awardedProject,
+      status: "construction",
+      workspace_root: null,
+      workspace_provisioned_at: null,
+    };
+    const fetchMock = mockProjectApi(legacyConstructionProject);
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${legacyConstructionProject.id}`);
+
+    const initialization = await screen.findByRole("region", { name: "Project closeout controls" });
+    await user.click(within(initialization).getByRole("button", { name: "Initialize closeout controls" }));
+
+    expect(await screen.findByRole("region", { name: "Project closeout checklist" })).toHaveTextContent("0 of 10");
+    expect(fetchMock.mock.calls.some(
+      ([url, options]) => url.toString().endsWith(`/projects/${legacyConstructionProject.id}/closeout-checklist`) && options?.method === "POST",
+    )).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url.toString().endsWith("/workspace"))).toBe(false);
+  });
+
   it("renders dashboard widgets for project readiness", async () => {
     mockProjectApi();
 
@@ -506,8 +599,10 @@ function mockProjectApi(
   startChecklist?: ProjectStartChecklist,
   delayChecklistUpdates = false,
   launchDashboard: ProjectLaunchDashboard = awardedLaunchDashboard,
+  closeout?: ProjectCloseoutChecklist,
 ) {
   let currentStartChecklist = startChecklist;
+  let currentCloseoutChecklist = closeout;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
     const url = input.toString();
 
@@ -549,6 +644,41 @@ function mockProjectApi(
           ? currentStartChecklist.items.find((item) => !item.completed) ?? null
           : launchDashboard.next_incomplete_control,
       });
+    }
+
+    const closeoutItemPath = `/projects/${currentProject.id}/closeout-checklist/`;
+    if (url.includes(closeoutItemPath) && options?.method === "PATCH" && currentCloseoutChecklist) {
+      const payload = JSON.parse(String(options.body));
+      const code = decodeURIComponent(url.slice(url.indexOf(closeoutItemPath) + closeoutItemPath.length));
+      const items = currentCloseoutChecklist.items.map((item) =>
+        item.code === code
+          ? {
+              ...item,
+              completed: payload.completed,
+              evidence: payload.completed ? payload.evidence : null,
+              changed_by: "test-admin@ironhousecontracting.com",
+              changed_at: "2026-08-27T15:00:00Z",
+            }
+          : item,
+      );
+      const completedCount = items.filter((item) => item.completed).length;
+      currentCloseoutChecklist = {
+        ...currentCloseoutChecklist,
+        status: completedCount === currentCloseoutChecklist.total_count ? "ready" : "not_ready",
+        completed_count: completedCount,
+        next_incomplete_control: items.find((item) => !item.completed) ?? null,
+        items,
+      };
+      return jsonResponse(currentCloseoutChecklist);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/closeout-checklist`) && options?.method === "POST") {
+      currentCloseoutChecklist = closeoutChecklist(currentProject.id);
+      return jsonResponse(currentCloseoutChecklist, 201);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/closeout-checklist`) && currentCloseoutChecklist) {
+      return jsonResponse(currentCloseoutChecklist);
     }
 
     const checklistItemPath = `/projects/${currentProject.id}/start-checklist/`;

@@ -54,6 +54,11 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    closeout_checklist_items = relationship(
+        "ProjectCloseoutChecklistItem",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectSupplier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -81,3 +86,26 @@ class ProjectStartChecklistItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     project = relationship("Project", back_populates="start_checklist_items")
+
+
+class ProjectCloseoutChecklistItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "project_closeout_checklist_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "code",
+            name="uq_project_closeout_checklist_project_code",
+        ),
+    )
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(500), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    evidence: Mapped[str | None] = mapped_column(Text)
+    changed_by: Mapped[str | None] = mapped_column(String(320))
+    changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    project = relationship("Project", back_populates="closeout_checklist_items")

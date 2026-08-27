@@ -105,7 +105,7 @@ describe("MVPWorkflowPage", () => {
 
     const queue = await screen.findByLabelText("Active quote-to-job work queue");
     const stages = screen.getByLabelText("Quote-to-job stages");
-    for (const label of ["Capture quote", "Record decision", "Award + job number", "Launch controls", "Deliver"]) {
+    for (const label of ["Capture quote", "Record decision", "Award + job number", "Launch controls", "Deliver + closeout"]) {
       expect(stages).toHaveTextContent(label);
     }
 
@@ -152,6 +152,10 @@ describe("MVPWorkflowPage", () => {
     expect(within(constructionCard as HTMLElement).getByRole("link", { name: "Documents" })).toHaveAttribute(
       "href",
       expect.stringContaining(`/documents?projectId=${constructionJob.id}`),
+    );
+    expect(within(constructionCard as HTMLElement).getByRole("link", { name: "Closeout controls" })).toHaveAttribute(
+      "href",
+      `/projects/${constructionJob.id}`,
     );
     expect(within(queue).getAllByRole("article")).toHaveLength(5);
   });

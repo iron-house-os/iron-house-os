@@ -15,6 +15,10 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.schemas.project_folder import AwardedProjectWorkspace, ProjectFolderManifest, ProjectFolderRequest
+from app.schemas.project_closeout import (
+    ProjectCloseoutChecklistRead,
+    ProjectCloseoutChecklistUpdate,
+)
 from app.schemas.project_launch import ProjectLaunchDashboard
 from app.schemas.project_readiness import ProjectReadinessResponse
 from app.schemas.project_start import ProjectStartChecklistRead, ProjectStartChecklistUpdate
@@ -56,8 +60,13 @@ def read_project(project_id: UUID, db: DBSession) -> ProjectRead:
 
 
 @router.patch("/{project_id}", response_model=ProjectRead)
-def update_project(project_id: UUID, payload: ProjectUpdate, db: DBSession) -> ProjectRead:
-    return projects.update_project(db, project_id, payload)
+def update_project(
+    project_id: UUID,
+    payload: ProjectUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectRead:
+    return projects.update_project(db, project_id, payload, user)
 
 
 @router.post("/{project_id}/archive", response_model=ProjectRead)
@@ -100,6 +109,27 @@ def read_project_start_checklist(project_id: UUID, db: DBSession) -> ProjectStar
     return projects.get_project_start_checklist(db, project_id)
 
 
+@router.get("/{project_id}/closeout-checklist", response_model=ProjectCloseoutChecklistRead)
+def read_project_closeout_checklist(
+    project_id: UUID,
+    db: DBSession,
+) -> ProjectCloseoutChecklistRead:
+    return projects.get_project_closeout_checklist(db, project_id)
+
+
+@router.post(
+    "/{project_id}/closeout-checklist",
+    response_model=ProjectCloseoutChecklistRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def initialize_project_closeout_checklist(
+    project_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectCloseoutChecklistRead:
+    return projects.initialize_project_closeout_checklist(db, project_id, user)
+
+
 @router.get("/{project_id}/launch-dashboard", response_model=ProjectLaunchDashboard)
 def read_project_launch_dashboard(
     project_id: UUID,
@@ -128,4 +158,24 @@ def update_project_start_checklist_item(
         code,
         payload.completed,
         user.email,
+    )
+
+
+@router.patch(
+    "/{project_id}/closeout-checklist/{code}",
+    response_model=ProjectCloseoutChecklistRead,
+)
+def update_project_closeout_checklist_item(
+    project_id: UUID,
+    code: str,
+    payload: ProjectCloseoutChecklistUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectCloseoutChecklistRead:
+    return projects.update_project_closeout_checklist_item(
+        db,
+        project_id,
+        code,
+        payload,
+        user,
     )

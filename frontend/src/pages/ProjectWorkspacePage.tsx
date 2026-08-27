@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   AwardedProjectWorkspace,
   Project,
+  ProjectCloseoutChecklist,
   ProjectCreatePayload,
   ProjectDashboard,
   ProjectLaunchDashboard,
@@ -57,14 +58,18 @@ export function ProjectWorkspacePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isManagement = user?.role === "admin" || user?.role === "operations_manager";
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
   const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
   const [launchDashboard, setLaunchDashboard] = useState<ProjectLaunchDashboard | null>(null);
   const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
+  const [closeoutChecklist, setCloseoutChecklist] = useState<ProjectCloseoutChecklist | null>(null);
   const [projectLoadWarning, setProjectLoadWarning] = useState<string | null>(null);
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
+  const [savingCloseoutCode, setSavingCloseoutCode] = useState<string | null>(null);
+  const [initializingCloseout, setInitializingCloseout] = useState(false);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
@@ -96,27 +101,36 @@ export function ProjectWorkspacePage() {
         setWorkspace(null);
         setLaunchDashboard(null);
         setStartChecklist(null);
+        setCloseoutChecklist(null);
 
-        if (detail.workspace_root) {
-          const [workspaceResult, checklistResult, launchResult] = await Promise.allSettled([
-            projectsApi.workspace(projectId),
-            projectsApi.startChecklist(projectId),
-            projectsApi.launchDashboard(projectId),
-          ]);
-          setWorkspace(workspaceResult.status === "fulfilled" ? workspaceResult.value : null);
-          setStartChecklist(checklistResult.status === "fulfilled" ? checklistResult.value : null);
-          setLaunchDashboard(launchResult.status === "fulfilled" ? launchResult.value : null);
+        const closeoutEligible = Boolean(
+          detail.project_number && ["awarded", "construction", "completed"].includes(detail.status),
+        );
+        const [workspaceResult, checklistResult, launchResult, closeoutResult] = await Promise.allSettled([
+          detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
+          detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
+          detail.workspace_root && detail.status === "awarded"
+            ? projectsApi.launchDashboard(projectId)
+            : Promise.resolve(null),
+          closeoutEligible ? projectsApi.closeoutChecklist(projectId) : Promise.resolve(null),
+        ]);
+        setWorkspace(workspaceResult.status === "fulfilled" ? workspaceResult.value : null);
+        setStartChecklist(checklistResult.status === "fulfilled" ? checklistResult.value : null);
+        setLaunchDashboard(launchResult.status === "fulfilled" ? launchResult.value : null);
+        setCloseoutChecklist(closeoutResult.status === "fulfilled" ? closeoutResult.value : null);
 
-          const unavailable = [
-            workspaceResult.status === "rejected" ? "workspace summary" : null,
-            checklistResult.status === "rejected" ? "start checklist" : null,
-            launchResult.status === "rejected" ? "launch dashboard" : null,
-          ].filter(Boolean);
-          if (unavailable.length) {
-            setProjectLoadWarning(
-              `${detail.name} is selected, but its ${unavailable.join(", ")} could not be loaded. Available project controls remain usable.`,
-            );
-          }
+        const unavailable = [
+          detail.workspace_root && workspaceResult.status === "rejected" ? "workspace summary" : null,
+          detail.workspace_root && checklistResult.status === "rejected" ? "start checklist" : null,
+          detail.workspace_root && detail.status === "awarded" && launchResult.status === "rejected"
+            ? "launch dashboard"
+            : null,
+          closeoutEligible && closeoutResult.status === "rejected" ? "closeout checklist" : null,
+        ].filter(Boolean);
+        if (unavailable.length) {
+          setProjectLoadWarning(
+            `${detail.name} is selected, but its ${unavailable.join(", ")} could not be loaded. Available project controls remain usable.`,
+          );
         }
       } else {
         setSelectedProject(null);
@@ -124,6 +138,7 @@ export function ProjectWorkspacePage() {
         setWorkspace(null);
         setLaunchDashboard(null);
         setStartChecklist(null);
+        setCloseoutChecklist(null);
       }
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "Unable to load projects");
@@ -149,8 +164,13 @@ export function ProjectWorkspacePage() {
 
   async function updateStatus(status: ProjectStatus) {
     if (!selectedProject) return;
-    await projectsApi.update(selectedProject.id, { status });
-    await refresh();
+    setError(null);
+    try {
+      await projectsApi.update(selectedProject.id, { status });
+      await refresh();
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update project status");
+    }
   }
 
   async function archiveProject() {
@@ -244,6 +264,34 @@ export function ProjectWorkspacePage() {
     }
   }
 
+  async function initializeCloseoutChecklist() {
+    if (!selectedProject || !isManagement || initializingCloseout) return;
+    setInitializingCloseout(true);
+    setError(null);
+    try {
+      setCloseoutChecklist(await projectsApi.initializeCloseoutChecklist(selectedProject.id));
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to initialize project closeout controls");
+    } finally {
+      setInitializingCloseout(false);
+    }
+  }
+
+  async function updateCloseoutChecklistItem(code: string, completed: boolean, evidence?: string | null) {
+    if (!selectedProject || !isManagement || savingCloseoutCode) return;
+    setSavingCloseoutCode(code);
+    setError(null);
+    try {
+      setCloseoutChecklist(
+        await projectsApi.updateCloseoutChecklistItem(selectedProject.id, code, completed, evidence),
+      );
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update the project closeout checklist");
+    } finally {
+      setSavingCloseoutCode(null);
+    }
+  }
+
   const normalizedSearch = searchFilter.trim().toLocaleLowerCase();
   const filteredProjects = filterProjects(projects, normalizedSearch, smokeTestOnly);
 
@@ -328,14 +376,20 @@ export function ProjectWorkspacePage() {
             workspace={workspace}
             launchDashboard={launchDashboard}
             startChecklist={startChecklist}
+            closeoutChecklist={closeoutChecklist}
             savingChecklistCode={savingChecklistCode}
+            savingCloseoutCode={savingCloseoutCode}
+            initializingCloseout={initializingCloseout}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onStatusChange={(value) => void updateStatus(value)}
             onArchive={() => void archiveProject()}
             onDelete={() => void deleteProject()}
             canDelete={isAdmin}
+            canManageCloseout={isManagement}
             onStartChecklistChange={(code, completed) => void updateStartChecklistItem(code, completed)}
+            onInitializeCloseout={() => void initializeCloseoutChecklist()}
+            onCloseoutChecklistChange={(code, completed, evidence) => void updateCloseoutChecklistItem(code, completed, evidence)}
           />
         ) : (
           <div className="rounded-md border border-iron-100 bg-white p-6">
@@ -562,28 +616,40 @@ function ProjectDetail({
   workspace,
   launchDashboard,
   startChecklist,
+  closeoutChecklist,
   savingChecklistCode,
+  savingCloseoutCode,
+  initializingCloseout,
   activeTab,
   onTabChange,
   onStatusChange,
   onArchive,
   onDelete,
   canDelete,
+  canManageCloseout,
   onStartChecklistChange,
+  onInitializeCloseout,
+  onCloseoutChecklistChange,
 }: {
   project: Project;
   dashboard: ProjectDashboard;
   workspace: AwardedProjectWorkspace | null;
   launchDashboard: ProjectLaunchDashboard | null;
   startChecklist: ProjectStartChecklist | null;
+  closeoutChecklist: ProjectCloseoutChecklist | null;
   savingChecklistCode: string | null;
+  savingCloseoutCode: string | null;
+  initializingCloseout: boolean;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onStatusChange: (status: ProjectStatus) => void;
   onArchive: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  canManageCloseout: boolean;
   onStartChecklistChange: (code: string, completed: boolean) => void;
+  onInitializeCloseout: () => void;
+  onCloseoutChecklistChange: (code: string, completed: boolean, evidence?: string | null) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -598,12 +664,14 @@ function ProjectDetail({
           </div>
           <div className="flex gap-2">
             <select
+              aria-label="Project status"
               value={project.status}
+              disabled={project.status === "completed" && !canManageCloseout}
               onChange={(event) => onStatusChange(event.target.value as ProjectStatus)}
-              className="rounded-md border border-iron-100 bg-white px-3 py-2 text-sm"
+              className="rounded-md border border-iron-100 bg-white px-3 py-2 text-sm disabled:bg-iron-50 disabled:text-iron-500"
             >
               {projectStatuses.map((item) => (
-                <option key={item} value={item}>
+                <option key={item} value={item} disabled={item === "completed" && !canManageCloseout}>
                   {label(item)}
                 </option>
               ))}
@@ -631,6 +699,20 @@ function ProjectDetail({
           checklist={startChecklist}
           savingCode={savingChecklistCode}
           onChange={onStartChecklistChange}
+        />
+      ) : null}
+      {closeoutChecklist ? (
+        <ProjectCloseoutChecklistCard
+          checklist={closeoutChecklist}
+          savingCode={savingCloseoutCode}
+          canManage={canManageCloseout}
+          projectCompleted={project.status === "completed"}
+          onChange={onCloseoutChecklistChange}
+        />
+      ) : project.project_number && canManageCloseout && ["awarded", "construction", "completed"].includes(project.status) ? (
+        <CloseoutInitializationCard
+          initializing={initializingCloseout}
+          onInitialize={onInitializeCloseout}
         />
       ) : null}
       <DashboardWidgets dashboard={dashboard} project={project} />
@@ -867,6 +949,177 @@ function ProjectStartChecklistCard({
         engineering approval, or project-specific safety evidence.
       </p>
     </section>
+  );
+}
+
+function CloseoutInitializationCard({
+  initializing,
+  onInitialize,
+}: {
+  initializing: boolean;
+  onInitialize: () => void;
+}) {
+  return (
+    <section aria-label="Project closeout controls" className="rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-iron-950">Project closeout controls</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
+            This legacy job has no closeout checklist yet. Initialize the standard controls before attempting project completion.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={initializing}
+          onClick={onInitialize}
+          className="min-h-11 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {initializing ? "Initializing…" : "Initialize closeout controls"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ProjectCloseoutChecklistCard({
+  checklist,
+  savingCode,
+  canManage,
+  projectCompleted,
+  onChange,
+}: {
+  checklist: ProjectCloseoutChecklist;
+  savingCode: string | null;
+  canManage: boolean;
+  projectCompleted: boolean;
+  onChange: (code: string, completed: boolean, evidence?: string | null) => void;
+}) {
+  const ready = checklist.status === "ready";
+  return (
+    <section aria-label="Project closeout checklist" className="rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-brand-gold" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-iron-950">Project closeout checklist</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
+            Record the source document, email, inspection, invoice, or other evidence for every closeout control.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={[
+              "rounded-md px-3 py-2 text-xs font-semibold",
+              ready ? "bg-signal-green/10 text-signal-green" : "bg-brand-gold/10 text-iron-800",
+            ].join(" ")}
+          >
+            {ready ? "Ready for management completion" : "Not ready"}
+          </span>
+          <span className="text-sm font-semibold text-iron-800">
+            {checklist.completed_count} of {checklist.total_count}
+          </span>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {checklist.items.map((item) => (
+          <CloseoutChecklistItemControl
+            key={`${item.code}-${item.completed}-${item.changed_at ?? "new"}`}
+            item={item}
+            saving={savingCode !== null}
+            canManage={canManage}
+            projectCompleted={projectCompleted}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+      <p className="mt-4 text-xs leading-5 text-iron-500">
+        Checklist readiness does not issue an invoice, release holdback, prove payment, replace source documents, or infer client,
+        consultant, regulatory, or contract acceptance. Management must still select the project completion status separately.
+      </p>
+    </section>
+  );
+}
+
+function CloseoutChecklistItemControl({
+  item,
+  saving,
+  canManage,
+  projectCompleted,
+  onChange,
+}: {
+  item: ProjectCloseoutChecklist["items"][number];
+  saving: boolean;
+  canManage: boolean;
+  projectCompleted: boolean;
+  onChange: (code: string, completed: boolean, evidence?: string | null) => void;
+}) {
+  const [evidence, setEvidence] = useState(item.evidence ?? "");
+  const normalizedEvidence = evidence.trim();
+  const evidenceChanged = normalizedEvidence !== (item.evidence ?? "");
+  return (
+    <article className="rounded-md border border-iron-100 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">{item.category}</div>
+          <p className="mt-1 text-sm leading-5 text-iron-800">{item.label}</p>
+        </div>
+        <span className={item.completed ? "text-xs font-semibold text-signal-green" : "text-xs font-semibold text-iron-500"}>
+          {item.completed ? "Complete" : "Open"}
+        </span>
+      </div>
+      <label className="mt-3 block text-xs font-semibold text-iron-700">
+        Evidence
+        <textarea
+          aria-label={`Evidence for ${item.label}`}
+          value={evidence}
+          disabled={!canManage || saving}
+          onChange={(event) => setEvidence(event.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder="Document, email, inspection, invoice, or record reference"
+          className="mt-1 w-full rounded-md border border-iron-100 px-3 py-2 text-sm font-normal text-iron-800 disabled:bg-iron-50"
+        />
+      </label>
+      {item.changed_by && item.changed_at ? (
+        <p className="mt-2 text-xs text-iron-500">
+          Recorded by {item.changed_by} at <time dateTime={item.changed_at}>{new Date(item.changed_at).toLocaleString()}</time>
+        </p>
+      ) : null}
+      {canManage ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {item.completed ? (
+            <>
+              <button
+                type="button"
+                disabled={saving || !normalizedEvidence || !evidenceChanged}
+                onClick={() => onChange(item.code, true, normalizedEvidence)}
+                className="min-h-10 rounded-md border border-iron-200 px-3 py-2 text-xs font-semibold text-iron-800 disabled:opacity-50"
+              >
+                Update evidence
+              </button>
+              <button
+                type="button"
+                disabled={saving || projectCompleted}
+                onClick={() => onChange(item.code, false, null)}
+                className="min-h-10 rounded-md border border-iron-200 px-3 py-2 text-xs font-semibold text-iron-700 disabled:opacity-50"
+              >
+                Reopen control
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={saving || !normalizedEvidence}
+              onClick={() => onChange(item.code, true, normalizedEvidence)}
+              className="min-h-10 rounded-md bg-iron-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              Confirm complete
+            </button>
+          )}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
