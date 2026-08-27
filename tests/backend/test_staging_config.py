@@ -91,6 +91,16 @@ def test_release_workflow_uses_disposable_staging_and_immutable_evidence() -> No
 def test_staging_deploy_pins_and_verifies_the_live_release() -> None:
     workflow = (ROOT / ".github/workflows/staging-deploy.yml").read_text()
 
+    assert "Select exact current main for staging" in workflow
+    assert 'current_main="$(git rev-parse origin/main)"' in workflow
+    assert 'if [[ "$RELEASE_SHA" != "$current_main" ]]' in workflow
+    assert 'echo "deploy=false" >> "$GITHUB_OUTPUT"' in workflow
+    assert "Skipping stale staging release" in workflow
+    assert "if: steps.current_main.outputs.deploy == 'true'" in workflow
+    assert 'test "$RELEASE_SHA" = "$(git rev-parse origin/main)"' in workflow
+    assert workflow.index('test "$RELEASE_SHA" = "$(git rev-parse origin/main)"') < workflow.index(
+        'sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose'
+    )
     assert 'sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose' in workflow
     assert "exec -T backend alembic heads" in workflow
     assert 'test "$migration" = "$expected_migration"' in workflow

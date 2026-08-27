@@ -37,10 +37,27 @@ jobs:
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           test -f backend/app/services/local_receipt_ocr.py
 
-      - name: Build and deploy exact checkout
+      - name: Select exact current main for staging
+        id: current_main
         env:
           RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
         run: |
+          git fetch --no-tags origin main
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$RELEASE_SHA" != "$current_main" ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping stale staging release $RELEASE_SHA; current main is $current_main."
+            exit 0
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build and deploy exact checkout
+        if: steps.current_main.outputs.deploy == 'true'
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
           sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose \
             --env-file /etc/iron-house-os/staging.env \
             -f "$GITHUB_WORKSPACE/docker-compose.staging.yml" \
@@ -48,6 +65,7 @@ jobs:
             up -d --build --force-recreate --remove-orphans
 
       - name: Verify live backend contains OCR fallback
+        if: steps.current_main.outputs.deploy == 'true'
         env:
           RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
         run: |
@@ -58,6 +76,7 @@ jobs:
             exec -T backend python -c 'import app.services.local_receipt_ocr; print("LOCAL_OCR_READY")'
 
       - name: Verify exact staging migration
+        if: steps.current_main.outputs.deploy == 'true'
         env:
           RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
         run: |
@@ -80,6 +99,7 @@ jobs:
           printf 'Verified staging Alembic revision %s\n' "$migration"
 
       - name: Verify public staging endpoints
+        if: steps.current_main.outputs.deploy == 'true'
         env:
           RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
         run: |
