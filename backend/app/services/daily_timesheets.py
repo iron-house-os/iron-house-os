@@ -51,9 +51,22 @@ def _event(action: str, user: AuthenticatedUser, *, reason: str | None = None, f
 
 
 def _project_cost_codes(db: Session) -> dict[str, list[dict]]:
-    bids = list(db.scalars(select(Bid).order_by(Bid.project_id, Bid.created_at.desc())))
+    projects = list(db.scalars(select(Project)))
     result: dict[str, list[dict]] = {}
-    seen: set[UUID] = set()
+    for project in projects:
+        approved = (project.metadata_json or {}).get("project_cost_codes") or []
+        codes = {
+            str(item.get("code") or "").strip().upper(): {
+                "code": str(item.get("code") or "").strip().upper(),
+                "name": str(item.get("name") or item.get("code") or "").strip(),
+            }
+            for item in approved
+            if str(item.get("code") or "").strip()
+        }
+        if codes:
+            result[str(project.id)] = list(codes.values())
+    bids = list(db.scalars(select(Bid).order_by(Bid.project_id, Bid.created_at.desc())))
+    seen: set[UUID] = {UUID(project_id) for project_id in result}
     for bid in bids:
         if bid.project_id in seen or (bid.bid_json or {}).get("source") != "estimate_workspace":
             continue

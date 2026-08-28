@@ -1,0 +1,47 @@
+{
+  "issue": 373,
+  "parent_issues": [268, 314, 371],
+  "environment": "staging",
+  "source": "bennett_strata_issue_314",
+  "source_revision": "2026-08-27-final",
+  "trigger": "human merge of the exact Build 229 pull request followed by a successful exact-release staging deployment",
+  "approval_scope": "seed the exact original cost budget and approved pilot job cost codes for awarded staging job IH2026002",
+  "exact_records": {
+    "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+    "job_number": "IH2026002",
+    "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+    "quote_id": "8f854940-e710-45c2-aae4-7d5706c3a9e2",
+    "quote_number": "Q-2026-002"
+  },
+  "customer_pricing": {
+    "subtotal": "36266.67",
+    "gst": "1813.33",
+    "total": "38080.00"
+  },
+  "original_cost_budget": {
+    "total": "26660.93",
+    "allocations": [
+      {"source_code": "CON-001", "cost_code": "4100", "name": "Concrete restoration", "amount": "19860.93"},
+      {"source_code": "RISK", "cost_code": "4100", "name": "Concrete restoration", "amount": "4750.00"},
+      {"source_code": "EQP-001", "cost_code": "5100", "name": "Small equipment rental", "amount": "200.00"},
+      {"source_code": "EQP-002", "cost_code": "5110", "name": "Skid steer / hydraulic attachment", "amount": "1100.00"},
+      {"source_code": "TRK-001", "cost_code": "6100", "name": "Trucking, disposal and material hauling", "amount": "750.00"}
+    ]
+  },
+  "permitted_actions": [
+    "authenticate through the live HTTPS staging origin",
+    "create or reuse five estimate-sourced original budget entries",
+    "publish four approved job cost codes to daily timesheets",
+    "mark the award cost-budget metadata allocated",
+    "repeat the import to prove stable entry identity and totals",
+    "upload immutable evidence retained for 90 days"
+  ],
+  "prohibited_actions": [
+    "change customer pricing or contract value",
+    "create a commitment, actual cost, purchase order, invoice, or accounting export",
+    "mark mobilization ready or complete a project-start checklist item",
+    "issue or externally send the quote",
+    "mutate production",
+    "change DNS, certificates, secrets, backups, authentication, or infrastructure"
+  ]
+}

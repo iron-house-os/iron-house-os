@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import date
 from uuid import UUID
 
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
 from app.models.bid import Bid
+from app.models.project import Project
 from app.services.auth import AuthenticatedUser
 from conftest import TestingSessionLocal
 
@@ -28,6 +30,85 @@ def _estimate(project_id: str) -> UUID:
         return bid.id
 
 
+def _bennett_style_estimate(project_id: str) -> UUID:
+    with TestingSessionLocal() as db:
+        project = db.get(Project, UUID(project_id))
+        assert project is not None
+        project.metadata_json = {
+            "award_pricing_baseline": {
+                "source_quote_id": "quote-1",
+                "source_quote_number": "Q-2026-002",
+                "pricing_subtotal": "36266.67",
+                "cost_budget_status": "needs_cost_allocation",
+                "lines": [{"description": "Concrete pull and pour", "cost_code": None}],
+            },
+            "procurement_plan": {
+                "status": "draft",
+                "automatic_commitment": False,
+                "requirements": [],
+            },
+        }
+        bid = Bid(
+            project_id=UUID(project_id),
+            status="approved",
+            total_amount=36266.67,
+            summary="Bennett concrete estimate",
+            bid_json={
+                "source": "bennett_strata_issue_314",
+                "source_revision": "2026-08-27-final",
+                "estimate_key": "concrete",
+                "estimate": {
+                    "risks": [
+                        {
+                            "description": "Subgrade / buried deficiencies provisional allowance",
+                            "amount": 4750,
+                            "probability": 1,
+                        }
+                    ]
+                },
+                "summary": {
+                    "final_price": 36266.67,
+                    "line_items": [
+                        {"code": "CON-001", "description": "4 in concrete pull and pour", "item_type": "self_perform", "direct_cost": 19860.93},
+                        {"code": "EQP-001", "description": "14 in cutoff saw", "item_type": "equipment", "direct_cost": 200},
+                        {"code": "EQP-002", "description": "Skid steer with hydraulic hammer", "item_type": "equipment", "direct_cost": 1100},
+                        {"code": "TRK-001", "description": "Concrete disposal tandem", "item_type": "subcontract", "direct_cost": 750},
+                    ],
+                    "indirect_cost": 0,
+                    "risk_cost": 4750,
+                    "contingency": 0,
+                    "bonding": 0,
+                    "insurance": 0,
+                    "overhead": 0,
+                },
+            },
+        )
+        db.add(bid)
+        db.commit()
+        db.refresh(bid)
+        return bid.id
+
+
+def _bennett_budget_payload(workspace_id: UUID) -> dict:
+    return {
+        "workspace_id": str(workspace_id),
+        "cost_code_mappings": {
+            "CON-001": "4100",
+            "EQP-001": "5100",
+            "EQP-002": "5110",
+            "TRK-001": "6100",
+        },
+        "cost_code_names": {
+            "4100": "Concrete restoration",
+            "5100": "Small equipment rental",
+            "5110": "Skid steer / hydraulic attachment",
+            "6100": "Trucking, disposal and material hauling",
+        },
+        "risk_cost_code": "4100",
+        "risk_cost_code_name": "Concrete restoration",
+    }
+
+
 def test_estimate_budget_actual_commitment_and_forecast_summary() -> None:
     project = _project()
     workspace_id = _estimate(project["id"])
@@ -44,6 +125,133 @@ def test_estimate_budget_actual_commitment_and_forecast_summary() -> None:
     assert summary["actual"] == 25000
     assert summary["forecast_cost"] == 65000
     assert summary["forecast_profit"] == 85000
+
+
+def test_estimate_budget_mapping_is_idempotent_and_initializes_job_cost_codes() -> None:
+    project = _project()
+    awarded = client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"})
+    assert awarded.status_code == 200
+    workspace_id = _bennett_style_estimate(project["id"])
+    payload = _bennett_budget_payload(workspace_id)
+
+    first = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    second = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["budget"] == 26660.93
+    assert second.json()["budget"] == 26660.93
+    first_entries = [item for item in first.json()["entries"] if item["entry_type"] == "budget"]
+    second_entries = [item for item in second.json()["entries"] if item["entry_type"] == "budget"]
+    assert len(first_entries) == len(second_entries) == 5
+    assert {item["id"] for item in first_entries} == {item["id"] for item in second_entries}
+    assert all(item["source_key"] for item in first_entries)
+    code_totals = {item["cost_code"]: item["budget"] for item in second.json()["cost_codes"]}
+    assert code_totals == {"4100": 24610.93, "5100": 200, "5110": 1100, "6100": 750}
+    refreshed = client.get(f"/api/v1/projects/{project['id']}").json()
+    baseline = refreshed["metadata"]["award_pricing_baseline"]
+    assert baseline["pricing_subtotal"] == "36266.67"
+    assert baseline["cost_budget_status"] == "allocated"
+    assert baseline["cost_budget_total"] == "26660.93"
+    assert len(baseline["cost_budget_lines"]) == 5
+    assert refreshed["metadata"]["project_cost_codes"] == [
+        {"code": "4100", "name": "Concrete restoration"},
+        {"code": "5100", "name": "Small equipment rental"},
+        {"code": "5110", "name": "Skid steer / hydraulic attachment"},
+        {"code": "6100", "name": "Trucking, disposal and material hauling"},
+    ]
+    assert refreshed["metadata"]["procurement_plan"]["automatic_commitment"] is False
+    launch = client.get(f"/api/v1/projects/{project['id']}/launch-dashboard").json()
+    assert launch["baseline_budget_total"] == 26660.93
+    assert launch["budget_entry_count"] == 5
+    assert launch["award_cost_budget_status"] == "allocated"
+    assert launch["uncoded_award_line_count"] == 0
+    timesheets = client.get("/api/v1/daily-timesheets/bootstrap").json()
+    assert timesheets["project_cost_codes"][project["id"]] == [
+        {"code": "4100", "name": "Concrete restoration"},
+        {"code": "5100", "name": "Small equipment rental"},
+        {"code": "5110", "name": "Skid steer / hydraulic attachment"},
+        {"code": "6100", "name": "Trucking, disposal and material hauling"},
+    ]
+
+
+def test_estimate_budget_reactivates_a_previously_voided_source_key() -> None:
+    project = _project()
+    workspace_id = _bennett_style_estimate(project["id"])
+    payload = _bennett_budget_payload(workspace_id)
+    first = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    assert first.status_code == 200
+    trucking = next(item for item in first.json()["entries"] if item["cost_code"] == "6100")
+
+    with TestingSessionLocal() as db:
+        bid = db.get(Bid, workspace_id)
+        assert bid is not None
+        estimate = deepcopy(bid.bid_json)
+        estimate["summary"]["line_items"][3]["direct_cost"] = 0
+        bid.bid_json = estimate
+        db.commit()
+    reduced = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    assert reduced.status_code == 200
+    assert reduced.json()["budget"] == 25910.93
+    assert all(item["cost_code"] != "6100" for item in reduced.json()["entries"])
+
+    with TestingSessionLocal() as db:
+        bid = db.get(Bid, workspace_id)
+        assert bid is not None
+        estimate = deepcopy(bid.bid_json)
+        estimate["summary"]["line_items"][3]["direct_cost"] = 750
+        bid.bid_json = estimate
+        db.commit()
+    restored = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    assert restored.status_code == 200
+    restored_trucking = next(
+        item for item in restored.json()["entries"] if item["cost_code"] == "6100"
+    )
+    assert restored.json()["budget"] == 26660.93
+    assert restored_trucking["id"] == trucking["id"]
+
+
+def test_estimate_budget_import_does_not_replace_a_manual_budget() -> None:
+    project = _project()
+    workspace_id = _estimate(project["id"])
+    manual = client.post(
+        "/api/v1/finance/entries",
+        json={
+            "project_id": project["id"],
+            "cost_code": "MANUAL",
+            "entry_type": "budget",
+            "category": "other",
+            "amount": 100,
+            "entry_date": str(date.today()),
+            "description": "Management-entered budget",
+        },
+    )
+    assert manual.status_code == 201
+
+    blocked = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json={"workspace_id": str(workspace_id)},
+    )
+
+    assert blocked.status_code == 409
+    assert "manual or different-workspace budget" in blocked.json()["detail"]
+    summary = client.get(f"/api/v1/finance/projects/{project['id']}").json()
+    assert summary["budget"] == 100
 
 
 def test_quickbooks_export_contains_posted_cost_references() -> None:
