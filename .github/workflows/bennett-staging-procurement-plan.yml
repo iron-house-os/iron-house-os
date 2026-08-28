@@ -1,0 +1,126 @@
+name: Approved Bennett staging procurement plan
+
+on:
+  workflow_run:
+    workflows: ["Staging deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: iron-house-os-bennett-staging-procurement-plan
+  cancel-in-progress: false
+
+jobs:
+  procurement:
+    name: Seed exact Bennett procurement planning requirements
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      contains(github.event.workflow_run.head_commit.message, 'Build 230: seed Bennett procurement planning requirements')
+    runs-on: [self-hosted, linux, ihos-staging]
+    timeout-minutes: 30
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      EVIDENCE_DIR: /tmp/iron-house-os-bennett-staging-procurement-${{ github.run_id }}-${{ github.run_attempt }}
+      PILOT_OPERATOR: Iron House OS GitHub staging procurement issue 375
+    steps:
+      - name: Initialize evidence directory
+        run: mkdir -p "$EVIDENCE_DIR"
+
+      - name: Check out exact approved release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify current main and approval marker
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          python3 -m json.tool ops/staging-pilots/2026-08-28-bennett-procurement-plan.json >/dev/null
+          python3 - <<'PY' > "$EVIDENCE_DIR/run-metadata.json"
+          import json
+          import os
+
+          print(json.dumps({
+              "issue": 375,
+              "parent_issues": [268, 314, 373],
+              "environment": "staging",
+              "release_sha": os.environ["RELEASE_SHA"],
+              "approval_boundary": "staging_procurement_planning_only_no_commitments",
+              "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+              "job_number": "IH2026002",
+              "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify exact live staging release
+        run: |
+          readiness="$(curl --fail --silent --show-error https://staging.os.ironhousecivil.com/readiness)"
+          READINESS_JSON="$readiness" python3 - <<'PY' > "$EVIDENCE_DIR/readiness.json"
+          import json
+          import os
+
+          readiness = json.loads(os.environ["READINESS_JSON"])
+          actual = readiness.get("checks", {}).get("release_id")
+          expected = os.environ["RELEASE_SHA"]
+          if actual != expected:
+              raise SystemExit(f"Live staging release mismatch: expected {expected}, got {actual}")
+          print(json.dumps(readiness, indent=2, sort_keys=True))
+          PY
+
+      - name: Seed and verify approved procurement planning requirements
+        run: |
+          compose=(
+            sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose
+            --env-file /etc/iron-house-os/staging.env
+            -f "$GITHUB_WORKSPACE/docker-compose.staging.yml"
+            -p iron-house-os-staging
+          )
+          "${compose[@]}" exec -T backend python -m app.tools.bennett_procurement_staging_pilot \
+            --operator "$PILOT_OPERATOR" \
+            --base-url https://staging.os.ironhousecivil.com \
+            > "$EVIDENCE_DIR/procurement-report.json"
+          EVIDENCE_DIR="$EVIDENCE_DIR" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads((Path(os.environ["EVIDENCE_DIR"]) / "procurement-report.json").read_text())
+          if report.get("status") != "passed":
+              raise SystemExit("Bennett procurement planning pilot did not pass.")
+          if report.get("approval_boundary") != "staging_procurement_planning_only_no_commitments":
+              raise SystemExit("Bennett procurement pilot crossed its approval boundary.")
+          if report.get("project", {}).get("job_number") != "IH2026002":
+              raise SystemExit("Bennett procurement plan attached to the wrong job number.")
+          if report.get("budget", {}).get("total") != "26660.93":
+              raise SystemExit("Bennett original cost budget changed.")
+          procurement = report.get("procurement", {})
+          if procurement.get("status") != "draft" or procurement.get("requirement_count") != 4:
+              raise SystemExit("Bennett procurement plan is not the exact four-item draft.")
+          if procurement.get("ready_mix_order_quantity_confirmed") is not False:
+              raise SystemExit("Bennett ready-mix order quantity was inferred or confirmed.")
+          if report.get("idempotent_retry") is not True:
+              raise SystemExit("Bennett procurement retry was not idempotent.")
+          for field in ("vendors_selected", "commitments_created", "po_requests_created", "actuals_created", "checklist_items_completed"):
+              if report.get(field) != 0:
+                  raise SystemExit(f"Bennett procurement pilot crossed prohibited boundary: {field}")
+          if report.get("external_issuance_performed") is not False:
+              raise SystemExit("Bennett procurement pilot performed prohibited external issuance.")
+          if report.get("production_mutation_performed") is not False:
+              raise SystemExit("Bennett procurement pilot performed prohibited production mutation.")
+          PY
+
+      - name: Upload immutable procurement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bennett-staging-procurement-${{ github.run_id }}
+          path: ${{ env.EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 90

@@ -146,12 +146,33 @@ class CompletedWorkCostLedger(BaseModel):
     lines: list[CompletedWorkCostLine]
 
 
+class EstimateProcurementRequirement(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_code: str = Field(min_length=1, max_length=32)
+    category: Literal["material", "rental", "trucking", "subcontract"]
+    description: str = Field(min_length=1, max_length=500)
+    order_quantity: Decimal | None = Field(default=None, gt=0, decimal_places=3)
+    order_unit: str = Field(min_length=1, max_length=30)
+    order_quantity_status: Literal["planning_basis", "needs_confirmation"]
+    specification: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_quantity_status(self) -> "EstimateProcurementRequirement":
+        if self.order_quantity_status == "planning_basis" and self.order_quantity is None:
+            raise ValueError("Planning-basis procurement requirements need an order quantity.")
+        if self.order_quantity_status == "needs_confirmation" and self.order_quantity is not None:
+            raise ValueError("Unconfirmed procurement requirements cannot carry an order quantity.")
+        return self
+
+
 class EstimateBudgetImportRequest(BaseModel):
     workspace_id: UUID | None = None
     cost_code_mappings: dict[str, str] = Field(default_factory=dict)
     cost_code_names: dict[str, str] = Field(default_factory=dict)
     risk_cost_code: str | None = Field(default=None, min_length=1, max_length=32)
     risk_cost_code_name: str | None = Field(default=None, min_length=1, max_length=255)
+    procurement_requirements: list[EstimateProcurementRequirement] = Field(default_factory=list)
 
 
 InvoiceStatus = Literal["draft", "approved", "issued", "paid", "void"]

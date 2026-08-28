@@ -69,10 +69,10 @@ def _bennett_style_estimate(project_id: str) -> UUID:
                 "summary": {
                     "final_price": 36266.67,
                     "line_items": [
-                        {"code": "CON-001", "description": "4 in concrete pull and pour", "item_type": "self_perform", "direct_cost": 19860.93},
-                        {"code": "EQP-001", "description": "14 in cutoff saw", "item_type": "equipment", "direct_cost": 200},
-                        {"code": "EQP-002", "description": "Skid steer with hydraulic hammer", "item_type": "equipment", "direct_cost": 1100},
-                        {"code": "TRK-001", "description": "Concrete disposal tandem", "item_type": "subcontract", "direct_cost": 750},
+                        {"code": "CON-001", "description": "4 in concrete pull and pour", "item_type": "self_perform", "quantity": 108.6, "unit": "m2", "direct_cost": 19860.93},
+                        {"code": "EQP-001", "description": "14 in cutoff saw", "item_type": "equipment", "quantity": 1, "unit": "day", "direct_cost": 200},
+                        {"code": "EQP-002", "description": "Skid steer with hydraulic hammer", "item_type": "equipment", "quantity": 1, "unit": "day", "direct_cost": 1100},
+                        {"code": "TRK-001", "description": "Concrete disposal tandem", "item_type": "subcontract", "quantity": 1, "unit": "LS", "direct_cost": 750},
                     ],
                     "indirect_cost": 0,
                     "risk_cost": 4750,
@@ -107,6 +107,44 @@ def _bennett_budget_payload(workspace_id: UUID) -> dict:
         "risk_cost_code": "4100",
         "risk_cost_code_name": "Concrete restoration",
     }
+
+
+def _bennett_procurement_requirements() -> list[dict]:
+    return [
+        {
+            "source_code": "CON-001",
+            "category": "material",
+            "description": "Ready-mix concrete planning requirement",
+            "order_quantity": None,
+            "order_unit": "m3",
+            "order_quantity_status": "needs_confirmation",
+            "specification": "4 in concrete scope; mix, order quantity, delivery and placement details require confirmation.",
+        },
+        {
+            "source_code": "EQP-001",
+            "category": "rental",
+            "description": "14 in cutoff saw including blade wear and consumables",
+            "order_quantity": "1",
+            "order_unit": "day",
+            "order_quantity_status": "planning_basis",
+        },
+        {
+            "source_code": "EQP-002",
+            "category": "rental",
+            "description": "Skid steer with hydraulic hammer",
+            "order_quantity": "1",
+            "order_unit": "day",
+            "order_quantity_status": "planning_basis",
+        },
+        {
+            "source_code": "TRK-001",
+            "category": "trucking",
+            "description": "Tandem allowance for concrete disposal",
+            "order_quantity": "1",
+            "order_unit": "LS",
+            "order_quantity_status": "planning_basis",
+        },
+    ]
 
 
 def test_estimate_budget_actual_commitment_and_forecast_summary() -> None:
@@ -224,6 +262,117 @@ def test_estimate_budget_reactivates_a_previously_voided_source_key() -> None:
     )
     assert restored.json()["budget"] == 26660.93
     assert restored_trucking["id"] == trucking["id"]
+
+
+def test_estimate_budget_seeds_source_linked_procurement_planning_without_commitments() -> None:
+    project = _project()
+    awarded = client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"})
+    assert awarded.status_code == 200
+    workspace_id = _bennett_style_estimate(project["id"])
+    payload = _bennett_budget_payload(workspace_id)
+    payload["procurement_requirements"] = _bennett_procurement_requirements()
+
+    first = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    second = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["budget"] == second.json()["budget"] == 26660.93
+    assert {item["id"] for item in first.json()["entries"]} == {
+        item["id"] for item in second.json()["entries"]
+    }
+    refreshed = client.get(f"/api/v1/projects/{project['id']}").json()
+    plan = refreshed["metadata"]["procurement_plan"]
+    assert plan["status"] == "draft"
+    assert plan["job_number"] == awarded.json()["project_number"]
+    assert plan["source_estimate_workspace_id"] == str(workspace_id)
+    assert plan["automatic_commitment"] is False
+    requirements = plan["requirements"]
+    assert len(requirements) == 4
+    assert len({item["requirement_id"] for item in requirements}) == 4
+    assert [item["source_code"] for item in requirements] == [
+        "CON-001",
+        "EQP-001",
+        "EQP-002",
+        "TRK-001",
+    ]
+    assert [item["cost_code"] for item in requirements] == ["4100", "5100", "5110", "6100"]
+    assert [item["budget_basis"] for item in requirements] == [
+        "19860.93",
+        "200.00",
+        "1100.00",
+        "750.00",
+    ]
+    assert all(
+        item["budget_basis_type"] == "source_estimate_line_cost_not_authorized_spend"
+        for item in requirements
+    )
+    concrete = requirements[0]
+    assert concrete["scope_quantity"] == "108.6"
+    assert concrete["scope_unit"] == "m2"
+    assert concrete["order_quantity"] is None
+    assert concrete["order_unit"] == "m3"
+    assert concrete["order_quantity_status"] == "needs_confirmation"
+    assert concrete["status"] == "needs_quantity_confirmation"
+    assert all(
+        item[field] is None
+        for item in requirements
+        for field in (
+            "vendor_id",
+            "vendor_quote_reference",
+            "required_on_site_date",
+            "approval",
+            "po_number",
+        )
+    )
+    assert all(item["commitment_created"] is False for item in requirements)
+    assert not any(item["source_code"] == "RISK" for item in requirements)
+    launch = client.get(f"/api/v1/projects/{project['id']}/launch-dashboard").json()
+    assert launch["procurement_requirement_count"] == 4
+    assert launch["procurement_plan_status"] == "draft"
+    assert launch["po_request_count"] == 0
+
+
+def test_estimate_procurement_plan_does_not_replace_a_vendor_decision() -> None:
+    project = _project()
+    awarded = client.patch(f"/api/v1/projects/{project['id']}", json={"status": "awarded"})
+    assert awarded.status_code == 200
+    workspace_id = _bennett_style_estimate(project["id"])
+    payload = _bennett_budget_payload(workspace_id)
+    payload["procurement_requirements"] = _bennett_procurement_requirements()
+    created = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+    assert created.status_code == 200
+
+    with TestingSessionLocal() as db:
+        row = db.get(Project, UUID(project["id"]))
+        assert row is not None
+        metadata = deepcopy(row.metadata_json)
+        metadata["procurement_plan"]["requirements"][1]["approval"] = {
+            "status": "approved",
+            "by": "manager@ironhousecontracting.com",
+        }
+        row.metadata_json = metadata
+        db.commit()
+    blocked = client.post(
+        f"/api/v1/finance/projects/{project['id']}/import-estimate",
+        json=payload,
+    )
+
+    assert blocked.status_code == 409
+    assert "decision or commitment" in blocked.json()["detail"]
+    unchanged = client.get(f"/api/v1/projects/{project['id']}").json()
+    assert unchanged["metadata"]["procurement_plan"]["requirements"][1]["approval"] == {
+        "status": "approved",
+        "by": "manager@ironhousecontracting.com",
+    }
 
 
 def test_estimate_budget_import_does_not_replace_a_manual_budget() -> None:
