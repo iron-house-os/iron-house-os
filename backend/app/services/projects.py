@@ -38,7 +38,8 @@ from app.schemas.project_start import (
     ProjectStartChecklistItemRead,
     ProjectStartChecklistRead,
 )
-from app.services import project_folders
+from app.schemas.project_safety_launch import ProjectSafetyLaunchRead
+from app.services import project_folders, project_safety_launch
 from app.services.auth import AuthenticatedUser
 
 JOB_NUMBER_PREFIX = "IH"
@@ -151,6 +152,11 @@ MANAGEMENT_PROJECT_ROLES = {"admin", "operations_manager"}
 
 def create_project(db: Session, payload: ProjectCreate) -> ProjectRead:
     values = _project_values(payload)
+    if "safety_launch" in (values.get("metadata_json") or {}):
+        raise AppError(
+            "Safety launch controls must be initialized through the controlled safety-launch endpoint.",
+            status_code=409,
+        )
     if values.get("status") == ProjectStatus.completed.value:
         raise AppError(
             "Create the project through the awarded workflow and complete its closeout controls before marking it complete.",
@@ -200,6 +206,7 @@ def update_project(
     project = _load_project(db, project_id)
     was_awarded = project.status == ProjectStatus.awarded.value
     update_data = _project_values(payload)
+    _protect_safety_launch_metadata(project, update_data)
     if project.project_number:
         update_data.pop("project_number", None)
     supplier_ids = payload.supplier_ids if "supplier_ids" in payload.model_fields_set else None
@@ -460,6 +467,39 @@ def get_project_start_checklist(db: Session, project_id: UUID) -> ProjectStartCh
     return _project_start_checklist_schema(project_id, items)
 
 
+def get_project_safety_launch(
+    db: Session,
+    project_id: UUID,
+    user: AuthenticatedUser,
+) -> ProjectSafetyLaunchRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError(
+            "Management access is required to view project safety launch controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id)
+    launch = project_safety_launch.read(project)
+    if launch is None:
+        raise AppError("Project safety launch controls are not initialized.", status_code=404)
+    return launch
+
+
+def initialize_project_safety_launch(
+    db: Session,
+    project_id: UUID,
+    user: AuthenticatedUser,
+) -> ProjectSafetyLaunchRead:
+    if user.role not in {"admin", "operations_manager"}:
+        raise AppError(
+            "Management access is required to initialize project safety launch controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id, for_update=True)
+    launch = project_safety_launch.initialize(project, actor=user.email)
+    db.commit()
+    return launch
+
+
 def update_project_start_checklist_item(
     db: Session,
     project_id: UUID,
@@ -692,7 +732,13 @@ def get_project_dashboard(db: Session, project_id: UUID) -> ProjectDashboard:
     )
 
 
-def _load_project(db: Session, project_id: UUID, include_deleted: bool = False) -> Project:
+def _load_project(
+    db: Session,
+    project_id: UUID,
+    include_deleted: bool = False,
+    *,
+    for_update: bool = False,
+) -> Project:
     statement = (
         select(Project)
         .where(Project.id == project_id)
@@ -700,10 +746,29 @@ def _load_project(db: Session, project_id: UUID, include_deleted: bool = False) 
     )
     if not include_deleted:
         statement = statement.where(Project.deleted_at.is_(None))
+    if for_update:
+        statement = statement.with_for_update()
     project = db.scalar(statement)
     if project is None:
         raise AppError("Project not found", status_code=404)
     return project
+
+
+def _protect_safety_launch_metadata(project: Project, update_data: dict) -> None:
+    if "metadata_json" not in update_data:
+        return
+    requested = dict(update_data.get("metadata_json") or {})
+    current = (project.metadata_json or {}).get("safety_launch")
+    if "safety_launch" in requested and requested.get("safety_launch") != current:
+        raise AppError(
+            "Safety launch controls cannot be changed through the generic project update.",
+            status_code=409,
+        )
+    if current is not None:
+        requested["safety_launch"] = current
+    else:
+        requested.pop("safety_launch", None)
+    update_data["metadata_json"] = requested
 
 
 def _project_values(payload: ProjectCreate | ProjectUpdate) -> dict:

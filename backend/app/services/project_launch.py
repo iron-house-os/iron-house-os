@@ -11,6 +11,7 @@ from app.models.finance import FinancialEntry
 from app.models.project import Project, ProjectStartChecklistItem
 from app.schemas.project import ProjectStatus
 from app.schemas.project_launch import ProjectLaunchDashboard, ProjectLaunchNextControl
+from app.services import project_safety_launch
 
 SAFETY_RECORD_TYPES = (
     "safety_permit",
@@ -79,6 +80,7 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
         db.scalar(select(func.count(Document.id)).where(Document.project_id == project_id)) or 0
     )
     metadata = project.metadata_json or {}
+    safety_launch = project_safety_launch.read(project)
     award_baseline = metadata.get("award_pricing_baseline") or {}
     procurement_plan = metadata.get("procurement_plan") or {}
     award_lines = award_baseline.get("lines") or []
@@ -109,6 +111,21 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
         po_request_count=len(po_rows),
         pending_po_request_count=sum(row.status == "pending_approval" for row in po_rows),
         safety_record_counts=safety_counts,
+        safety_release_status=(
+            safety_launch.release_status if safety_launch else "not_initialized"
+        ),
+        safety_requirement_count=(
+            len(safety_launch.record_requirements) if safety_launch else 0
+        ),
+        safety_folder_status=(
+            safety_launch.folder_status if safety_launch else "not_initialized"
+        ),
+        portal_access_status=(
+            safety_launch.portal_access.status if safety_launch else "not_initialized"
+        ),
+        portal_assignment_count=(
+            len(safety_launch.portal_access.assignments) if safety_launch else 0
+        ),
         document_count=document_count,
         award_baseline_source=award_baseline.get("source_quote_number"),
         award_pricing_subtotal=round(float(award_baseline.get("pricing_subtotal") or 0), 2),

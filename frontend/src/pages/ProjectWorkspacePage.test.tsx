@@ -179,6 +179,11 @@ const awardedLaunchDashboard: ProjectLaunchDashboard = {
     toolbox_talk: 1,
     corrective_action: 0,
   },
+  safety_release_status: "blocked",
+  safety_requirement_count: 6,
+  safety_folder_status: "prepared",
+  portal_access_status: "not_started",
+  portal_assignment_count: 0,
   document_count: 7,
   award_baseline_source: "Q-2026-001",
   award_pricing_subtotal: 125000,
@@ -419,6 +424,10 @@ describe("ProjectWorkspacePage", () => {
     expect(launch).toHaveTextContent("$125,000");
     expect(launch).toHaveTextContent("3");
     expect(launch).toHaveTextContent("5");
+    expect(launch).toHaveTextContent("Safety launch");
+    expect(launch).toHaveTextContent("Blocked");
+    expect(launch).toHaveTextContent("6 record requirement(s)");
+    expect(launch).toHaveTextContent("portal not started (0 assignment(s))");
     expect(launch).toHaveTextContent("Only the project-start checklist determines");
 
     for (const name of ["Estimate", "Budget", "Purchase orders", "Safety", "Documents"]) {

@@ -836,6 +836,11 @@ function ProjectLaunchDashboardCard({
           value={String(safetyRecordCount)}
           detail="Project-linked records only"
         />
+        <LaunchMetric
+          label="Safety launch"
+          value={label(dashboard.safety_release_status)}
+          detail={`${dashboard.safety_requirement_count} record requirement(s) · folder ${label(dashboard.safety_folder_status).toLowerCase()} · portal ${label(dashboard.portal_access_status).toLowerCase()} (${dashboard.portal_assignment_count} assignment(s))`}
+        />
         <LaunchMetric label="Documents" value={String(dashboard.document_count)} detail="Project-linked records only" />
         <LaunchMetric
           label="Award pricing baseline"

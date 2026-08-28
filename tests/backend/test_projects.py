@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
+from app.models.field_operations import FieldRecord
 from app.models.project import Project, ProjectCloseoutChecklistItem, ProjectStartChecklistItem
 from app.services.auth import AuthenticatedUser
 from app.services.projects import (
@@ -257,6 +258,91 @@ def test_transition_to_awarded_generates_job_number() -> None:
     assert checklist.json()["status"] == "not_ready"
     assert checklist.json()["completed_count"] == 0
     assert checklist.json()["total_count"] == 10
+
+
+def test_awarded_safety_launch_is_blocked_typed_idempotent_and_does_not_create_evidence() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Controlled Safety Launch", "status": "awarded"},
+    ).json()
+
+    first = client.post(f"/api/v1/projects/{project['id']}/safety-launch")
+    read_back = client.get(f"/api/v1/projects/{project['id']}/safety-launch")
+    retry = client.post(f"/api/v1/projects/{project['id']}/safety-launch")
+    workspace = client.get(f"/api/v1/projects/{project['id']}/workspace").json()
+    checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist").json()
+
+    assert first.status_code == 201
+    assert read_back.status_code == 200
+    assert retry.status_code == 201
+    assert read_back.json() == first.json()
+    assert retry.json() == first.json()
+    launch = first.json()
+    assert launch["job_number"] == project["project_number"]
+    assert launch["release_status"] == "blocked"
+    assert launch["folder_status"] == "prepared"
+    assert launch["folder_path"].endswith("/13_Award_Handoff/Safety")
+    assert len(launch["record_requirements"]) == 6
+    assert all(item["applicability_status"] == "unconfirmed" for item in launch["record_requirements"])
+    assert all(item["status"] == "not_started" for item in launch["record_requirements"])
+    assert all(item["record_id"] is None for item in launch["record_requirements"])
+    assert all(item["evidence_document_ids"] == [] for item in launch["record_requirements"])
+    assert launch["portal_access"] == {
+        "status": "not_started",
+        "automatic_provisioning": False,
+        "assignments": [],
+    }
+    assert sum(entry["path"] == launch["folder_path"] for entry in workspace["entries"]) == 1
+    assert checklist["completed_count"] == 0
+    with TestingSessionLocal() as db:
+        assert db.scalar(
+            select(func.count())
+            .select_from(FieldRecord)
+            .where(FieldRecord.project_id == UUID(project["id"]))
+        ) == 0
+
+
+def test_safety_launch_initialization_requires_management() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Management Safety Launch", "status": "awarded"},
+    ).json()
+
+    _authenticate_as("viewer")
+
+    assert client.get(f"/api/v1/projects/{project['id']}/safety-launch").status_code == 403
+    assert client.post(f"/api/v1/projects/{project['id']}/safety-launch").status_code == 403
+
+
+def test_safety_launch_metadata_cannot_be_injected_or_changed_by_generic_project_writes() -> None:
+    injected = client.post(
+        "/api/v1/projects",
+        json={
+            "name": "Injected Safety Launch",
+            "status": "awarded",
+            "metadata": {"safety_launch": {"release_status": "ready"}},
+        },
+    )
+    assert injected.status_code == 409
+
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Protected Safety Metadata", "status": "awarded"},
+    ).json()
+    launch = client.post(f"/api/v1/projects/{project['id']}/safety-launch").json()
+    changed = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"metadata": {"safety_launch": {**launch, "release_status": "ready"}}},
+    )
+    assert changed.status_code == 409
+
+    unrelated = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"metadata": {"management_note": "Safety launch remains controlled."}},
+    )
+    assert unrelated.status_code == 200
+    assert unrelated.json()["metadata"]["management_note"] == "Safety launch remains controlled."
+    assert unrelated.json()["metadata"]["safety_launch"] == launch
 
 
 def test_awarded_job_start_checklist_records_checkbox_state_and_actor() -> None:
