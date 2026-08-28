@@ -148,6 +148,10 @@ class CompletedWorkCostLedger(BaseModel):
 
 class EstimateBudgetImportRequest(BaseModel):
     workspace_id: UUID | None = None
+    cost_code_mappings: dict[str, str] = Field(default_factory=dict)
+    cost_code_names: dict[str, str] = Field(default_factory=dict)
+    risk_cost_code: str | None = Field(default=None, min_length=1, max_length=32)
+    risk_cost_code_name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 InvoiceStatus = Literal["draft", "approved", "issued", "paid", "void"]
