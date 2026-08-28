@@ -13,6 +13,7 @@ from app.core.errors import AppError
 from app.core.workflow_values import workflow_enum
 from app.models.bid import Bid
 from app.models.document import Document, Drawing
+from app.models.field_operations import FieldRecord
 from app.models.project import (
     Project,
     ProjectCloseoutChecklistItem,
@@ -25,6 +26,7 @@ from app.schemas.project_closeout import (
     ProjectCloseoutChecklistUpdate,
 )
 from app.models.rfq import RFQPackage
+from app.models.user import Employee, UserAccount
 from app.schemas.project import (
     ProjectCreate,
     ProjectDashboard,
@@ -38,8 +40,16 @@ from app.schemas.project_start import (
     ProjectStartChecklistItemRead,
     ProjectStartChecklistRead,
 )
-from app.schemas.project_safety_launch import ProjectSafetyLaunchRead
-from app.services import project_folders, project_safety_launch
+from app.schemas.project_safety_launch import (
+    ProjectSafetyEmployeeOption,
+    ProjectSafetyEvidenceDocument,
+    ProjectSafetyLaunchControls,
+    ProjectSafetyLaunchRead,
+    ProjectSafetyLaunchUpdate,
+    ProjectSafetyPostingBlocker,
+    ProjectSafetyRecordOption,
+)
+from app.services import project_folders, project_production_records, project_safety_launch
 from app.services.auth import AuthenticatedUser
 
 JOB_NUMBER_PREFIX = "IH"
@@ -498,6 +508,124 @@ def initialize_project_safety_launch(
     launch = project_safety_launch.initialize(project, actor=user.email)
     db.commit()
     return launch
+
+
+def get_project_safety_launch_controls(
+    db: Session,
+    project_id: UUID,
+    user: AuthenticatedUser,
+) -> ProjectSafetyLaunchControls:
+    if user.role not in MANAGEMENT_PROJECT_ROLES:
+        raise AppError(
+            "Management access is required to manage project safety launch controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id)
+    launch = project_safety_launch.read(project)
+    if launch is None:
+        raise AppError("Project safety launch controls are not initialized.", status_code=404)
+
+    documents = [
+        item
+        for item in db.scalars(
+            select(Document)
+            .where(Document.project_id == project.id)
+            .order_by(Document.title, Document.created_at)
+        ).all()
+        if item.status in project_safety_launch.VALID_EVIDENCE_DOCUMENT_STATUSES
+        and bool((item.storage_uri or "").strip())
+    ]
+    supported_types = {
+        value[0]
+        for value in project_safety_launch.SUPPORTED_RECORD_TYPES.values()
+        if value is not None
+    }
+    records = [
+        item
+        for item in db.scalars(
+            select(FieldRecord)
+            .where(
+                FieldRecord.project_id == project.id,
+                FieldRecord.record_type.in_(supported_types),
+            )
+            .order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc())
+        ).all()
+        if any(
+            supported is not None
+            and item.record_type == supported[0]
+            and item.status in supported[1]
+            for supported in project_safety_launch.SUPPORTED_RECORD_TYPES.values()
+        )
+    ]
+    active_account_emails = {
+        email.lower()
+        for email in db.scalars(
+            select(UserAccount.email).where(UserAccount.is_active.is_(True))
+        ).all()
+    }
+    employees = [
+        item
+        for item in db.scalars(
+            select(Employee)
+            .where(
+                Employee.status == "active",
+                Employee.portal_role.in_({"employee", "operator", "foreman"}),
+            )
+            .order_by(Employee.last_name, Employee.first_name)
+        ).all()
+        if item.email.lower() in active_account_emails
+    ]
+    return ProjectSafetyLaunchControls(
+        launch=launch,
+        evidence_documents=[
+            ProjectSafetyEvidenceDocument(
+                id=item.id,
+                title=item.title,
+                category=item.category,
+                status=item.status,
+            )
+            for item in documents
+        ],
+        record_options=[
+            ProjectSafetyRecordOption(
+                id=item.id,
+                record_type=item.record_type,
+                title=item.title,
+                status=item.status,
+                work_date=item.work_date,
+            )
+            for item in records
+        ],
+        active_employees=[
+            ProjectSafetyEmployeeOption(
+                id=item.id,
+                display_name=f"{item.first_name} {item.last_name}".strip(),
+                portal_role=item.portal_role,
+            )
+            for item in employees
+        ],
+        posting_blockers=[
+            ProjectSafetyPostingBlocker.model_validate(item)
+            for item in project_production_records.posting_blockers(db, project)
+        ],
+    )
+
+
+def update_project_safety_launch(
+    db: Session,
+    project_id: UUID,
+    payload: ProjectSafetyLaunchUpdate,
+    user: AuthenticatedUser,
+) -> ProjectSafetyLaunchControls:
+    if user.role not in MANAGEMENT_PROJECT_ROLES:
+        raise AppError(
+            "Management access is required to update project safety launch controls.",
+            status_code=403,
+        )
+    project = _load_project(db, project_id, for_update=True)
+    project_safety_launch.update(db, project, payload, actor=user.email)
+    db.commit()
+    return get_project_safety_launch_controls(db, project_id, user)
 
 
 def update_project_start_checklist_item(

@@ -164,6 +164,95 @@ export type ProjectLaunchDashboard = {
   procurement_plan_status: string;
 };
 
+export type ProjectSafetyRequirementCode =
+  | "project_safety_plan"
+  | "emergency_action_card"
+  | "field_hazard_assessment"
+  | "toolbox_talk"
+  | "safety_permit"
+  | "orientation_verification";
+
+export type ProjectSafetyRequirement = {
+  code: ProjectSafetyRequirementCode;
+  label: string;
+  applicability_status: "unconfirmed" | "applicable" | "not_applicable";
+  status: "not_started" | "in_progress" | "blocked" | "ready";
+  record_id: string | null;
+  evidence_document_ids: string[];
+  not_applicable_basis: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+};
+
+export type ProjectPortalAssignment = {
+  employee_id: string;
+  portal_role: "employee" | "operator" | "foreman";
+  status: "active" | "revoked";
+};
+
+export type ProjectSafetyLaunch = {
+  project_id: string;
+  job_number: string;
+  release_status: "blocked" | "at_risk" | "ready";
+  folder_path: string;
+  folder_status: "prepared";
+  record_requirements: ProjectSafetyRequirement[];
+  portal_access: {
+    status: "not_started" | "active" | "suspended";
+    automatic_provisioning: false;
+    assignments: ProjectPortalAssignment[];
+  };
+  initialized_by: string;
+  initialized_at: string;
+  last_reviewed_by: string | null;
+  last_reviewed_at: string | null;
+  last_review_note: string | null;
+  review_history: Array<{
+    reviewed_by: string;
+    reviewed_at: string;
+    review_note: string;
+    release_status: "blocked" | "at_risk" | "ready";
+    portal_status: "not_started" | "active" | "suspended";
+    active_assignment_count: number;
+  }>;
+};
+
+export type ProjectSafetyLaunchControls = {
+  launch: ProjectSafetyLaunch;
+  evidence_documents: Array<{ id: string; title: string; category: string; status: string }>;
+  record_options: Array<{
+    id: string;
+    record_type: string;
+    title: string;
+    status: string;
+    work_date: string;
+  }>;
+  active_employees: Array<{
+    id: string;
+    display_name: string;
+    portal_role: "employee" | "operator" | "foreman";
+  }>;
+  posting_blockers: Array<{ code: string; message: string }>;
+};
+
+export type ProjectSafetyLaunchUpdate = {
+  release_status: "blocked" | "at_risk" | "ready";
+  record_requirements: Array<{
+    code: ProjectSafetyRequirementCode;
+    applicability_status: "unconfirmed" | "applicable" | "not_applicable";
+    status: "not_started" | "in_progress" | "blocked" | "ready";
+    record_id: string | null;
+    evidence_document_ids: string[];
+    not_applicable_basis: string | null;
+  }>;
+  portal_access: {
+    status: "not_started" | "active" | "suspended";
+    assignments: ProjectPortalAssignment[];
+  };
+  review_note: string;
+  release_confirmation: boolean;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -257,5 +346,12 @@ export const projectsApi = {
     request<ProjectCloseoutChecklist>(`/projects/${id}/closeout-checklist/${encodeURIComponent(code)}`, {
       method: "PATCH",
       body: JSON.stringify({ completed, evidence: evidence || null }),
+    }),
+  safetyLaunchControls: (id: string) =>
+    requestOptional<ProjectSafetyLaunchControls>(`/projects/${id}/safety-launch/controls`),
+  updateSafetyLaunch: (id: string, payload: ProjectSafetyLaunchUpdate) =>
+    request<ProjectSafetyLaunchControls>(`/projects/${id}/safety-launch`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     }),
 };

@@ -284,52 +284,49 @@ def _controlled_project(data: dict) -> dict:
             )
             for index in range(1, 3)
         ]
-        db.add_all([bid, *photos, *tickets])
+        safety_documents = [
+            Document(
+                title=f"Controlled safety evidence {index}",
+                category="other",
+                status="current",
+                project_id=project_id,
+                storage_uri=f"drive://controlled-project/safety-evidence-{index}.pdf",
+                metadata_json={},
+            )
+            for index in range(1, 7)
+        ]
+        db.add_all([bid, *photos, *tickets, *safety_documents])
         db.commit()
-        for item in [*photos, *tickets]:
+        for item in [*photos, *tickets, *safety_documents]:
             db.refresh(item)
         return {
             "project": project,
             "photo_document_ids": [str(item.id) for item in photos],
             "ticket_document_ids": [str(item.id) for item in tickets],
+            "safety_document_ids": [str(item.id) for item in safety_documents],
         }
 
 
 def _release_controlled_project(data: dict, controlled: dict) -> None:
     project_id = UUID(controlled["project"]["id"])
-    with TestingSessionLocal() as db:
-        project = db.get(Project, project_id)
-        metadata = deepcopy(project.metadata_json)
-        launch = deepcopy(metadata["safety_launch"])
-        safety_rows = []
-        for requirement in launch["record_requirements"]:
-            row = FieldRecord(
-                record_type=requirement["code"],
-                project_id=project_id,
-                work_date=date.today(),
-                title=requirement["label"],
-                status="ready",
-                severity="none",
-                details={},
-                document_ids=[],
-                signatures=[],
-                alert_recipients=[],
-            )
-            db.add(row)
-            safety_rows.append((requirement, row))
-        db.flush()
-        for requirement, row in safety_rows:
-            requirement.update(
+    launch = client.get(f"/api/v1/projects/{project_id}/safety-launch").json()
+    release = client.patch(
+        f"/api/v1/projects/{project_id}/safety-launch",
+        json={
+            "release_status": "ready",
+            "record_requirements": [
                 {
+                    "code": requirement["code"],
                     "applicability_status": "applicable",
                     "status": "ready",
-                    "record_id": str(row.id),
+                    "record_id": None,
+                    "evidence_document_ids": [controlled["safety_document_ids"][index]],
+                    "not_applicable_basis": None,
                 }
-            )
-        launch["release_status"] = "ready"
-        launch["portal_access"] = {
+                for index, requirement in enumerate(launch["record_requirements"])
+            ],
+            "portal_access": {
             "status": "active",
-            "automatic_provisioning": False,
             "assignments": [
                 {
                     "employee_id": data["foreman"]["id"],
@@ -342,10 +339,12 @@ def _release_controlled_project(data: dict, controlled: dict) -> None:
                     "status": "active",
                 },
             ],
-        }
-        metadata["safety_launch"] = launch
-        project.metadata_json = metadata
-        db.commit()
+            },
+            "review_note": "Controlled test release using exact project evidence and crew records.",
+            "release_confirmation": True,
+        },
+    )
+    assert release.status_code == 200, release.text
     checklist = client.get(f"/api/v1/projects/{project_id}/start-checklist").json()
     for item in checklist["items"]:
         response = client.patch(

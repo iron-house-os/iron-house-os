@@ -4,7 +4,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.models.field_operations import FieldRecord
 from app.models.project import Project, ProjectStartChecklistItem
 from app.models.user import Employee
 from app.schemas.project_folder import ProjectFolderEntry
@@ -69,22 +68,7 @@ def posting_blockers(db: Session, project: Project) -> list[dict[str, str]]:
                     "message": "Safety release must be Ready before field production can post.",
                 }
             )
-        unresolved = []
-        for item in launch.record_requirements:
-            if item.applicability_status == "unconfirmed":
-                unresolved.append(item)
-                continue
-            if item.applicability_status != "applicable":
-                continue
-            record = db.get(FieldRecord, item.record_id) if item.record_id else None
-            if (
-                item.status != "ready"
-                or record is None
-                or record.project_id != project.id
-                or record.record_type != item.code
-                or record.status != "ready"
-            ):
-                unresolved.append(item)
+        unresolved = project_safety_launch.unresolved_requirements(db, project, launch)
         if unresolved:
             blockers.append(
                 {

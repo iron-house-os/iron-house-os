@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import UUID
@@ -11,6 +12,7 @@ from app.api.dependencies.auth import require_authenticated_user
 from app.main import app
 from app.models.field_operations import FieldRecord
 from app.models.project import Project, ProjectCloseoutChecklistItem, ProjectStartChecklistItem
+from app.models.user import Employee
 from app.services.auth import AuthenticatedUser
 from app.services.projects import (
     _provision_project_closeout_checklist,
@@ -312,6 +314,321 @@ def test_safety_launch_initialization_requires_management() -> None:
 
     assert client.get(f"/api/v1/projects/{project['id']}/safety-launch").status_code == 403
     assert client.post(f"/api/v1/projects/{project['id']}/safety-launch").status_code == 403
+
+
+def _safety_launch_update_payload(
+    launch: dict,
+    *,
+    document_id: str,
+    employee_id: str,
+    release_confirmation: bool = True,
+) -> dict:
+    return {
+        "release_status": "ready",
+        "record_requirements": [
+            {
+                "code": item["code"],
+                "applicability_status": "applicable",
+                "status": "ready",
+                "record_id": None,
+                "evidence_document_ids": [document_id],
+                "not_applicable_basis": None,
+            }
+            for item in launch["record_requirements"]
+        ],
+        "portal_access": {
+            "status": "active",
+            "assignments": [
+                {
+                    "employee_id": employee_id,
+                    "portal_role": "foreman",
+                    "status": "active",
+                }
+            ],
+        },
+        "review_note": "Reviewed against the current controlled project evidence.",
+        "release_confirmation": release_confirmation,
+    }
+
+
+def test_management_updates_fail_closed_safety_and_crew_release_with_project_evidence() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Evidence Controlled Safety Launch", "status": "awarded"},
+    ).json()
+    launch = client.post(f"/api/v1/projects/{project['id']}/safety-launch").json()
+    employee = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Sam",
+            "last_name": "Foreperson",
+            "email": "sam.foreperson@ironhousecontracting.com",
+            "portal_role": "foreman",
+        },
+    ).json()
+    evidence = client.post(
+        "/api/v1/documents",
+        json={
+            "title": "Controlled project safety package",
+            "category": "other",
+            "status": "current",
+            "project_id": project["id"],
+            "storage_uri": "drive://projects/controlled-safety-package.pdf",
+        },
+    ).json()
+    payload = _safety_launch_update_payload(
+        launch,
+        document_id=evidence["id"],
+        employee_id=employee["id"],
+    )
+
+    no_confirmation = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json={**payload, "release_confirmation": False},
+    )
+    assert no_confirmation.status_code == 409
+    assert "explicit human confirmation" in no_confirmation.json()["error"]["message"]
+
+    released = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=payload,
+    )
+    assert released.status_code == 200, released.text
+    controls = released.json()
+    assert controls["launch"]["release_status"] == "ready"
+    assert controls["launch"]["portal_access"]["status"] == "active"
+    assert controls["launch"]["last_reviewed_by"] == "test-admin@ironhousecontracting.com"
+    assert controls["launch"]["last_reviewed_at"]
+    assert controls["launch"]["review_history"][-1]["review_note"] == payload["review_note"]
+    assert [item["code"] for item in controls["posting_blockers"]] == ["mobilization"]
+    assert controls["evidence_documents"][0]["id"] == evidence["id"]
+    assert controls["active_employees"][0]["id"] == employee["id"]
+
+    checklist = client.get(f"/api/v1/projects/{project['id']}/start-checklist").json()
+    for item in checklist["items"]:
+        assert client.patch(
+            f"/api/v1/projects/{project['id']}/start-checklist/{item['code']}",
+            json={"completed": True},
+        ).status_code == 200
+    refreshed = client.get(f"/api/v1/projects/{project['id']}/safety-launch/controls")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["posting_blockers"] == []
+    with TestingSessionLocal() as db:
+        assert db.scalar(
+            select(func.count())
+            .select_from(FieldRecord)
+            .where(FieldRecord.project_id == UUID(project["id"]))
+        ) == 0
+
+
+def test_safety_release_rejects_wrong_project_evidence_inactive_or_duplicate_crew_and_short_basis() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Rejected Safety Release", "status": "awarded"},
+    ).json()
+    other = client.post(
+        "/api/v1/projects",
+        json={"name": "Other Safety Evidence Job", "status": "awarded"},
+    ).json()
+    launch = client.post(f"/api/v1/projects/{project['id']}/safety-launch").json()
+    wrong_document = client.post(
+        "/api/v1/documents",
+        json={
+            "title": "Wrong project safety package",
+            "category": "other",
+            "status": "current",
+            "project_id": other["id"],
+            "storage_uri": "drive://projects/wrong-safety-package.pdf",
+        },
+    ).json()
+    employee = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Alex",
+            "last_name": "Crew",
+            "email": "alex.crew@ironhousecontracting.com",
+            "portal_role": "employee",
+        },
+    ).json()
+    payload = _safety_launch_update_payload(
+        launch,
+        document_id=wrong_document["id"],
+        employee_id=employee["id"],
+    )
+    payload["portal_access"]["assignments"][0]["portal_role"] = "employee"
+
+    accountless_employee = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "No",
+            "last_name": "Account",
+            "email": "no.account@ironhousecontracting.com",
+            "portal_role": "employee",
+            "provision_portal_access": False,
+        },
+    ).json()
+    accountless_payload = deepcopy(payload)
+    accountless_payload["portal_access"]["assignments"][0]["employee_id"] = accountless_employee["id"]
+    accountless = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=accountless_payload,
+    )
+    assert accountless.status_code == 409
+    assert "active portal account" in accountless.json()["error"]["message"]
+
+    wrong_project = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=payload,
+    )
+    assert wrong_project.status_code == 409
+    assert "exact project" in wrong_project.json()["error"]["message"]
+
+    duplicate_crew = deepcopy(payload)
+    duplicate_crew["portal_access"]["assignments"].append(
+        deepcopy(duplicate_crew["portal_access"]["assignments"][0])
+    )
+    duplicate = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=duplicate_crew,
+    )
+    assert duplicate.status_code == 409
+    assert "duplicate employees" in duplicate.json()["error"]["message"]
+
+    short_basis = deepcopy(payload)
+    short_basis["release_status"] = "blocked"
+    short_basis["record_requirements"][0].update(
+        {
+            "applicability_status": "not_applicable",
+            "status": "ready",
+            "evidence_document_ids": [],
+            "not_applicable_basis": "No",
+        }
+    )
+    rejected_basis = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=short_basis,
+    )
+    assert rejected_basis.status_code == 409
+    assert "at least 10 characters" in rejected_basis.json()["error"]["message"]
+
+    current_document = client.post(
+        "/api/v1/documents",
+        json={
+            "title": "Current project safety package",
+            "category": "other",
+            "status": "current",
+            "project_id": project["id"],
+            "storage_uri": "drive://projects/current-safety-package.pdf",
+        },
+    ).json()
+    with TestingSessionLocal() as db:
+        unsupported_record = FieldRecord(
+            record_type="journal",
+            project_id=UUID(project["id"]),
+            work_date=datetime.now(UTC).date(),
+            title="Not a controlled safety record",
+            status="ready",
+            severity="none",
+            details={},
+            document_ids=[],
+            signatures=[],
+            alert_recipients=[],
+        )
+        db.add(unsupported_record)
+        db.commit()
+        unsupported_record_id = str(unsupported_record.id)
+    unsupported_payload = deepcopy(payload)
+    for item in unsupported_payload["record_requirements"]:
+        item["evidence_document_ids"] = [current_document["id"]]
+    unsupported_payload["record_requirements"][1]["record_id"] = unsupported_record_id
+    unsupported = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=unsupported_payload,
+    )
+    assert unsupported.status_code == 409
+    assert "unsupported, incomplete, or wrong-project" in unsupported.json()["error"]["message"]
+
+    with TestingSessionLocal() as db:
+        stored_employee = db.get(Employee, UUID(employee["id"]))
+        assert stored_employee is not None
+        stored_employee.status = "inactive"
+        db.commit()
+    inactive = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json=payload,
+    )
+    assert inactive.status_code == 409
+    assert "active employee records" in inactive.json()["error"]["message"]
+
+
+def test_viewer_cannot_read_or_update_safety_release_controls() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Management Only Release", "status": "awarded"},
+    ).json()
+    launch = client.post(f"/api/v1/projects/{project['id']}/safety-launch").json()
+    _authenticate_as("viewer")
+
+    assert client.get(f"/api/v1/projects/{project['id']}/safety-launch/controls").status_code == 403
+    denied = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json={
+            "release_status": "blocked",
+            "record_requirements": [
+                {
+                    "code": item["code"],
+                    "applicability_status": "unconfirmed",
+                    "status": "not_started",
+                    "record_id": None,
+                    "evidence_document_ids": [],
+                    "not_applicable_basis": None,
+                }
+                for item in launch["record_requirements"]
+            ],
+            "portal_access": {"status": "not_started", "assignments": []},
+            "review_note": "Viewer must not save controlled release decisions.",
+            "release_confirmation": False,
+        },
+    )
+    assert denied.status_code == 403
+
+
+def test_operations_manager_can_record_a_blocked_safety_review_without_creating_facts() -> None:
+    project = client.post(
+        "/api/v1/projects",
+        json={"name": "Operations Manager Safety Review", "status": "awarded"},
+    ).json()
+    launch = client.post(f"/api/v1/projects/{project['id']}/safety-launch").json()
+    _authenticate_as("operations_manager")
+
+    reviewed = client.patch(
+        f"/api/v1/projects/{project['id']}/safety-launch",
+        json={
+            "release_status": "blocked",
+            "record_requirements": [
+                {
+                    "code": item["code"],
+                    "applicability_status": "unconfirmed",
+                    "status": "not_started",
+                    "record_id": None,
+                    "evidence_document_ids": [],
+                    "not_applicable_basis": None,
+                }
+                for item in launch["record_requirements"]
+            ],
+            "portal_access": {"status": "not_started", "assignments": []},
+            "review_note": "Evidence and crew assignments remain outstanding.",
+            "release_confirmation": False,
+        },
+    )
+
+    assert reviewed.status_code == 200
+    assert reviewed.json()["launch"]["release_status"] == "blocked"
+    assert reviewed.json()["launch"]["last_reviewed_by"] == "operations_manager@ironhousecontracting.com"
+    assert all(
+        item["applicability_status"] == "unconfirmed"
+        for item in reviewed.json()["launch"]["record_requirements"]
+    )
 
 
 def test_safety_launch_metadata_cannot_be_injected_or_changed_by_generic_project_writes() -> None:

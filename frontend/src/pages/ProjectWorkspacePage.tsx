@@ -9,6 +9,8 @@ import {
   ProjectCreatePayload,
   ProjectDashboard,
   ProjectLaunchDashboard,
+  ProjectSafetyLaunchControls,
+  ProjectSafetyLaunchUpdate,
   ProjectStartChecklist,
   ProjectStatus,
   projectStatuses,
@@ -66,6 +68,7 @@ export function ProjectWorkspacePage() {
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
   const [workspace, setWorkspace] = useState<AwardedProjectWorkspace | null>(null);
   const [launchDashboard, setLaunchDashboard] = useState<ProjectLaunchDashboard | null>(null);
+  const [safetyLaunchControls, setSafetyLaunchControls] = useState<ProjectSafetyLaunchControls | null>(null);
   const [startChecklist, setStartChecklist] = useState<ProjectStartChecklist | null>(null);
   const [closeoutChecklist, setCloseoutChecklist] = useState<ProjectCloseoutChecklist | null>(null);
   const [invoicePackageReadiness, setInvoicePackageReadiness] = useState<ProjectInvoicePackageReadiness | null>(null);
@@ -73,6 +76,7 @@ export function ProjectWorkspacePage() {
   const [savingChecklistCode, setSavingChecklistCode] = useState<string | null>(null);
   const [savingCloseoutCode, setSavingCloseoutCode] = useState<string | null>(null);
   const [initializingCloseout, setInitializingCloseout] = useState(false);
+  const [savingSafetyLaunch, setSavingSafetyLaunch] = useState(false);
   const [dashboardByProjectId, setDashboardByProjectId] = useState<Record<string, ProjectDashboard>>({});
   const [statusFilter, setStatusFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
@@ -103,6 +107,7 @@ export function ProjectWorkspacePage() {
         setDashboard(summary);
         setWorkspace(null);
         setLaunchDashboard(null);
+        setSafetyLaunchControls(null);
         setStartChecklist(null);
         setCloseoutChecklist(null);
         setInvoicePackageReadiness(null);
@@ -110,12 +115,16 @@ export function ProjectWorkspacePage() {
         const closeoutEligible = Boolean(
           detail.project_number && ["awarded", "construction", "completed"].includes(detail.status),
         );
-        const [workspaceResult, checklistResult, launchResult, closeoutResult, invoicePackageResult] = await Promise.allSettled([
+        const safetyEligible = Boolean(
+          isManagement && detail.workspace_root && ["awarded", "construction"].includes(detail.status),
+        );
+        const [workspaceResult, checklistResult, launchResult, safetyResult, closeoutResult, invoicePackageResult] = await Promise.allSettled([
           detail.workspace_root ? projectsApi.workspace(projectId) : Promise.resolve(null),
           detail.workspace_root ? projectsApi.startChecklist(projectId) : Promise.resolve(null),
           detail.workspace_root && detail.status === "awarded"
             ? projectsApi.launchDashboard(projectId)
             : Promise.resolve(null),
+          safetyEligible ? projectsApi.safetyLaunchControls(projectId) : Promise.resolve(null),
           closeoutEligible ? projectsApi.closeoutChecklist(projectId) : Promise.resolve(null),
           isManagement && detail.status === "completed"
             ? financeApi.getProjectInvoicePackageReadiness(projectId)
@@ -124,6 +133,7 @@ export function ProjectWorkspacePage() {
         setWorkspace(workspaceResult.status === "fulfilled" ? workspaceResult.value : null);
         setStartChecklist(checklistResult.status === "fulfilled" ? checklistResult.value : null);
         setLaunchDashboard(launchResult.status === "fulfilled" ? launchResult.value : null);
+        setSafetyLaunchControls(safetyResult.status === "fulfilled" ? safetyResult.value : null);
         setCloseoutChecklist(closeoutResult.status === "fulfilled" ? closeoutResult.value : null);
         setInvoicePackageReadiness(invoicePackageResult.status === "fulfilled" ? invoicePackageResult.value : null);
 
@@ -133,6 +143,7 @@ export function ProjectWorkspacePage() {
           detail.workspace_root && detail.status === "awarded" && launchResult.status === "rejected"
             ? "launch dashboard"
             : null,
+          safetyEligible && safetyResult.status === "rejected" ? "safety and crew release controls" : null,
           closeoutEligible && closeoutResult.status === "rejected" ? "closeout checklist" : null,
           isManagement && detail.status === "completed" && invoicePackageResult.status === "rejected"
             ? "draft invoice package readiness"
@@ -148,6 +159,7 @@ export function ProjectWorkspacePage() {
         setDashboard(null);
         setWorkspace(null);
         setLaunchDashboard(null);
+        setSafetyLaunchControls(null);
         setStartChecklist(null);
         setCloseoutChecklist(null);
         setInvoicePackageReadiness(null);
@@ -310,6 +322,29 @@ export function ProjectWorkspacePage() {
     }
   }
 
+  async function updateSafetyLaunch(payload: ProjectSafetyLaunchUpdate) {
+    if (!selectedProject || !isManagement || savingSafetyLaunch) return;
+    setSavingSafetyLaunch(true);
+    setError(null);
+    try {
+      const controls = await projectsApi.updateSafetyLaunch(selectedProject.id, payload);
+      setSafetyLaunchControls(controls);
+      setLaunchDashboard((current) => current ? {
+        ...current,
+        safety_release_status: controls.launch.release_status,
+        safety_requirement_count: controls.launch.record_requirements.length,
+        portal_access_status: controls.launch.portal_access.status,
+        portal_assignment_count: controls.launch.portal_access.assignments.filter((item) => item.status === "active").length,
+        production_posting_status: controls.posting_blockers.length ? "blocked" : "ready",
+        production_blockers: controls.posting_blockers.map((item) => item.code),
+      } : current);
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "Unable to update safety and crew release controls");
+    } finally {
+      setSavingSafetyLaunch(false);
+    }
+  }
+
   const normalizedSearch = searchFilter.trim().toLocaleLowerCase();
   const filteredProjects = filterProjects(projects, normalizedSearch, smokeTestOnly);
 
@@ -393,12 +428,14 @@ export function ProjectWorkspacePage() {
             dashboard={dashboard}
             workspace={workspace}
             launchDashboard={launchDashboard}
+            safetyLaunchControls={safetyLaunchControls}
             startChecklist={startChecklist}
             closeoutChecklist={closeoutChecklist}
             invoicePackageReadiness={invoicePackageReadiness}
             savingChecklistCode={savingChecklistCode}
             savingCloseoutCode={savingCloseoutCode}
             initializingCloseout={initializingCloseout}
+            savingSafetyLaunch={savingSafetyLaunch}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onStatusChange={(value) => void updateStatus(value)}
@@ -406,6 +443,7 @@ export function ProjectWorkspacePage() {
             onDelete={() => void deleteProject()}
             canDelete={isAdmin}
             canManageCloseout={isManagement}
+            onSafetyLaunchChange={(payload) => void updateSafetyLaunch(payload)}
             onStartChecklistChange={(code, completed) => void updateStartChecklistItem(code, completed)}
             onInitializeCloseout={() => void initializeCloseoutChecklist()}
             onCloseoutChecklistChange={(code, completed, evidence) => void updateCloseoutChecklistItem(code, completed, evidence)}
@@ -635,12 +673,14 @@ function ProjectDetail({
   dashboard,
   workspace,
   launchDashboard,
+  safetyLaunchControls,
   startChecklist,
   closeoutChecklist,
   invoicePackageReadiness,
   savingChecklistCode,
   savingCloseoutCode,
   initializingCloseout,
+  savingSafetyLaunch,
   activeTab,
   onTabChange,
   onStatusChange,
@@ -648,6 +688,7 @@ function ProjectDetail({
   onDelete,
   canDelete,
   canManageCloseout,
+  onSafetyLaunchChange,
   onStartChecklistChange,
   onInitializeCloseout,
   onCloseoutChecklistChange,
@@ -657,12 +698,14 @@ function ProjectDetail({
   dashboard: ProjectDashboard;
   workspace: AwardedProjectWorkspace | null;
   launchDashboard: ProjectLaunchDashboard | null;
+  safetyLaunchControls: ProjectSafetyLaunchControls | null;
   startChecklist: ProjectStartChecklist | null;
   closeoutChecklist: ProjectCloseoutChecklist | null;
   invoicePackageReadiness: ProjectInvoicePackageReadiness | null;
   savingChecklistCode: string | null;
   savingCloseoutCode: string | null;
   initializingCloseout: boolean;
+  savingSafetyLaunch: boolean;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onStatusChange: (status: ProjectStatus) => void;
@@ -670,13 +713,14 @@ function ProjectDetail({
   onDelete: () => void;
   canDelete: boolean;
   canManageCloseout: boolean;
+  onSafetyLaunchChange: (payload: ProjectSafetyLaunchUpdate) => void;
   onStartChecklistChange: (code: string, completed: boolean) => void;
   onInitializeCloseout: () => void;
   onCloseoutChecklistChange: (code: string, completed: boolean, evidence?: string | null) => void;
   onInvoicePackageGenerated: () => Promise<void>;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="rounded-md border border-iron-100 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -718,6 +762,14 @@ function ProjectDetail({
 
       {workspace ? <AwardedWorkspaceCard workspace={workspace} /> : null}
       {launchDashboard ? <ProjectLaunchDashboardCard dashboard={launchDashboard} project={project} /> : null}
+      {safetyLaunchControls ? (
+        <ProjectSafetyLaunchCard
+          key={safetyLaunchControls.launch.last_reviewed_at ?? safetyLaunchControls.launch.initialized_at}
+          controls={safetyLaunchControls}
+          saving={savingSafetyLaunch}
+          onSave={onSafetyLaunchChange}
+        />
+      ) : null}
       {startChecklist ? (
         <ProjectStartChecklistCard
           checklist={startChecklist}
@@ -769,6 +821,365 @@ function ProjectDetail({
         </div>
       </div>
     </div>
+  );
+}
+
+const safetyRecordTypeByRequirement: Partial<Record<
+  ProjectSafetyLaunchUpdate["record_requirements"][number]["code"],
+  string
+>> = {
+  emergency_action_card: "emergency_action_card",
+  field_hazard_assessment: "daily_hazard_assessment",
+  toolbox_talk: "toolbox_talk",
+  safety_permit: "safety_permit",
+};
+
+function ProjectSafetyLaunchCard({
+  controls,
+  saving,
+  onSave,
+}: {
+  controls: ProjectSafetyLaunchControls;
+  saving: boolean;
+  onSave: (payload: ProjectSafetyLaunchUpdate) => void;
+}) {
+  const [requirements, setRequirements] = useState<ProjectSafetyLaunchUpdate["record_requirements"]>(
+    controls.launch.record_requirements.map((item) => ({
+      code: item.code,
+      applicability_status: item.applicability_status,
+      status: item.status,
+      record_id: item.record_id,
+      evidence_document_ids: item.evidence_document_ids,
+      not_applicable_basis: item.not_applicable_basis,
+    })),
+  );
+  const eligibleEmployeeIds = new Set(controls.active_employees.map((item) => item.id));
+  const unavailableAssignmentCount = controls.launch.portal_access.assignments.filter(
+    (item) => !eligibleEmployeeIds.has(item.employee_id),
+  ).length;
+  const [assignments, setAssignments] = useState(
+    controls.launch.portal_access.assignments.filter((item) => eligibleEmployeeIds.has(item.employee_id)),
+  );
+  const [portalStatus, setPortalStatus] = useState(controls.launch.portal_access.status);
+  const [releaseStatus, setReleaseStatus] = useState(controls.launch.release_status);
+  const [reviewNote, setReviewNote] = useState("");
+  const [releaseConfirmation, setReleaseConfirmation] = useState(false);
+
+  const activeAssignmentIds = new Set(
+    assignments.filter((item) => item.status === "active").map((item) => item.employee_id),
+  );
+  const invalidRequirement = requirements.some((item) => {
+    if (item.applicability_status === "unconfirmed") return item.status !== "not_started";
+    if (item.applicability_status === "not_applicable") {
+      return item.status !== "ready" || (item.not_applicable_basis ?? "").trim().length < 10;
+    }
+    return item.status === "ready" && item.evidence_document_ids.length === 0;
+  });
+  const unresolvedForRelease = requirements.some((item) => (
+    item.applicability_status === "unconfirmed"
+    || item.status !== "ready"
+    || (item.applicability_status === "applicable" && item.evidence_document_ids.length === 0)
+    || (item.applicability_status === "not_applicable" && (item.not_applicable_basis ?? "").trim().length < 10)
+  ));
+  const saveBlocked = saving
+    || reviewNote.trim().length < 10
+    || invalidRequirement
+    || (portalStatus === "active" && activeAssignmentIds.size === 0)
+    || (portalStatus === "not_started" && activeAssignmentIds.size > 0)
+    || (releaseStatus === "ready" && (unresolvedForRelease || !releaseConfirmation));
+
+  function updateRequirement(
+    code: ProjectSafetyLaunchUpdate["record_requirements"][number]["code"],
+    updates: Partial<ProjectSafetyLaunchUpdate["record_requirements"][number]>,
+  ) {
+    setRequirements((current) => current.map((item) => item.code === code ? { ...item, ...updates } : item));
+  }
+
+  function changeApplicability(
+    code: ProjectSafetyLaunchUpdate["record_requirements"][number]["code"],
+    applicability: ProjectSafetyLaunchUpdate["record_requirements"][number]["applicability_status"],
+  ) {
+    if (applicability === "unconfirmed") {
+      updateRequirement(code, {
+        applicability_status: applicability,
+        status: "not_started",
+        record_id: null,
+        evidence_document_ids: [],
+        not_applicable_basis: null,
+      });
+      return;
+    }
+    if (applicability === "not_applicable") {
+      updateRequirement(code, {
+        applicability_status: applicability,
+        status: "ready",
+        record_id: null,
+        evidence_document_ids: [],
+      });
+      return;
+    }
+    updateRequirement(code, {
+      applicability_status: applicability,
+      status: "in_progress",
+      not_applicable_basis: null,
+    });
+  }
+
+  function toggleEvidence(
+    code: ProjectSafetyLaunchUpdate["record_requirements"][number]["code"],
+    documentId: string,
+    checked: boolean,
+  ) {
+    const item = requirements.find((candidate) => candidate.code === code);
+    if (!item) return;
+    updateRequirement(code, {
+      evidence_document_ids: checked
+        ? [...item.evidence_document_ids, documentId]
+        : item.evidence_document_ids.filter((id) => id !== documentId),
+    });
+  }
+
+  function toggleEmployee(employeeId: string, checked: boolean) {
+    const employee = controls.active_employees.find((item) => item.id === employeeId);
+    if (!employee) return;
+    setAssignments((current) => checked
+      ? [
+          ...current.filter((item) => item.employee_id !== employeeId),
+          { employee_id: employeeId, portal_role: employee.portal_role, status: "active" },
+        ]
+      : current.filter((item) => item.employee_id !== employeeId));
+    if (checked && portalStatus === "not_started") setPortalStatus("active");
+  }
+
+  return (
+    <section aria-label="Project safety and crew release" className="min-w-0 rounded-md border border-brand-gold/40 bg-white p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-brand-gold" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-iron-950">Project safety and crew release</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">
+            Management records project evidence and exact crew access here. IHOS does not infer applicability, approve evidence, or activate workers automatically.
+          </p>
+        </div>
+        <span className="w-fit rounded-md bg-brand-gold/10 px-3 py-2 text-xs font-semibold text-iron-800">
+          Safety {label(controls.launch.release_status)} · Portal {label(controls.launch.portal_access.status)}
+        </span>
+      </div>
+
+      {controls.posting_blockers.length ? (
+        <div className="mt-4 rounded-md border border-brand-gold/40 bg-brand-gold/5 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-iron-700">Field posting remains blocked</div>
+          <ul className="mt-2 space-y-1 text-sm text-iron-700">
+            {controls.posting_blockers.map((item) => <li key={item.code}>{item.message}</li>)}
+          </ul>
+        </div>
+      ) : (
+        <Notice tone="neutral" message="Safety, portal access, crew assignment, and mobilization controls currently permit field posting." />
+      )}
+
+      <div className="mt-5 space-y-4">
+        {requirements.map((item) => {
+          const definition = controls.launch.record_requirements.find((candidate) => candidate.code === item.code);
+          const expectedRecordType = safetyRecordTypeByRequirement[item.code];
+          const recordOptions = controls.record_options.filter((record) => record.record_type === expectedRecordType);
+          return (
+            <fieldset key={item.code} className="min-w-0 rounded-md border border-iron-100 p-4">
+              <legend className="px-1 text-sm font-semibold text-iron-950">{definition?.label ?? label(item.code)}</legend>
+              <div className="mt-2 grid gap-3 md:grid-cols-2">
+                <Field label="Applicability">
+                  <select
+                    aria-label={`${definition?.label ?? item.code} applicability`}
+                    value={item.applicability_status}
+                    disabled={saving}
+                    onChange={(event) => changeApplicability(item.code, event.target.value as typeof item.applicability_status)}
+                    className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+                  >
+                    <option value="unconfirmed">Unconfirmed</option>
+                    <option value="applicable">Applicable</option>
+                    <option value="not_applicable">Not applicable</option>
+                  </select>
+                </Field>
+                <Field label="Control status">
+                  <select
+                    aria-label={`${definition?.label ?? item.code} status`}
+                    value={item.status}
+                    disabled={saving || item.applicability_status !== "applicable"}
+                    onChange={(event) => updateRequirement(item.code, { status: event.target.value as typeof item.status })}
+                    className="w-full rounded-md border border-iron-100 px-3 py-2 text-sm disabled:bg-iron-50"
+                  >
+                    <option value="not_started">Not started</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="ready">Ready</option>
+                  </select>
+                </Field>
+              </div>
+
+              {item.applicability_status === "not_applicable" ? (
+                <Field label="Written not-applicable basis">
+                  <textarea
+                    aria-label={`${definition?.label ?? item.code} not-applicable basis`}
+                    value={item.not_applicable_basis ?? ""}
+                    disabled={saving}
+                    onChange={(event) => updateRequirement(item.code, { not_applicable_basis: event.target.value })}
+                    className="mt-2 min-h-20 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+                    placeholder="Record the project-specific basis (minimum 10 characters)."
+                  />
+                </Field>
+              ) : null}
+
+              {item.applicability_status === "applicable" ? (
+                <div className="mt-3 grid min-w-0 gap-3 2xl:grid-cols-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Current project evidence</div>
+                    {controls.evidence_documents.length ? (
+                      <div className="mt-2 max-h-40 space-y-2 overflow-y-auto rounded-md border border-iron-100 p-3">
+                        {controls.evidence_documents.map((document) => (
+                          <label key={document.id} className="flex cursor-pointer items-start gap-2 text-sm text-iron-800">
+                            <input
+                              type="checkbox"
+                              checked={item.evidence_document_ids.includes(document.id)}
+                              disabled={saving}
+                              onChange={(event) => toggleEvidence(item.code, document.id, event.target.checked)}
+                              className="mt-0.5 h-4 w-4 accent-signal-green"
+                            />
+                            <span>{document.title} · {label(document.status)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-iron-500">No current stored documents are linked to this project. Add them in Documents first.</p>
+                    )}
+                  </div>
+                  <Field label="Supporting IHOS record (optional)">
+                    <select
+                      aria-label={`${definition?.label ?? item.code} supporting IHOS record`}
+                      value={item.record_id ?? ""}
+                      disabled={saving || !expectedRecordType}
+                      onChange={(event) => updateRequirement(item.code, { record_id: event.target.value || null })}
+                      className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm disabled:bg-iron-50"
+                    >
+                      <option value="">No supporting record selected</option>
+                      {recordOptions.map((record) => (
+                        <option key={record.id} value={record.id}>{record.work_date} · {record.title} · {label(record.status)}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+              ) : null}
+            </fieldset>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
+        <fieldset className="min-w-0 rounded-md border border-iron-100 p-4">
+          <legend className="px-1 text-sm font-semibold text-iron-950">Controlled crew access</legend>
+          <Field label="Project portal status">
+            <select
+              aria-label="Project portal status"
+              value={portalStatus}
+              disabled={saving}
+              onChange={(event) => setPortalStatus(event.target.value as typeof portalStatus)}
+              className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+            >
+              <option value="not_started">Not started</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
+          </Field>
+          <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-iron-500">Active employees</div>
+          {unavailableAssignmentCount ? (
+            <p className="mt-2 text-sm text-signal-red">
+              {unavailableAssignmentCount} prior assignment(s) no longer have an active employee and portal account. Saving removes them.
+            </p>
+          ) : null}
+          <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-md border border-iron-100 p-3">
+            {controls.active_employees.length ? controls.active_employees.map((employee) => (
+              <label key={employee.id} className="flex cursor-pointer items-start gap-2 text-sm text-iron-800">
+                <input
+                  type="checkbox"
+                  checked={activeAssignmentIds.has(employee.id)}
+                  disabled={saving}
+                  onChange={(event) => toggleEmployee(employee.id, event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-signal-green"
+                />
+                <span>{employee.display_name} · {label(employee.portal_role)}</span>
+              </label>
+            )) : <p className="text-sm text-iron-500">No active crew profiles are available. Complete onboarding first.</p>}
+          </div>
+        </fieldset>
+
+        <fieldset className="min-w-0 rounded-md border border-iron-100 p-4">
+          <legend className="px-1 text-sm font-semibold text-iron-950">Human release decision</legend>
+          <Field label="Safety release status">
+            <select
+              aria-label="Safety release status"
+              value={releaseStatus}
+              disabled={saving}
+              onChange={(event) => {
+                const value = event.target.value as typeof releaseStatus;
+                setReleaseStatus(value);
+                if (value !== "ready") setReleaseConfirmation(false);
+              }}
+              className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+            >
+              <option value="blocked">Blocked</option>
+              <option value="at_risk">At risk</option>
+              <option value="ready">Ready</option>
+            </select>
+          </Field>
+          <Field label="Review note">
+            <textarea
+              aria-label="Safety release review note"
+              value={reviewNote}
+              disabled={saving}
+              onChange={(event) => setReviewNote(event.target.value)}
+              className="mt-2 min-h-24 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              placeholder="Record what was reviewed and any remaining constraints."
+            />
+          </Field>
+          {releaseStatus === "ready" ? (
+            <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-md border border-brand-gold/40 bg-brand-gold/5 p-3 text-sm text-iron-800">
+              <input
+                type="checkbox"
+                checked={releaseConfirmation}
+                disabled={saving}
+                onChange={(event) => setReleaseConfirmation(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-signal-green"
+              />
+              <span>I confirm every requirement was reviewed against the linked project evidence. This is a human safety decision.</span>
+            </label>
+          ) : null}
+          <button
+            type="button"
+            disabled={saveBlocked}
+            onClick={() => onSave({
+              release_status: releaseStatus,
+              record_requirements: requirements,
+              portal_access: { status: portalStatus, assignments },
+              review_note: reviewNote.trim(),
+              release_confirmation: releaseConfirmation,
+            })}
+            className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md bg-iron-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            {saving ? "Saving controlled release..." : "Save controlled release"}
+          </button>
+          <p className="mt-2 text-xs leading-5 text-iron-500">
+            A 10-character review note is required. Ready also requires resolved evidence and explicit confirmation.
+          </p>
+        </fieldset>
+      </div>
+
+      {controls.launch.last_reviewed_by && controls.launch.last_reviewed_at ? (
+        <p className="mt-4 text-xs text-iron-500">
+          Last reviewed by {controls.launch.last_reviewed_by} on {formatDateTime(controls.launch.last_reviewed_at)}.
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -1548,9 +1959,16 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 function Field({ label: itemLabel, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-sm font-medium text-iron-800">{itemLabel}</span>
       {children}
     </label>

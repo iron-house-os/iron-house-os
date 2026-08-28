@@ -21,7 +21,11 @@ from app.schemas.project_closeout import (
 )
 from app.schemas.project_launch import ProjectLaunchDashboard
 from app.schemas.project_readiness import ProjectReadinessResponse
-from app.schemas.project_safety_launch import ProjectSafetyLaunchRead
+from app.schemas.project_safety_launch import (
+    ProjectSafetyLaunchControls,
+    ProjectSafetyLaunchRead,
+    ProjectSafetyLaunchUpdate,
+)
 from app.schemas.project_start import ProjectStartChecklistRead, ProjectStartChecklistUpdate
 from app.services import project_folders, project_launch, project_readiness, projects
 
@@ -130,6 +134,31 @@ def initialize_project_safety_launch(
     db: DBSession,
 ) -> ProjectSafetyLaunchRead:
     return projects.initialize_project_safety_launch(db, project_id, user)
+
+
+@router.get(
+    "/{project_id}/safety-launch/controls",
+    response_model=ProjectSafetyLaunchControls,
+)
+def read_project_safety_launch_controls(
+    project_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectSafetyLaunchControls:
+    return projects.get_project_safety_launch_controls(db, project_id, user)
+
+
+@router.patch(
+    "/{project_id}/safety-launch",
+    response_model=ProjectSafetyLaunchControls,
+)
+def update_project_safety_launch(
+    project_id: UUID,
+    payload: ProjectSafetyLaunchUpdate,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectSafetyLaunchControls:
+    return projects.update_project_safety_launch(db, project_id, payload, user)
 
 
 @router.get("/{project_id}/closeout-checklist", response_model=ProjectCloseoutChecklistRead)

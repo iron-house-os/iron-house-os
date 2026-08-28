@@ -9,6 +9,7 @@ import {
   ProjectCloseoutChecklist,
   ProjectDashboard,
   ProjectLaunchDashboard,
+  ProjectSafetyLaunchControls,
   ProjectStartChecklist,
 } from "../api/projects";
 import { ProjectInvoicePackageReadiness } from "../api/finance";
@@ -197,6 +198,65 @@ const awardedLaunchDashboard: ProjectLaunchDashboard = {
   uncoded_award_line_count: 4,
   procurement_requirement_count: 3,
   procurement_plan_status: "draft",
+};
+
+const safetyRequirementDefinitions = [
+  ["project_safety_plan", "Project-specific safety plan"],
+  ["emergency_action_card", "Emergency action card"],
+  ["field_hazard_assessment", "Field-level hazard assessment"],
+  ["toolbox_talk", "Crew toolbox talk"],
+  ["safety_permit", "Task permit or safety-control record, if applicable"],
+  ["orientation_verification", "Crew orientation and qualification verification"],
+] as const;
+
+const safetyLaunchControls: ProjectSafetyLaunchControls = {
+  launch: {
+    project_id: awardedProject.id,
+    job_number: awardedProject.project_number ?? "IH-2026-014",
+    release_status: "blocked",
+    folder_path: `${awardedWorkspace.root_folder}/13_Award_Handoff/Safety`,
+    folder_status: "prepared",
+    record_requirements: safetyRequirementDefinitions.map(([code, itemLabel]) => ({
+      code,
+      label: itemLabel,
+      applicability_status: "unconfirmed",
+      status: "not_started",
+      record_id: null,
+      evidence_document_ids: [],
+      not_applicable_basis: null,
+      reviewed_by: null,
+      reviewed_at: null,
+    })),
+    portal_access: {
+      status: "not_started",
+      automatic_provisioning: false,
+      assignments: [],
+    },
+    initialized_by: "test-admin@ironhousecontracting.com",
+    initialized_at: "2026-08-28T15:00:00Z",
+    last_reviewed_by: null,
+    last_reviewed_at: null,
+    last_review_note: null,
+    review_history: [],
+  },
+  evidence_documents: [{
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    title: "Current project safety package",
+    category: "other",
+    status: "current",
+  }],
+  record_options: [],
+  active_employees: [{
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    display_name: "Sam Foreperson",
+    portal_role: "foreman",
+  }],
+  posting_blockers: [
+    { code: "safety_release", message: "Safety release must be Ready before field production can post." },
+    { code: "safety_records", message: "Applicable safety records and their evidence must be resolved before field production can post." },
+    { code: "portal_access", message: "Project portal access and at least one worker assignment must be active before field production can post." },
+    { code: "mobilization", message: "The project-start checklist must be complete before field production can post." },
+  ],
 };
 
 let releaseChecklistUpdate: (() => void) | null = null;
@@ -479,6 +539,67 @@ describe("ProjectWorkspacePage", () => {
         .getAllByRole("checkbox")
         .every((checkbox) => (checkbox as HTMLInputElement).checked),
     ).toBe(true);
+  });
+
+  it("requires project evidence, exact crew selection, and explicit confirmation for safety release", async () => {
+    const fetchMock = mockProjectApi(
+      awardedProject,
+      awardedWorkspace,
+      awardedStartChecklist,
+      false,
+      awardedLaunchDashboard,
+      undefined,
+      safetyLaunchControls,
+    );
+    const user = userEvent.setup();
+    renderWorkspace(`/projects/${awardedProject.id}`);
+
+    const release = await screen.findByRole("region", { name: "Project safety and crew release" });
+    const save = within(release).getByRole("button", { name: "Save controlled release" });
+    expect(save).toBeDisabled();
+    expect(release).toHaveTextContent("IHOS does not infer applicability");
+    expect(release).toHaveTextContent("Field posting remains blocked");
+
+    for (const [, itemLabel] of safetyRequirementDefinitions) {
+      await user.selectOptions(within(release).getByLabelText(`${itemLabel} applicability`), "applicable");
+      await user.selectOptions(within(release).getByLabelText(`${itemLabel} status`), "ready");
+    }
+    for (const checkbox of within(release).getAllByRole("checkbox", { name: /Current project safety package/ })) {
+      await user.click(checkbox);
+    }
+    await user.click(within(release).getByRole("checkbox", { name: /Sam Foreperson/ }));
+    await user.selectOptions(within(release).getByLabelText("Safety release status"), "ready");
+    await user.type(
+      within(release).getByLabelText("Safety release review note"),
+      "Reviewed current evidence and exact crew access.",
+    );
+    expect(save).toBeDisabled();
+    await user.click(within(release).getByRole("checkbox", { name: /I confirm every requirement/ }));
+    expect(save).toBeEnabled();
+    await user.click(save);
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(
+        ([url, options]) => url.toString().endsWith(`/projects/${awardedProject.id}/safety-launch`) && options?.method === "PATCH",
+      );
+      expect(updateCall).toBeDefined();
+      const payload = JSON.parse(String(updateCall?.[1]?.body));
+      expect(payload.release_status).toBe("ready");
+      expect(payload.release_confirmation).toBe(true);
+      expect(payload.record_requirements).toHaveLength(6);
+      expect(payload.record_requirements.every((item: { evidence_document_ids: string[] }) => (
+        item.evidence_document_ids[0] === safetyLaunchControls.evidence_documents[0].id
+      ))).toBe(true);
+      expect(payload.portal_access).toEqual({
+        status: "active",
+        assignments: [{
+          employee_id: safetyLaunchControls.active_employees[0].id,
+          portal_role: "foreman",
+          status: "active",
+        }],
+      });
+    });
+    expect(await screen.findByText(/Last reviewed by test-admin/)).toBeInTheDocument();
   });
 
   it("serializes checklist updates so an older response cannot replace newer state", async () => {
@@ -767,6 +888,7 @@ function mockProjectApi(
   delayChecklistUpdates = false,
   launchDashboard: ProjectLaunchDashboard = awardedLaunchDashboard,
   closeout?: ProjectCloseoutChecklist,
+  safetyControls?: ProjectSafetyLaunchControls,
 ) {
   let currentStartChecklist = startChecklist;
   let currentCloseoutChecklist = closeout;
@@ -811,6 +933,40 @@ function mockProjectApi(
           ? currentStartChecklist.items.find((item) => !item.completed) ?? null
           : launchDashboard.next_incomplete_control,
       });
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/safety-launch/controls`) && safetyControls) {
+      return jsonResponse(safetyControls);
+    }
+
+    if (url.endsWith(`/projects/${currentProject.id}/safety-launch`) && options?.method === "PATCH" && safetyControls) {
+      const payload = JSON.parse(String(options.body));
+      safetyControls = {
+        ...safetyControls,
+        launch: {
+          ...safetyControls.launch,
+          release_status: payload.release_status,
+          record_requirements: safetyControls.launch.record_requirements.map((item) => ({
+            ...item,
+            ...payload.record_requirements.find((candidate: { code: string }) => candidate.code === item.code),
+            reviewed_by: "test-admin@ironhousecontracting.com",
+            reviewed_at: "2026-08-28T16:00:00Z",
+          })),
+          portal_access: {
+            status: payload.portal_access.status,
+            automatic_provisioning: false,
+            assignments: payload.portal_access.assignments,
+          },
+          last_reviewed_by: "test-admin@ironhousecontracting.com",
+          last_reviewed_at: "2026-08-28T16:00:00Z",
+          last_review_note: payload.review_note,
+        },
+        posting_blockers: [{
+          code: "mobilization",
+          message: "The project-start checklist must be complete before field production can post.",
+        }],
+      };
+      return jsonResponse(safetyControls);
     }
 
     const closeoutItemPath = `/projects/${currentProject.id}/closeout-checklist/`;
