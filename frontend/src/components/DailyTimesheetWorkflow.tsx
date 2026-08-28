@@ -8,15 +8,22 @@ import { UniversalPhotoField } from "./UniversalPhotoField";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blankNarrative = { work_completed: "", delays_issues: "", potential_change: false, potential_change_details: "", safety_quality_notes: "", general_comments: "" };
-const emptyPayload = (): DailyTimesheetPayload => ({ work_date: today(), shift: "day", project_id: "", project_manager_id: null, supervisor_id: "", weather: "", site_conditions: "", document_ids: [], labour: [], equipment: [], materials: [], narrative: { ...blankNarrative } });
+const emptyPayload = (): DailyTimesheetPayload => ({ work_date: today(), shift: "day", project_id: "", project_manager_id: null, supervisor_id: "", weather: "", site_conditions: "", document_ids: [], ticket_document_ids: [], labour: [], equipment: [], materials: [], narrative: { ...blankNarrative } });
 const STORAGE_KEY = "ihos:foreman-daily-timesheet:v1";
 
 function storedDraft(storageKey: string): { payload: DailyTimesheetPayload; sheetId?: string } {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
     if (!saved) return { payload: emptyPayload() };
-    if (saved.payload) return saved;
-    return { payload: saved };
+    const restored = saved.payload ? saved : { payload: saved };
+    return {
+      ...restored,
+      payload: {
+        ...emptyPayload(),
+        ...restored.payload,
+        ticket_document_ids: restored.payload.ticket_document_ids ?? [],
+      },
+    };
   } catch {
     return { payload: emptyPayload() };
   }
@@ -31,6 +38,7 @@ export function DailyTimesheetWorkflow() {
   const [sheetId, setSheetId] = useState<string | undefined>(restoredDraft.sheetId);
   const [status, setStatus] = useState("draft");
   const [files, setFiles] = useState<File[]>([]);
+  const [ticketFiles, setTicketFiles] = useState<File[]>([]);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "offline">("idle");
   const [error, setError] = useState<string | null>(null);
   const [crewChoice, setCrewChoice] = useState("");
@@ -65,7 +73,9 @@ export function DailyTimesheetWorkflow() {
 
   function chooseProject(projectId: string) {
     const assigned = data?.assigned_crew[projectId] ?? [];
-    setPayload((current) => ({ ...current, project_id: projectId, labour: assigned.map((employee_id) => ({ employee_id, equipment_id: null, splits: [{ cost_code: "", straight_time: 0, overtime: 0 }] })) }));
+    setFiles([]);
+    setTicketFiles([]);
+    setPayload((current) => ({ ...current, project_id: projectId, document_ids: [], ticket_document_ids: [], labour: assigned.map((employee_id) => ({ employee_id, equipment_id: null, splits: [{ cost_code: "", straight_time: 0, overtime: 0 }] })) }));
   }
   function addWorker() {
     if (!crewChoice || payload.labour.some((item) => item.employee_id === crewChoice)) return;
@@ -83,19 +93,31 @@ export function DailyTimesheetWorkflow() {
   }
   function loadSheet(sheet: DailyTimesheet, preserveIdentity = true) {
     const details = sheet.details;
-    setPayload({ work_date: preserveIdentity ? sheet.work_date : today(), shift: details.shift ?? "day", project_id: sheet.project_id, project_manager_id: details.project_manager_id, supervisor_id: details.supervisor_id, weather: details.weather ?? "", site_conditions: details.site_conditions ?? "", document_ids: preserveIdentity ? sheet.document_ids : [], labour: details.labour ?? [], equipment: details.equipment ?? [], materials: details.materials ?? [], narrative: { ...blankNarrative, ...(details.narrative ?? {}) } });
+    setPayload({ work_date: preserveIdentity ? sheet.work_date : today(), shift: details.shift ?? "day", project_id: sheet.project_id, project_manager_id: details.project_manager_id, supervisor_id: details.supervisor_id, weather: details.weather ?? "", site_conditions: details.site_conditions ?? "", document_ids: preserveIdentity ? sheet.document_ids : [], ticket_document_ids: preserveIdentity ? (sheet.ticket_document_ids ?? details.ticket_document_ids ?? []) : [], labour: details.labour ?? [], equipment: details.equipment ?? [], materials: details.materials ?? [], narrative: { ...blankNarrative, ...(details.narrative ?? {}) } });
     if (preserveIdentity) { setSheetId(sheet.id); setStatus(sheet.status); }
   }
 
-  async function uploadPending(): Promise<string[]> {
-    if (!files.length) return payload.document_ids;
-    const uploaded = await mediaApi.upload({ files, projectId: payload.project_id, caption: "Foreman daily time sheet backup", capturedDate: payload.work_date, category: "job_photo" });
-    const ids = [...payload.document_ids, ...uploaded.map((item) => item.original_document_id)]; setFiles([]); return ids;
+  async function uploadPending(): Promise<{ document_ids: string[]; ticket_document_ids: string[] }> {
+    let document_ids = payload.document_ids;
+    let ticket_document_ids = payload.ticket_document_ids;
+    if (files.length) {
+      const uploaded = await mediaApi.upload({ files, projectId: payload.project_id, caption: "Daily field production photo", capturedDate: payload.work_date, category: "job_photo" });
+      document_ids = [...document_ids, ...uploaded.map((item) => item.original_document_id)];
+      setFiles([]);
+      setPayload((current) => ({ ...current, document_ids }));
+    }
+    if (ticketFiles.length) {
+      const uploadedTickets = await mediaApi.upload({ files: ticketFiles, projectId: payload.project_id, caption: "Daily delivery or disposal ticket", capturedDate: payload.work_date, category: "job_photo" });
+      ticket_document_ids = [...ticket_document_ids, ...uploadedTickets.map((item) => item.original_document_id)];
+      setTicketFiles([]);
+      setPayload((current) => ({ ...current, document_ids, ticket_document_ids }));
+    }
+    return { document_ids, ticket_document_ids };
   }
   async function saveNow(): Promise<string | undefined> {
     if (!validDraft) { setError("Complete the job, foreman, crew hours and cost codes before saving."); return undefined; }
     setBusy(true); setError(null);
-    try { const document_ids = await uploadPending(); const saved = await dailyTimesheetApi.save({ ...payload, document_ids }, sheetId); setPayload((current) => ({ ...current, document_ids })); setSheetId(saved.id); setStatus(saved.status); setSaveState("saved"); await refresh(); return saved.id; }
+    try { const evidence = await uploadPending(); const saved = await dailyTimesheetApi.save({ ...payload, ...evidence }, sheetId); setPayload((current) => ({ ...current, ...evidence })); setSheetId(saved.id); setStatus(saved.status); setSaveState("saved"); await refresh(); return saved.id; }
     catch (failure) { setError(failure instanceof Error ? failure.message : "Save failed. Photos and the local draft remain available for retry."); }
     finally { setBusy(false); }
     return undefined;
@@ -120,7 +142,7 @@ export function DailyTimesheetWorkflow() {
         <Input label="Weather" value={payload.weather} onChange={(weather) => setPayload({ ...payload, weather })} />
         <div className="sm:col-span-2 lg:col-span-3"><Input label="Site conditions" value={payload.site_conditions} onChange={(site_conditions) => setPayload({ ...payload, site_conditions })} /></div>
       </div>
-      <div className="mt-4"><UniversalPhotoField files={files} onFilesChange={setFiles} documentIds={payload.document_ids} category="job_photo" label="Backup photos / attachments" /></div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2"><UniversalPhotoField files={files} onFilesChange={setFiles} documentIds={payload.document_ids} category="job_photo" label="Field production photos" /><UniversalPhotoField files={ticketFiles} onFilesChange={setTicketFiles} documentIds={payload.ticket_document_ids} category="job_photo" label="Delivery / disposal ticket photos" /></div>
     </header>
     <section className="rounded-xl border border-iron-100 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="flex items-center gap-2 font-semibold"><Users className="h-5 w-5 text-brand-gold-dark" />Crew labour</h3><p className="mt-1 text-sm text-iron-500">Expandable employee cards on phones; split coding remains compact on larger screens.</p></div><div className="flex flex-wrap gap-2"><SmallButton onClick={copyPrevious}><ClipboardCopy />Previous day</SmallButton><SmallButton onClick={copyCostCode}><ClipboardCopy />Code across crew</SmallButton></div></div>

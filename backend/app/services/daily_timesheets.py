@@ -17,11 +17,17 @@ from app.models.finance import Receipt
 from app.models.project import Project
 from app.models.supplier import Supplier
 from app.models.user import Employee
-from app.schemas.daily_timesheet import DailyTimesheetAction, DailyTimesheetBootstrap, DailyTimesheetRead, DailyTimesheetRevision, DailyTimesheetWrite
+from app.schemas.daily_timesheet import (
+    DailyTimesheetAction,
+    DailyTimesheetBootstrap,
+    DailyTimesheetRead,
+    DailyTimesheetRevision,
+    DailyTimesheetWrite,
+)
 from app.services.auth import AuthenticatedUser
 from app.services.field_operations import commit
 from app.services.media_access import require_document_access
-from app.services import project_safety_launch
+from app.services import project_production_records, project_safety_launch
 
 
 MANAGEMENT_ROLES = {"admin", "operations_manager"}
@@ -47,8 +53,23 @@ def _require_management(user: AuthenticatedUser) -> None:
         raise AppError("Authorized project/office approval access is required.", status_code=403)
 
 
-def _event(action: str, user: AuthenticatedUser, *, reason: str | None = None, from_status: str | None = None, to_status: str | None = None) -> dict:
-    return {"action": action, "actor": user.email, "display_name": user.display_name, "at": datetime.now(UTC).isoformat(), "reason": reason, "from_status": from_status, "to_status": to_status}
+def _event(
+    action: str,
+    user: AuthenticatedUser,
+    *,
+    reason: str | None = None,
+    from_status: str | None = None,
+    to_status: str | None = None,
+) -> dict:
+    return {
+        "action": action,
+        "actor": user.email,
+        "display_name": user.display_name,
+        "at": datetime.now(UTC).isoformat(),
+        "reason": reason,
+        "from_status": from_status,
+        "to_status": to_status,
+    }
 
 
 def _project_cost_codes(db: Session) -> dict[str, list[dict]]:
@@ -108,20 +129,29 @@ def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
         projects = [
             item
             for item in projects
-            if profile is not None
-            and project_safety_launch.portal_access_allowed(item, profile.id)
+            if profile is not None and project_safety_launch.portal_access_allowed(item, profile.id)
         ]
     visible_project_ids = {str(item.id) for item in projects}
-    employees = list(db.scalars(select(Employee).where(Employee.status == "active").order_by(Employee.last_name, Employee.first_name)))
-    equipment = list(db.scalars(select(Equipment).where(Equipment.status.in_(["active", "available"])).order_by(Equipment.name)))
+    employees = list(
+        db.scalars(
+            select(Employee).where(Employee.status == "active").order_by(Employee.last_name, Employee.first_name)
+        )
+    )
+    equipment = list(
+        db.scalars(select(Equipment).where(Equipment.status.in_(["active", "available"])).order_by(Equipment.name))
+    )
     vendors = list(db.scalars(select(Supplier).order_by(Supplier.name)))
-    rentals = list(db.scalars(select(FieldRecord).where(FieldRecord.record_type == "rental_equipment", FieldRecord.status.not_in(["inactive", "void", "closed"])).order_by(FieldRecord.work_date.desc())))
+    rentals = list(
+        db.scalars(
+            select(FieldRecord)
+            .where(
+                FieldRecord.record_type == "rental_equipment", FieldRecord.status.not_in(["inactive", "void", "closed"])
+            )
+            .order_by(FieldRecord.work_date.desc())
+        )
+    )
     if not _is_management(user):
-        rentals = [
-            item
-            for item in rentals
-            if item.project_id is None or str(item.project_id) in visible_project_ids
-        ]
+        rentals = [item for item in rentals if item.project_id is None or str(item.project_id) in visible_project_ids]
     receipt_statement = select(Receipt).where(Receipt.status != "void")
     if not _is_management(user):
         receipt_statement = receipt_statement.where(func.lower(Receipt.submitter_email) == user.email.lower())
@@ -131,28 +161,62 @@ def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
     sheets = _records(db, user)
     if not _is_management(user):
         project_cost_codes = {
-            project_id: values
-            for project_id, values in project_cost_codes.items()
-            if project_id in visible_project_ids
+            project_id: values for project_id, values in project_cost_codes.items() if project_id in visible_project_ids
         }
         assigned_crew = {
-            project_id: values
-            for project_id, values in assigned_crew.items()
-            if project_id in visible_project_ids
+            project_id: values for project_id, values in assigned_crew.items() if project_id in visible_project_ids
         }
-        sheets = [
-            item
-            for item in sheets
-            if item.project_id is None or str(item.project_id) in visible_project_ids
-        ]
+        sheets = [item for item in sheets if item.project_id is None or str(item.project_id) in visible_project_ids]
     return DailyTimesheetBootstrap(
-        projects=[{"id": str(item.id), "name": item.name, "project_number": item.project_number or "Unnumbered", "status": item.status} for item in projects if item.status not in {"closed", "cancelled", "inactive"}],
-        employees=[{"id": str(item.id), "code": "EMP-" + str(item.id)[:6].upper(), "name": f"{item.first_name} {item.last_name}", "classification": item.role or item.portal_role.replace("_", " ").title(), "portal_role": item.portal_role} for item in employees],
-        equipment=[{"id": str(item.id), "name": item.name, "identifier": item.identifier, "status": item.status} for item in equipment],
-        rentals=[{"id": str(item.id), "name": item.title, "project_id": str(item.project_id) if item.project_id else None, "vendor_id": str(item.supplier_id) if item.supplier_id else None, "status": item.status} for item in rentals],
+        projects=[
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "project_number": item.project_number or "Unnumbered",
+                "status": item.status,
+            }
+            for item in projects
+            if item.status not in {"closed", "cancelled", "inactive"}
+        ],
+        employees=[
+            {
+                "id": str(item.id),
+                "code": "EMP-" + str(item.id)[:6].upper(),
+                "name": f"{item.first_name} {item.last_name}",
+                "classification": item.role or item.portal_role.replace("_", " ").title(),
+                "portal_role": item.portal_role,
+            }
+            for item in employees
+        ],
+        equipment=[
+            {"id": str(item.id), "name": item.name, "identifier": item.identifier, "status": item.status}
+            for item in equipment
+        ],
+        rentals=[
+            {
+                "id": str(item.id),
+                "name": item.title,
+                "project_id": str(item.project_id) if item.project_id else None,
+                "vendor_id": str(item.supplier_id) if item.supplier_id else None,
+                "status": item.status,
+            }
+            for item in rentals
+        ],
         vendors=[{"id": str(item.id), "name": item.name, "category": item.category} for item in vendors],
-        receipts=[{"id": str(item.id), "reference": item.reference, "vendor_name": item.vendor_name, "receipt_date": item.receipt_date, "status": item.status} for item in receipts],
-        project_cost_codes=project_cost_codes, assigned_crew=assigned_crew, sheets=[_read(item) for item in sheets], can_approve=_is_management(user),
+        receipts=[
+            {
+                "id": str(item.id),
+                "reference": item.reference,
+                "vendor_name": item.vendor_name,
+                "receipt_date": item.receipt_date,
+                "status": item.status,
+            }
+            for item in receipts
+        ],
+        project_cost_codes=project_cost_codes,
+        assigned_crew=assigned_crew,
+        sheets=[_read(item) for item in sheets],
+        can_approve=_is_management(user),
     )
 
 
@@ -174,16 +238,29 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
     if not _is_management(user):
         profile = _profile(db, user)
         if profile is None or supervisor.id != profile.id:
-            raise AppError("A foreman can only submit a daily sheet under their own supervisor identity.", status_code=403)
+            raise AppError(
+                "A foreman can only submit a daily sheet under their own supervisor identity.", status_code=403
+            )
         project_safety_launch.require_portal_access(project, profile.id)
-    manager = _active(db, Employee, payload.project_manager_id, "Project manager", {"active"}) if payload.project_manager_id else None
+    manager = (
+        _active(db, Employee, payload.project_manager_id, "Project manager", {"active"})
+        if payload.project_manager_id
+        else None
+    )
+
     def validate_document(document_id: UUID) -> None:
         document = db.get(Document, document_id)
-        if document is None or document.project_id != payload.project_id or document.status in {"archived", "superseded"}:
+        if (
+            document is None
+            or document.project_id != payload.project_id
+            or document.status in {"archived", "superseded"}
+        ):
             raise AppError("Attachment is not active for the selected job.", status_code=400)
         require_document_access(db, document_id, user)
 
     for document_id in payload.document_ids:
+        validate_document(document_id)
+    for document_id in payload.ticket_document_ids:
         validate_document(document_id)
     allowed = {item["code"] for item in _project_cost_codes(db).get(str(payload.project_id), [])}
     if not allowed:
@@ -198,8 +275,21 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
     labour = []
     for line in payload.labour:
         employee = _active(db, Employee, line.employee_id, "Employee", {"active"})
-        operator_equipment = _active(db, Equipment, line.equipment_id, "Operator equipment", {"active", "available"}) if line.equipment_id else None
-        labour.append({"employee_id": str(employee.id), "employee_code": "EMP-" + str(employee.id)[:6].upper(), "employee_name": f"{employee.first_name} {employee.last_name}", "classification": employee.role or employee.portal_role.replace("_", " ").title(), "equipment_id": str(operator_equipment.id) if operator_equipment else None, "splits": [{**item.model_dump(), "cost_code": check_code(item.cost_code)} for item in line.splits]})
+        operator_equipment = (
+            _active(db, Equipment, line.equipment_id, "Operator equipment", {"active", "available"})
+            if line.equipment_id
+            else None
+        )
+        labour.append(
+            {
+                "employee_id": str(employee.id),
+                "employee_code": "EMP-" + str(employee.id)[:6].upper(),
+                "employee_name": f"{employee.first_name} {employee.last_name}",
+                "classification": employee.role or employee.portal_role.replace("_", " ").title(),
+                "equipment_id": str(operator_equipment.id) if operator_equipment else None,
+                "splits": [{**item.model_dump(), "cost_code": check_code(item.cost_code)} for item in line.splits],
+            }
+        )
     equipment_lines = []
     for line in payload.equipment:
         if line.source == "owned":
@@ -211,7 +301,14 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
                 raise AppError("Rental equipment is not active for the selected job.", status_code=400)
             resource_name = resource.title
         vendor = _active(db, Supplier, line.vendor_id, "Vendor") if line.vendor_id else None
-        equipment_lines.append({**line.model_dump(mode="json"), "resource_name": resource_name, "vendor_name": vendor.name if vendor else None, "splits": [{**split.model_dump(), "cost_code": check_code(split.cost_code)} for split in line.splits]})
+        equipment_lines.append(
+            {
+                **line.model_dump(mode="json"),
+                "resource_name": resource_name,
+                "vendor_name": vendor.name if vendor else None,
+                "splits": [{**split.model_dump(), "cost_code": check_code(split.cost_code)} for split in line.splits],
+            }
+        )
     materials = []
     for line in payload.materials:
         vendor = _active(db, Supplier, line.vendor_id, "Vendor")
@@ -221,13 +318,27 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
                 raise AppError("Receipt not found.", status_code=404)
         if line.document_id:
             validate_document(line.document_id)
-        materials.append({**line.model_dump(mode="json"), "vendor_name": vendor.name, "cost_code": check_code(line.cost_code)})
-    code_totals: dict[str, dict[str, float]] = defaultdict(lambda: {"straight_time": 0, "overtime": 0, "equipment_quantity": 0, "material_quantity": 0, "production_quantity": 0})
+        materials.append(
+            {**line.model_dump(mode="json"), "vendor_name": vendor.name, "cost_code": check_code(line.cost_code)}
+        )
+    code_totals: dict[str, dict[str, float]] = defaultdict(
+        lambda: {
+            "straight_time": 0,
+            "overtime": 0,
+            "equipment_quantity": 0,
+            "material_quantity": 0,
+            "production_quantity": 0,
+        }
+    )
     employee_totals: dict[str, dict[str, float]] = {}
     for line in labour:
         straight = sum(float(item["straight_time"]) for item in line["splits"])
         overtime = sum(float(item["overtime"]) for item in line["splits"])
-        employee_totals[line["employee_id"]] = {"straight_time": straight, "overtime": overtime, "total": straight + overtime}
+        employee_totals[line["employee_id"]] = {
+            "straight_time": straight,
+            "overtime": overtime,
+            "total": straight + overtime,
+        }
         for split in line["splits"]:
             code_totals[split["cost_code"]]["straight_time"] += float(split["straight_time"])
             code_totals[split["cost_code"]]["overtime"] += float(split["overtime"])
@@ -239,12 +350,52 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
         code_totals[line["cost_code"]]["production_quantity"] += float(line["production_quantity"] or 0)
     sheet_straight = sum(item["straight_time"] for item in employee_totals.values())
     sheet_overtime = sum(item["overtime"] for item in employee_totals.values())
-    return {"schema_version": 1, "shift": payload.shift, "project_name": project.name, "project_number": project.project_number, "project_manager_id": str(manager.id) if manager else None, "project_manager_name": f"{manager.first_name} {manager.last_name}" if manager else None, "supervisor_id": str(supervisor.id), "supervisor_name": f"{supervisor.first_name} {supervisor.last_name}", "weather": payload.weather, "site_conditions": payload.site_conditions, "labour": labour, "equipment": equipment_lines, "materials": materials, "narrative": payload.narrative.model_dump(), "employee_totals": employee_totals, "cost_code_totals": dict(code_totals), "sheet_totals": {"straight_time": sheet_straight, "overtime": sheet_overtime, "labour_hours": sheet_straight + sheet_overtime}}
+    return {
+        "schema_version": 2,
+        "shift": payload.shift,
+        "project_name": project.name,
+        "project_number": project.project_number,
+        "project_manager_id": str(manager.id) if manager else None,
+        "project_manager_name": f"{manager.first_name} {manager.last_name}" if manager else None,
+        "supervisor_id": str(supervisor.id),
+        "supervisor_name": f"{supervisor.first_name} {supervisor.last_name}",
+        "weather": payload.weather,
+        "site_conditions": payload.site_conditions,
+        "photo_document_ids": [str(value) for value in payload.document_ids],
+        "ticket_document_ids": [str(value) for value in payload.ticket_document_ids],
+        "labour": labour,
+        "equipment": equipment_lines,
+        "materials": materials,
+        "narrative": payload.narrative.model_dump(),
+        "employee_totals": employee_totals,
+        "cost_code_totals": dict(code_totals),
+        "sheet_totals": {
+            "straight_time": sheet_straight,
+            "overtime": sheet_overtime,
+            "labour_hours": sheet_straight + sheet_overtime,
+        },
+    }
 
 
 def _read(record: FieldRecord) -> DailyTimesheetRead:
     details = record.details or {}
-    return DailyTimesheetRead(id=record.id, status=record.status, version=int(details.get("version", 1)), project_id=record.project_id, work_date=record.work_date, shift=details.get("shift", "day"), details=details, document_ids=[UUID(str(value)) for value in record.document_ids or []], submitted_by=record.submitted_by, created_at=record.created_at, updated_at=record.updated_at)
+    photo_ids = details.get("photo_document_ids")
+    if photo_ids is None:
+        photo_ids = record.document_ids or []
+    return DailyTimesheetRead(
+        id=record.id,
+        status=record.status,
+        version=int(details.get("version", 1)),
+        project_id=record.project_id,
+        work_date=record.work_date,
+        shift=details.get("shift", "day"),
+        details=details,
+        document_ids=[UUID(str(value)) for value in photo_ids],
+        ticket_document_ids=[UUID(str(value)) for value in details.get("ticket_document_ids") or []],
+        submitted_by=record.submitted_by,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
 
 
 def _get(db: Session, sheet_id: UUID, user: AuthenticatedUser, *, for_update: bool = False) -> FieldRecord:
@@ -276,14 +427,22 @@ def _labour_intervals(details: dict) -> dict[str, list[tuple[str, str] | None]]:
 def _intervals_conflict(left: list[tuple[str, str] | None], right: list[tuple[str, str] | None]) -> bool:
     if any(item is None for item in [*left, *right]):
         return True
-    return any(a_start < b_end and b_start < a_end for a_start, a_end in left if a_start and a_end for b_start, b_end in right if b_start and b_end)
+    return any(
+        a_start < b_end and b_start < a_end
+        for a_start, a_end in left
+        if a_start and a_end
+        for b_start, b_end in right
+        if b_start and b_end
+    )
 
 
 def _ensure_no_cross_record_conflicts(db: Session, record: FieldRecord) -> None:
     details = record.details or {}
     root_id = str(details.get("root_record_id") or record.id)
     current_labour = _labour_intervals(details)
-    current_equipment = {(str(line.get("source")), str(line.get("resource_id"))) for line in details.get("equipment") or []}
+    current_equipment = {
+        (str(line.get("source")), str(line.get("resource_id"))) for line in details.get("equipment") or []
+    }
     statement = (
         select(FieldRecord)
         .where(
@@ -304,37 +463,83 @@ def _ensure_no_cross_record_conflicts(db: Session, record: FieldRecord) -> None:
         for employee_id in current_labour.keys() & other_labour.keys():
             if _intervals_conflict(current_labour[employee_id], other_labour[employee_id]):
                 raise AppError("Crew time overlaps another active daily sheet for this job and date.", status_code=409)
-        other_equipment = {(str(line.get("source")), str(line.get("resource_id"))) for line in other_details.get("equipment") or []}
+        other_equipment = {
+            (str(line.get("source")), str(line.get("resource_id"))) for line in other_details.get("equipment") or []
+        }
         if current_equipment & other_equipment:
-            raise AppError("Equipment is already recorded on another active daily sheet for this job and date.", status_code=409)
+            raise AppError(
+                "Equipment is already recorded on another active daily sheet for this job and date.", status_code=409
+            )
     if current_labour:
         duplicate_time = db.scalar(
-            select(TimeEntry.id).where(
+            select(TimeEntry.id)
+            .where(
                 TimeEntry.project_id == record.project_id,
                 TimeEntry.work_date == record.work_date,
                 TimeEntry.employee_id.in_([UUID(employee_id) for employee_id in current_labour]),
                 TimeEntry.status.not_in(["void", "rejected"]),
-            ).limit(1)
+            )
+            .limit(1)
         )
         if duplicate_time:
             raise AppError("Crew time already exists in the system for this job and date.", status_code=409)
 
 
-def save_draft(db: Session, payload: DailyTimesheetWrite, user: AuthenticatedUser, sheet_id: UUID | None = None) -> DailyTimesheetRead:
+def save_draft(
+    db: Session, payload: DailyTimesheetWrite, user: AuthenticatedUser, sheet_id: UUID | None = None
+) -> DailyTimesheetRead:
     _require_foreman(db, user)
     details = _validated_details(db, payload, user)
-    document_ids = [str(item) for item in payload.document_ids]
+    document_ids = list(
+        dict.fromkeys(
+            [
+                *[str(item) for item in payload.document_ids],
+                *[str(item) for item in payload.ticket_document_ids],
+            ]
+        )
+    )
     if sheet_id:
         record = _get(db, sheet_id, user, for_update=True)
         if record.status != "draft":
             raise AppError("Submitted daily sheets are immutable. Create a revision with a reason.", status_code=409)
         old = record.details or {}
-        audit = [*(old.get("audit_history") or []), _event("draft_autosaved", user, from_status="draft", to_status="draft")]
-        record.project_id, record.work_date, record.title = payload.project_id, payload.work_date, f"{details['project_number'] or details['project_name']} — Foreman Daily Time Sheet"
-        record.details = {**details, "version": int(old.get("version", 1)), "root_record_id": old.get("root_record_id"), "previous_record_id": old.get("previous_record_id"), "audit_history": audit}
+        audit = [
+            *(old.get("audit_history") or []),
+            _event("draft_autosaved", user, from_status="draft", to_status="draft"),
+        ]
+        record.project_id, record.work_date, record.title = (
+            payload.project_id,
+            payload.work_date,
+            f"{details['project_number'] or details['project_name']} — Foreman Daily Time Sheet",
+        )
+        record.details = {
+            **details,
+            "version": int(old.get("version", 1)),
+            "root_record_id": old.get("root_record_id"),
+            "previous_record_id": old.get("previous_record_id"),
+            "audit_history": audit,
+        }
         record.document_ids = document_ids
     else:
-        record = FieldRecord(record_type="daily_timesheet", project_id=payload.project_id, work_date=payload.work_date, title=f"{details['project_number'] or details['project_name']} — Foreman Daily Time Sheet", status="draft", severity="medium" if payload.narrative.potential_change else "none", details={**details, "version": 1, "root_record_id": None, "previous_record_id": None, "audit_history": [_event("draft_created", user, to_status="draft")]}, document_ids=document_ids, signatures=[], alert_recipients=[], submitted_by=user.email)
+        record = FieldRecord(
+            record_type="daily_timesheet",
+            project_id=payload.project_id,
+            work_date=payload.work_date,
+            title=f"{details['project_number'] or details['project_name']} — Foreman Daily Time Sheet",
+            status="draft",
+            severity="medium" if payload.narrative.potential_change else "none",
+            details={
+                **details,
+                "version": 1,
+                "root_record_id": None,
+                "previous_record_id": None,
+                "audit_history": [_event("draft_created", user, to_status="draft")],
+            },
+            document_ids=document_ids,
+            signatures=[],
+            alert_recipients=[],
+            submitted_by=user.email,
+        )
         db.add(record)
     record.severity = "medium" if payload.narrative.potential_change else "none"
     commit(db)
@@ -356,9 +561,20 @@ def submit(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> DailyTimeshe
         raise AppError("Add at least one crew labour entry before submitting.", status_code=400)
     _lock_project_day(db, record.project_id, record.work_date)
     _ensure_no_cross_record_conflicts(db, record)
-    audit = [*(details.get("audit_history") or []), _event("submitted_by_foreman", user, from_status="draft", to_status="submitted"), _event("queued_for_review", user, from_status="submitted", to_status="needs_review")]
+    audit = [
+        *(details.get("audit_history") or []),
+        _event("submitted_by_foreman", user, from_status="draft", to_status="submitted"),
+        _event("queued_for_review", user, from_status="submitted", to_status="needs_review"),
+    ]
     record.status = "needs_review"
-    record.details = {**details, "submitted_at": datetime.now(UTC).isoformat(), "audit_history": audit, "review_item": {"type": "potential_change", "status": "open"} if (details.get("narrative") or {}).get("potential_change") else None}
+    record.details = {
+        **details,
+        "submitted_at": datetime.now(UTC).isoformat(),
+        "audit_history": audit,
+        "review_item": {"type": "potential_change", "status": "open"}
+        if (details.get("narrative") or {}).get("potential_change")
+        else None,
+    }
     commit(db)
     db.refresh(record)
     return _read(record)
@@ -370,16 +586,35 @@ def _create_revision(source: FieldRecord, reason: str, user: AuthenticatedUser, 
         raise AppError("Posted daily sheets require a controlled accounting reversal before revision.", status_code=409)
     details.pop("submitted_at", None)
     details.pop("review_item", None)
-    details.update({
-        "version": int(details.get("version", 1)) + 1,
-        "previous_record_id": str(source.id),
-        "revision_reason": reason,
-        "audit_history": [*(details.get("audit_history") or []), _event(action, user, reason=reason, from_status=source.status, to_status="draft")],
-    })
-    return FieldRecord(record_type="daily_timesheet", project_id=source.project_id, work_date=source.work_date, title=source.title, status="draft", severity=source.severity, details=details, document_ids=list(source.document_ids or []), signatures=[], alert_recipients=[], submitted_by=user.email)
+    details.update(
+        {
+            "version": int(details.get("version", 1)) + 1,
+            "previous_record_id": str(source.id),
+            "revision_reason": reason,
+            "audit_history": [
+                *(details.get("audit_history") or []),
+                _event(action, user, reason=reason, from_status=source.status, to_status="draft"),
+            ],
+        }
+    )
+    return FieldRecord(
+        record_type="daily_timesheet",
+        project_id=source.project_id,
+        work_date=source.work_date,
+        title=source.title,
+        status="draft",
+        severity=source.severity,
+        details=details,
+        document_ids=list(source.document_ids or []),
+        signatures=[],
+        alert_recipients=[],
+        submitted_by=user.email,
+    )
 
 
-def decide(db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetAction, user: AuthenticatedUser) -> DailyTimesheetRead:
+def decide(
+    db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetAction, user: AuthenticatedUser
+) -> DailyTimesheetRead:
     _require_management(user)
     record = _get(db, sheet_id, user, for_update=True)
     if action == "reopen":
@@ -394,7 +629,11 @@ def decide(db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetActi
         db.refresh(revision)
         return _read(revision)
 
-    transitions = {"approve": ({"needs_review"}, "approved"), "reject": ({"needs_review"}, "rejected"), "void": ({"draft", "needs_review", "approved", "rejected"}, "void")}
+    transitions = {
+        "approve": ({"needs_review"}, "approved"),
+        "reject": ({"needs_review"}, "rejected"),
+        "void": ({"draft", "needs_review", "approved", "rejected"}, "void"),
+    }
     allowed, target = transitions[action]
     if record.status not in allowed:
         raise AppError(f"A {record.status} daily sheet cannot be {action}d.", status_code=409)
@@ -406,13 +645,21 @@ def decide(db: Session, sheet_id: UUID, action: str, payload: DailyTimesheetActi
     previous = record.status
     event_name = {"approve": "approved", "reject": "rejected", "void": "voided"}[action]
     record.status = target
-    record.details = {**(record.details or {}), "audit_history": [*((record.details or {}).get("audit_history") or []), _event(event_name, user, reason=payload.reason, from_status=previous, to_status=target)]}
+    record.details = {
+        **(record.details or {}),
+        "audit_history": [
+            *((record.details or {}).get("audit_history") or []),
+            _event(event_name, user, reason=payload.reason, from_status=previous, to_status=target),
+        ],
+    }
     commit(db)
     db.refresh(record)
     return _read(record)
 
 
-def create_revision(db: Session, sheet_id: UUID, payload: DailyTimesheetRevision, user: AuthenticatedUser) -> DailyTimesheetRead:
+def create_revision(
+    db: Session, sheet_id: UUID, payload: DailyTimesheetRevision, user: AuthenticatedUser
+) -> DailyTimesheetRead:
     _require_foreman(db, user)
     source = _get(db, sheet_id, user, for_update=True)
     if source.status == "draft":
@@ -433,11 +680,24 @@ def export_csv(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> tuple[st
     rows = ["employee_code,employee_name,classification,cost_code,straight_time,overtime"]
     for line in details.get("labour") or []:
         for split in line.get("splits") or []:
-            values = [line.get("employee_code"), line.get("employee_name"), line.get("classification"), split.get("cost_code"), split.get("straight_time"), split.get("overtime")]
-            rows.append(",".join('"' + str(value or '').replace('"', '""') + '"' for value in values))
+            values = [
+                line.get("employee_code"),
+                line.get("employee_name"),
+                line.get("classification"),
+                split.get("cost_code"),
+                split.get("straight_time"),
+                split.get("overtime"),
+            ]
+            rows.append(",".join('"' + str(value or "").replace('"', '""') + '"' for value in values))
     if record.status == "approved":
         record.status = "exported"
-        record.details = {**details, "audit_history": [*(details.get("audit_history") or []), _event("exported", user, from_status="approved", to_status="exported")]}
+        record.details = {
+            **details,
+            "audit_history": [
+                *(details.get("audit_history") or []),
+                _event("exported", user, from_status="approved", to_status="exported"),
+            ],
+        }
         commit(db)
     return f"daily-timesheet-{record.work_date}-v{details.get('version', 1)}.csv", "\n".join(rows) + "\n"
 
@@ -448,14 +708,182 @@ def post_time_entries(db: Session, sheet_id: UUID, user: AuthenticatedUser) -> D
     if record.status not in {"approved", "exported"}:
         raise AppError("Only approved daily sheets can be posted.", status_code=409)
     details = record.details or {}
+    expected_posting_key = f"daily-timesheet:{record.id}:v{details.get('version', 1)}"
+    existing_post = details.get("production_post")
+    if existing_post:
+        if existing_post.get("posting_key") != expected_posting_key or existing_post.get("project_id") != str(
+            record.project_id
+        ):
+            raise AppError(
+                "The existing production post does not match this daily sheet.",
+                status_code=409,
+            )
+
+        def manifest_uuid(value: object, label: str) -> UUID:
+            try:
+                return UUID(str(value))
+            except (TypeError, ValueError) as error:
+                raise AppError(
+                    f"The existing production post has an invalid {label}.",
+                    status_code=409,
+                ) from error
+
+        report_id = existing_post.get("daily_report_document_id")
+        report = db.get(Document, manifest_uuid(report_id, "daily report ID")) if report_id else None
+        report_metadata = report.metadata_json if report is not None else {}
+        if (
+            report is None
+            or report.project_id != record.project_id
+            or report_metadata.get("source") != "daily_timesheet"
+            or report_metadata.get("daily_timesheet_id") != str(record.id)
+            or int(report_metadata.get("daily_timesheet_version") or 0) != int(details.get("version", 1))
+        ):
+            raise AppError(
+                "The existing production post is missing its generated daily report.",
+                status_code=409,
+            )
+        entry_ids = existing_post.get("time_entry_ids") or []
+        expected_entry_count = sum(len(line.get("splits") or []) for line in details.get("labour") or [])
+        if len(entry_ids) != expected_entry_count or len({str(value) for value in entry_ids}) != len(entry_ids):
+            raise AppError(
+                "The existing production post has an incomplete time-entry manifest.",
+                status_code=409,
+            )
+        for entry_id in entry_ids:
+            entry = db.get(TimeEntry, manifest_uuid(entry_id, "time entry ID"))
+            if entry is None or entry.project_id != record.project_id:
+                raise AppError(
+                    "The existing production post is missing a linked time entry.",
+                    status_code=409,
+                )
+        return _read(record)
     if details.get("posted_at"):
-        raise AppError("This daily sheet has already been posted.", status_code=409)
+        raise AppError(
+            "This legacy daily-sheet post requires management review before conversion.",
+            status_code=409,
+        )
+    project = db.scalar(select(Project).where(Project.id == record.project_id).with_for_update())
+    if project is None:
+        raise AppError("Job not found.", status_code=404)
+    if project_safety_launch.read(project) is None:
+        _lock_project_day(db, record.project_id, record.work_date)
+        _ensure_no_cross_record_conflicts(db, record)
+        for line in details.get("labour") or []:
+            for split in line.get("splits") or []:
+                db.add(
+                    TimeEntry(
+                        employee_id=UUID(line["employee_id"]),
+                        project_id=record.project_id,
+                        cost_code=split["cost_code"],
+                        work_date=record.work_date,
+                        regular_hours=split["straight_time"],
+                        overtime_hours=split["overtime"],
+                        entry_type="foreman_crew",
+                        notes=f"Daily sheet {record.id} v{details.get('version', 1)}",
+                        status="approved",
+                        submitted_by=record.submitted_by,
+                    )
+                )
+        posted_at = datetime.now(UTC).isoformat()
+        record.details = {
+            **details,
+            "posted_at": posted_at,
+            "posted_by": user.email,
+            "audit_history": [
+                *(details.get("audit_history") or []),
+                _event(
+                    "posted",
+                    user,
+                    from_status=record.status,
+                    to_status=record.status,
+                ),
+            ],
+        }
+        commit(db)
+        db.refresh(record)
+        return _read(record)
+    project_production_records.require_posting_ready(db, project)
     _lock_project_day(db, record.project_id, record.work_date)
     _ensure_no_cross_record_conflicts(db, record)
+    folder_paths = project_production_records.ensure_workspace_folders(project)
+    version = int(details.get("version", 1))
+    shift = str(details.get("shift") or "day")
+    stem = f"{record.work_date}_{shift}_v{version}"
+    daily_report_path = (
+        f"{folder_paths[project_production_records.PRODUCTION_FOLDER_RELATIVE_PATH + '/Daily_Reports']}/{stem}.pdf"
+    )
+    report = Document(
+        title=f"{project.project_number} daily report {record.work_date} {shift} v{version}",
+        category="other",
+        status="current",
+        project_id=project.id,
+        description="Approved IHOS daily production report; internal workspace reference only.",
+        revision=str(version),
+        issue_date=record.work_date,
+        metadata_json={
+            "source": "daily_timesheet",
+            "daily_timesheet_id": str(record.id),
+            "daily_timesheet_version": version,
+            "generated_pdf_path": f"/api/v1/daily-timesheets/{record.id}/export.pdf",
+            "workspace_path": daily_report_path,
+            "external_folder_created": False,
+        },
+    )
+    db.add(report)
+    time_entries: list[TimeEntry] = []
     for line in details.get("labour") or []:
         for split in line.get("splits") or []:
-            db.add(TimeEntry(employee_id=UUID(line["employee_id"]), project_id=record.project_id, cost_code=split["cost_code"], work_date=record.work_date, regular_hours=split["straight_time"], overtime_hours=split["overtime"], entry_type="foreman_crew", notes=f"Daily sheet {record.id} v{details.get('version', 1)}", status="approved", submitted_by=record.submitted_by))
-    record.details = {**details, "posted_at": datetime.now(UTC).isoformat(), "posted_by": user.email, "audit_history": [*(details.get("audit_history") or []), _event("posted", user, from_status=record.status, to_status=record.status)]}
+            entry = TimeEntry(
+                employee_id=UUID(line["employee_id"]),
+                project_id=record.project_id,
+                cost_code=split["cost_code"],
+                work_date=record.work_date,
+                regular_hours=split["straight_time"],
+                overtime_hours=split["overtime"],
+                entry_type="foreman_crew",
+                notes=f"Daily sheet {record.id} v{version}",
+                status="approved",
+                submitted_by=record.submitted_by,
+            )
+            time_entries.append(entry)
+            db.add(entry)
+    db.flush()
+    posted_at = datetime.now(UTC).isoformat()
+    photo_values = details.get("photo_document_ids")
+    if photo_values is None:
+        ticket_set = {str(value) for value in details.get("ticket_document_ids") or []}
+        photo_values = [value for value in record.document_ids or [] if str(value) not in ticket_set]
+    photo_ids = [str(value) for value in photo_values]
+    ticket_ids = [str(value) for value in details.get("ticket_document_ids") or []]
+    production_post = {
+        "schema_version": 1,
+        "posting_key": expected_posting_key,
+        "project_id": str(project.id),
+        "job_number": project.project_number,
+        "status": "posted",
+        "folder_path": folder_paths[project_production_records.PRODUCTION_FOLDER_RELATIVE_PATH],
+        "daily_report_document_id": str(report.id),
+        "daily_report_path": daily_report_path,
+        "photo_document_ids": photo_ids,
+        "photo_folder_path": f"{folder_paths[project_production_records.PRODUCTION_FOLDER_RELATIVE_PATH + '/Photos']}/{record.work_date}_{shift}",
+        "ticket_document_ids": ticket_ids,
+        "ticket_folder_path": f"{folder_paths[project_production_records.PRODUCTION_FOLDER_RELATIVE_PATH + '/Tickets']}/{record.work_date}_{shift}",
+        "quantity_summary": details.get("cost_code_totals") or {},
+        "time_entry_ids": [str(item.id) for item in time_entries],
+        "posted_at": posted_at,
+        "posted_by": user.email,
+        "external_folder_created": False,
+    }
+    record.details = {
+        **details,
+        "posted_at": posted_at,
+        "posted_by": user.email,
+        "production_post": production_post,
+        "audit_history": [
+            *(details.get("audit_history") or []),
+            _event("posted", user, from_status=record.status, to_status=record.status),
+        ],
+    }
     commit(db)
     db.refresh(record)
     return _read(record)

@@ -149,6 +149,12 @@ export type ProjectLaunchDashboard = {
   safety_folder_status: string;
   portal_access_status: string;
   portal_assignment_count: number;
+  production_posting_status: "blocked" | "ready";
+  production_blockers: string[];
+  daily_sheet_count: number;
+  production_post_count: number;
+  latest_daily_sheet_status: string;
+  field_production_folder_status: string;
   document_count: number;
   award_baseline_source: string | null;
   award_pricing_subtotal: number;

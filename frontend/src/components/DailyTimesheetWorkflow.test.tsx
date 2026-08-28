@@ -20,7 +20,7 @@ const bootstrap = {
 };
 
 describe("DailyTimesheetWorkflow", () => {
-  beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); vi.mocked(dailyTimesheetApi.bootstrap).mockResolvedValue(bootstrap); vi.mocked(dailyTimesheetApi.save).mockResolvedValue({ id: "sheet-1", status: "draft", version: 1, project_id: "job-1", work_date: "2026-08-02", shift: "day", details: {}, document_ids: [], submitted_by: null, created_at: "", updated_at: "" }); });
+  beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); vi.mocked(dailyTimesheetApi.bootstrap).mockResolvedValue(bootstrap); vi.mocked(dailyTimesheetApi.save).mockResolvedValue({ id: "sheet-1", status: "draft", version: 1, project_id: "job-1", work_date: "2026-08-02", shift: "day", details: {}, document_ids: [], ticket_document_ids: [], submitted_by: null, created_at: "", updated_at: "" }); });
 
   it("loads assigned crew, filters estimate cost codes, and calculates ST/OT running totals", async () => {
     render(<DailyTimesheetWorkflow />);
@@ -50,6 +50,14 @@ describe("DailyTimesheetWorkflow", () => {
     fireEvent.change(screen.getByLabelText("Existing receipt record"), { target: { value: "receipt-1" } });
     expect(screen.getByLabelText("Existing receipt record")).toHaveValue("receipt-1");
     expect(screen.getByText(/Mixed lines may use separate job cost codes/)).toBeInTheDocument();
+  });
+
+  it("keeps field photos and ticket photos as separate multi-image collections", async () => {
+    render(<DailyTimesheetWorkflow />);
+    await screen.findByText("Foreman Daily Time Sheet");
+
+    expect(screen.getByText("Field production photos")).toBeInTheDocument();
+    expect(screen.getByText("Delivery / disposal ticket photos")).toBeInTheDocument();
   });
 
   it("restores totals after refresh and updates the existing server draft", async () => {

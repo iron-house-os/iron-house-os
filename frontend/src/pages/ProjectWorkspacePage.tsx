@@ -841,6 +841,11 @@ function ProjectLaunchDashboardCard({
           value={label(dashboard.safety_release_status)}
           detail={`${dashboard.safety_requirement_count} record requirement(s) · folder ${label(dashboard.safety_folder_status).toLowerCase()} · portal ${label(dashboard.portal_access_status).toLowerCase()} (${dashboard.portal_assignment_count} assignment(s))`}
         />
+        <LaunchMetric
+          label="Field production"
+          value={label(dashboard.production_posting_status)}
+          detail={`${dashboard.production_post_count} of ${dashboard.daily_sheet_count} daily sheet(s) posted · latest ${label(dashboard.latest_daily_sheet_status).toLowerCase()} · folder ${label(dashboard.field_production_folder_status).toLowerCase()}${dashboard.production_blockers.length ? ` · blockers: ${dashboard.production_blockers.map(label).join(", ")}` : ""}`}
+        />
         <LaunchMetric label="Documents" value={String(dashboard.document_count)} detail="Project-linked records only" />
         <LaunchMetric
           label="Award pricing baseline"
