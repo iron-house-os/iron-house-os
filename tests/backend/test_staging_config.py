@@ -78,7 +78,7 @@ def test_live_staging_deploy_is_isolated_and_keeps_secrets_on_host() -> None:
 def test_release_workflow_uses_disposable_staging_and_immutable_evidence() -> None:
     workflow = (ROOT / ".github/workflows/release-readiness.yml").read_text()
 
-    assert workflow.count('- ".github/workflows/staging-deploy.yml"') == 2
+    assert workflow.count('- ".github/workflows/**"') == 2
     assert "Disposable staging smoke, rollback, and evidence" in workflow
     assert "scripts/staging-smoke-test.sh" in workflow
     assert "STAGING_SYNTHETIC_DATA: \"true\"" in workflow
