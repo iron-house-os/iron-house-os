@@ -11,7 +11,7 @@ from app.models.finance import FinancialEntry
 from app.models.project import Project, ProjectStartChecklistItem
 from app.schemas.project import ProjectStatus
 from app.schemas.project_launch import ProjectLaunchDashboard, ProjectLaunchNextControl
-from app.services import project_safety_launch
+from app.services import project_production_records, project_safety_launch
 
 SAFETY_RECORD_TYPES = (
     "safety_permit",
@@ -41,8 +41,7 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
 
     bids = list(db.scalars(select(Bid).where(Bid.project_id == project_id)).all())
     priced_estimate_available = any(
-        bid.total_amount is not None or bool((bid.bid_json or {}).get("summary"))
-        for bid in bids
+        bid.total_amount is not None or bool((bid.bid_json or {}).get("summary")) for bid in bids
     )
 
     budget_rows = list(
@@ -76,9 +75,21 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
     for record_type, count in safety_rows:
         safety_counts[str(record_type)] = int(count)
 
-    document_count = int(
-        db.scalar(select(func.count(Document.id)).where(Document.project_id == project_id)) or 0
+    daily_sheets = list(
+        db.scalars(
+            select(FieldRecord)
+            .where(
+                FieldRecord.project_id == project_id,
+                FieldRecord.record_type == "daily_timesheet",
+                FieldRecord.status != "void",
+            )
+            .order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc())
+        ).all()
     )
+    production_post_count = sum(bool((item.details or {}).get("production_post")) for item in daily_sheets)
+    production_blockers = project_production_records.posting_blockers(db, project)
+
+    document_count = int(db.scalar(select(func.count(Document.id)).where(Document.project_id == project_id)) or 0)
     metadata = project.metadata_json or {}
     safety_launch = project_safety_launch.read(project)
     award_baseline = metadata.get("award_pricing_baseline") or {}
@@ -90,9 +101,7 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
     return ProjectLaunchDashboard(
         project_id=project.id,
         job_number=project.project_number,
-        mobilization_status=(
-            "ready" if total_count > 0 and completed_count == total_count else "not_ready"
-        ),
+        mobilization_status=("ready" if total_count > 0 and completed_count == total_count else "not_ready"),
         checklist_completed_count=completed_count,
         checklist_total_count=total_count,
         next_incomplete_control=(
@@ -111,28 +120,22 @@ def get_project_launch_dashboard(db: Session, project_id: UUID) -> ProjectLaunch
         po_request_count=len(po_rows),
         pending_po_request_count=sum(row.status == "pending_approval" for row in po_rows),
         safety_record_counts=safety_counts,
-        safety_release_status=(
-            safety_launch.release_status if safety_launch else "not_initialized"
-        ),
-        safety_requirement_count=(
-            len(safety_launch.record_requirements) if safety_launch else 0
-        ),
-        safety_folder_status=(
-            safety_launch.folder_status if safety_launch else "not_initialized"
-        ),
-        portal_access_status=(
-            safety_launch.portal_access.status if safety_launch else "not_initialized"
-        ),
-        portal_assignment_count=(
-            len(safety_launch.portal_access.assignments) if safety_launch else 0
-        ),
+        safety_release_status=(safety_launch.release_status if safety_launch else "not_initialized"),
+        safety_requirement_count=(len(safety_launch.record_requirements) if safety_launch else 0),
+        safety_folder_status=(safety_launch.folder_status if safety_launch else "not_initialized"),
+        portal_access_status=(safety_launch.portal_access.status if safety_launch else "not_initialized"),
+        portal_assignment_count=(len(safety_launch.portal_access.assignments) if safety_launch else 0),
+        production_posting_status="blocked" if production_blockers else "ready",
+        production_blockers=[item["code"] for item in production_blockers],
+        daily_sheet_count=len(daily_sheets),
+        production_post_count=production_post_count,
+        latest_daily_sheet_status=(daily_sheets[0].status if daily_sheets else "not_started"),
+        field_production_folder_status=(project_production_records.workspace_folder_status(project)),
         document_count=document_count,
         award_baseline_source=award_baseline.get("source_quote_number"),
         award_pricing_subtotal=round(float(award_baseline.get("pricing_subtotal") or 0), 2),
         award_cost_budget_status=str(award_baseline.get("cost_budget_status") or "not_started"),
-        uncoded_award_line_count=sum(
-            not line.get("cost_code") for line in (cost_budget_lines or award_lines)
-        ),
+        uncoded_award_line_count=sum(not line.get("cost_code") for line in (cost_budget_lines or award_lines)),
         procurement_requirement_count=len(requirements),
         procurement_plan_status=str(procurement_plan.get("status") or "not_started"),
     )

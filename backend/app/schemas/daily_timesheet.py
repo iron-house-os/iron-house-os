@@ -36,7 +36,9 @@ class CrewLabourLine(BaseModel):
         codes = [item.cost_code.strip().upper() for item in self.splits]
         if len(codes) != len(set(codes)):
             raise ValueError("An employee cannot have duplicate cost-code splits.")
-        intervals = sorted((item.start_time, item.end_time) for item in self.splits if item.start_time and item.end_time)
+        intervals = sorted(
+            (item.start_time, item.end_time) for item in self.splits if item.start_time and item.end_time
+        )
         if any(current[0] < previous[1] for previous, current in zip(intervals, intervals[1:])):
             raise ValueError("An employee cannot have overlapping timed splits.")
         if sum(item.straight_time + item.overtime for item in self.splits) > 24:
@@ -104,6 +106,7 @@ class DailyTimesheetWrite(BaseModel):
     weather: str = Field(default="", max_length=500)
     site_conditions: str = Field(default="", max_length=2000)
     document_ids: list[UUID] = Field(default_factory=list)
+    ticket_document_ids: list[UUID] = Field(default_factory=list)
     labour: list[CrewLabourLine] = Field(default_factory=list)
     equipment: list[EquipmentLine] = Field(default_factory=list)
     materials: list[MaterialProductionLine] = Field(default_factory=list)
@@ -117,6 +120,12 @@ class DailyTimesheetWrite(BaseModel):
         equipment_keys = [(item.source, item.resource_id) for item in self.equipment]
         if len(equipment_keys) != len(set(equipment_keys)):
             raise ValueError("Duplicate equipment usage is not allowed on a daily sheet.")
+        if len(self.document_ids) != len(set(self.document_ids)):
+            raise ValueError("Duplicate field photos are not allowed on a daily sheet.")
+        if len(self.ticket_document_ids) != len(set(self.ticket_document_ids)):
+            raise ValueError("Duplicate ticket evidence is not allowed on a daily sheet.")
+        if set(self.document_ids) & set(self.ticket_document_ids):
+            raise ValueError("One attachment cannot be both a field photo and ticket evidence.")
         return self
 
 
@@ -137,6 +146,7 @@ class DailyTimesheetRead(BaseModel):
     shift: Literal["day", "night"]
     details: dict
     document_ids: list[UUID]
+    ticket_document_ids: list[UUID] = Field(default_factory=list)
     submitted_by: str | None
     created_at: datetime
     updated_at: datetime
