@@ -16,6 +16,12 @@ from app.tools.bennett_cost_budget_staging_pilot import (
     _parser,
     run_pilot,
 )
+from app.tools.bennett_procurement_staging_pilot import (
+    EXPECTED_REQUIREMENTS,
+    PROCUREMENT_REQUEST,
+    _parser as procurement_parser,
+    run_pilot as run_procurement_pilot,
+)
 
 
 def test_cli_defaults_to_secure_live_staging_origin() -> None:
@@ -26,7 +32,7 @@ def test_cli_defaults_to_secure_live_staging_origin() -> None:
 
 
 class FakeApi:
-    def __init__(self, *, already_budgeted: bool = False) -> None:
+    def __init__(self, *, already_budgeted: bool = False, already_planned: bool = False) -> None:
         self.calls: list[tuple[str, str, dict[str, Any] | None, int]] = []
         self.project = {
             "id": PROJECT_ID,
@@ -75,8 +81,10 @@ class FakeApi:
             "issued_at": None,
         }
         self.entries: list[dict[str, Any]] = []
-        if already_budgeted:
+        if already_budgeted or already_planned:
             self._apply_budget()
+        if already_planned:
+            self._apply_procurement()
 
     def _apply_budget(self) -> None:
         if self.entries:
@@ -119,6 +127,46 @@ class FakeApi:
             for code, values in EXPECTED_CODES.items()
         ]
 
+    def _apply_procurement(self) -> None:
+        positions = {
+            "CON-001": "line-001",
+            "EQP-001": "line-002",
+            "EQP-002": "line-003",
+            "TRK-001": "line-004",
+        }
+        names = {"4100": "Concrete restoration", "5100": "Small equipment rental", "5110": "Skid steer / hydraulic attachment", "6100": "Trucking, disposal and material hauling"}
+        self.project["metadata"]["procurement_plan"] = {
+            "source_quote_id": QUOTE_ID,
+            "source_estimate_workspace_id": WORKSPACE_ID,
+            "job_number": JOB_NUMBER,
+            "status": "draft",
+            "automatic_commitment": False,
+            "requirements": [
+                {
+                    **expected,
+                    "requirement_id": f"estimate-procurement:{WORKSPACE_ID}:{expected['source_code']}",
+                    "source_type": "estimate_workspace",
+                    "source_estimate_workspace_id": WORKSPACE_ID,
+                    "source_budget_key": f"estimate-budget:{WORKSPACE_ID}:{positions[expected['source_code']]}",
+                    "job_number": JOB_NUMBER,
+                    "cost_code_name": names[expected["cost_code"]],
+                    "description": request["description"],
+                    "specification": request.get("specification"),
+                    "vendor_id": None,
+                    "vendor_quote_reference": None,
+                    "required_on_site_date": None,
+                    "approval": None,
+                    "po_number": None,
+                    "commitment_created": False,
+                }
+                for expected, request in zip(
+                    EXPECTED_REQUIREMENTS,
+                    PROCUREMENT_REQUEST["procurement_requirements"],
+                    strict=True,
+                )
+            ],
+        }
+
     def _financial_summary(self) -> dict[str, Any]:
         return {
             "project_id": PROJECT_ID,
@@ -155,13 +203,17 @@ class FakeApi:
             return self._financial_summary()
         if path == f"/api/v1/finance/projects/{PROJECT_ID}/import-estimate":
             assert method == "POST"
-            assert body == BUDGET_REQUEST
             self._apply_budget()
+            if body == PROCUREMENT_REQUEST:
+                self._apply_procurement()
+            else:
+                assert body == BUDGET_REQUEST
             return self._financial_summary()
         if path == f"/api/v1/projects/{PROJECT_ID}/launch-dashboard":
             return {
                 "job_number": JOB_NUMBER,
                 "mobilization_status": "not_ready",
+                "checklist_completed_count": 0,
                 "baseline_budget_total": "26660.93",
                 "budget_entry_count": 5,
                 "award_baseline_source": "Q-2026-002",
@@ -169,7 +221,11 @@ class FakeApi:
                 "award_cost_budget_status": "allocated",
                 "uncoded_award_line_count": 0,
                 "procurement_plan_status": "draft",
+                "procurement_requirement_count": len(
+                    self.project["metadata"]["procurement_plan"]["requirements"]
+                ),
                 "po_request_count": 0,
+                "pending_po_request_count": 0,
             }
         if path == "/api/v1/daily-timesheets/bootstrap":
             return {
@@ -254,6 +310,72 @@ def test_budget_pilot_fails_closed_on_existing_commitment() -> None:
         run_pilot(
             api,
             operator="GitHub staging budget",
+            email="admin@ironhousecontracting.com",
+            password="not-recorded",
+        )
+
+    assert not any(path.endswith("/import-estimate") for path, *_ in api.calls)
+
+
+def test_procurement_cli_defaults_to_secure_live_staging_origin() -> None:
+    args = procurement_parser().parse_args(["--operator", "GitHub staging procurement"])
+
+    assert args.base_url == STAGING_BASE_URL
+    assert args.base_url == "https://staging.os.ironhousecivil.com"
+
+
+@pytest.mark.parametrize(
+    ("already_planned", "expected_action"),
+    [
+        (False, "replace_safe_quote_procurement_shell"),
+        (True, "reuse_existing_procurement_plan"),
+    ],
+)
+def test_procurement_pilot_is_exact_safe_and_idempotent(
+    already_planned: bool,
+    expected_action: str,
+) -> None:
+    api = FakeApi(already_budgeted=True, already_planned=already_planned)
+
+    report = run_procurement_pilot(
+        api,
+        operator="GitHub staging procurement",
+        email="admin@ironhousecontracting.com",
+        password="not-recorded",
+    )
+
+    assert report["status"] == "passed"
+    assert report["approval_boundary"] == "staging_procurement_planning_only_no_commitments"
+    assert report["transition_action"] == expected_action
+    assert report["project"]["job_number"] == JOB_NUMBER
+    assert report["budget"] == {"total": "26660.93", "entry_count": 5}
+    assert report["procurement"]["status"] == "draft"
+    assert report["procurement"]["requirement_count"] == 4
+    assert report["procurement"]["ready_mix_order_quantity_confirmed"] is False
+    assert report["idempotent_retry"] is True
+    assert report["vendors_selected"] == 0
+    assert report["commitments_created"] == 0
+    assert report["po_requests_created"] == 0
+    assert report["actuals_created"] == 0
+    assert report["checklist_items_completed"] == 0
+    assert report["external_issuance_performed"] is False
+    assert report["production_mutation_performed"] is False
+    assert "not-recorded" not in str(report)
+
+    imports = [call for call in api.calls if call[0].endswith("/import-estimate")]
+    assert len(imports) == 2
+    assert all(call[1] == "POST" and call[2] == PROCUREMENT_REQUEST for call in imports)
+    assert not any("purchase-orders" in path or "quickbooks" in path for path, *_ in api.calls)
+
+
+def test_procurement_pilot_fails_closed_on_vendor_selection() -> None:
+    api = FakeApi(already_planned=True)
+    api.project["metadata"]["procurement_plan"]["requirements"][1]["vendor_id"] = "vendor-1"
+
+    with pytest.raises(ImportValidationError, match="decision or commitment"):
+        run_procurement_pilot(
+            api,
+            operator="GitHub staging procurement",
             email="admin@ironhousecontracting.com",
             password="not-recorded",
         )

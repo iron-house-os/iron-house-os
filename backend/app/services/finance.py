@@ -138,6 +138,8 @@ def import_estimate_budget(db: Session, project_id: UUID, payload: EstimateBudge
                 "workspace_id": str(bid.id),
                 "source_code": spec["source_code"],
                 "cost_code_name": spec["cost_code_name"],
+                "scope_quantity": spec["scope_quantity"],
+                "scope_unit": spec["scope_unit"],
             },
             "created_by": user.email,
         }
@@ -158,6 +160,8 @@ def import_estimate_budget(db: Session, project_id: UUID, payload: EstimateBudge
             "category": spec["category"],
             "description": spec["description"],
             "amount": f'{spec["amount"]:.2f}',
+            "scope_quantity": spec["scope_quantity"],
+            "scope_unit": spec["scope_unit"],
         }
         for spec in specs
     ]
@@ -178,6 +182,13 @@ def import_estimate_budget(db: Session, project_id: UUID, payload: EstimateBudge
         }
     metadata["project_cost_codes"] = list(cost_codes.values())
     project.metadata_json = metadata
+    _apply_estimate_procurement_plan(
+        project,
+        bid,
+        specs,
+        payload,
+        actor_email=user.email,
+    )
     summary = bid.bid_json["summary"]
     if project.contract_value is None and summary.get("final_price"):
         project.contract_value = float(summary["final_price"])
@@ -204,6 +215,8 @@ def _estimate_budget_specs(bid: Bid, payload: EstimateBudgetImportRequest) -> li
         description: str,
         override_code: str | None = None,
         override_name: str | None = None,
+        scope_quantity: object = None,
+        scope_unit: object = None,
     ) -> None:
         numeric = round(float(amount or 0), 2)
         if numeric <= 0:
@@ -221,6 +234,8 @@ def _estimate_budget_specs(bid: Bid, payload: EstimateBudgetImportRequest) -> li
                 "category": category,
                 "amount": numeric,
                 "description": description.strip(),
+                "scope_quantity": str(scope_quantity) if scope_quantity is not None else None,
+                "scope_unit": str(scope_unit).strip() if scope_unit is not None else None,
             }
         )
 
@@ -233,6 +248,8 @@ def _estimate_budget_specs(bid: Bid, payload: EstimateBudgetImportRequest) -> li
             category=_category(line.get("item_type")),
             amount=line.get("direct_cost"),
             description=str(line.get("description") or "Estimate budget line"),
+            scope_quantity=line.get("quantity"),
+            scope_unit=line.get("unit"),
         )
 
     risk_amount = float(summary.get("risk_cost") or 0)
@@ -270,6 +287,135 @@ def _estimate_budget_specs(bid: Bid, payload: EstimateBudgetImportRequest) -> li
     if not specs:
         raise HTTPException(status_code=400, detail="The selected estimate has no cost basis to import.")
     return specs
+
+
+def _apply_estimate_procurement_plan(
+    project: Project,
+    bid: Bid,
+    specs: list[dict],
+    payload: EstimateBudgetImportRequest,
+    *,
+    actor_email: str,
+) -> None:
+    requested = payload.procurement_requirements
+    if not requested:
+        return
+    if project.status != "awarded" or not project.project_number:
+        raise HTTPException(
+            status_code=409,
+            detail="Procurement planning requires an awarded project with a permanent job number.",
+        )
+    metadata = dict(project.metadata_json or {})
+    plan = dict(metadata.get("procurement_plan") or {})
+    if plan and plan.get("status") not in {None, "draft"}:
+        raise HTTPException(
+            status_code=409,
+            detail="The procurement plan has progressed beyond draft and cannot be regenerated.",
+        )
+    if plan.get("automatic_commitment") not in {None, False}:
+        raise HTTPException(
+            status_code=409,
+            detail="Automatic procurement commitments must be disabled before plan generation.",
+        )
+    source_workspace_id = plan.get("source_estimate_workspace_id")
+    if source_workspace_id and str(source_workspace_id) != str(bid.id):
+        raise HTTPException(
+            status_code=409,
+            detail="A procurement plan from another estimate workspace already exists.",
+        )
+    protected_fields = (
+        "vendor_id",
+        "vendor_quote_reference",
+        "required_on_site_date",
+        "approval",
+        "po_number",
+    )
+    safe_statuses = {None, "not_started", "needs_quantity_confirmation"}
+    for requirement in plan.get("requirements") or []:
+        if (
+            requirement.get("status") not in safe_statuses
+            or requirement.get("commitment_created") is True
+            or any(requirement.get(field) is not None for field in protected_fields)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="The procurement plan contains a decision or commitment and cannot be regenerated.",
+            )
+
+    by_source: dict[str, dict] = {}
+    for spec in specs:
+        source_code = spec["source_code"]
+        if source_code in by_source:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Estimate source code {source_code} is not unique.",
+            )
+        by_source[source_code] = spec
+    normalized_requests = [item.model_copy(update={"source_code": item.source_code.upper()}) for item in requested]
+    source_codes = [item.source_code for item in normalized_requests]
+    if len(source_codes) != len(set(source_codes)):
+        raise HTTPException(status_code=400, detail="Procurement source codes must be unique.")
+
+    requirements = []
+    for item in normalized_requests:
+        spec = by_source.get(item.source_code)
+        if spec is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Procurement source code {item.source_code} is not in the selected estimate budget.",
+            )
+        requirements.append(
+            {
+                "requirement_id": f"estimate-procurement:{bid.id}:{item.source_code}",
+                "source_type": "estimate_workspace",
+                "source_estimate_workspace_id": str(bid.id),
+                "source_budget_key": spec["source_key"],
+                "source_code": item.source_code,
+                "job_number": project.project_number,
+                "cost_code": spec["cost_code"],
+                "cost_code_name": spec["cost_code_name"],
+                "category": item.category,
+                "description": item.description,
+                "scope_quantity": spec["scope_quantity"],
+                "scope_unit": spec["scope_unit"],
+                "order_quantity": (
+                    str(item.order_quantity.normalize())
+                    if item.order_quantity is not None
+                    else None
+                ),
+                "order_unit": item.order_unit,
+                "order_quantity_status": item.order_quantity_status,
+                "specification": item.specification,
+                "budget_basis": f'{spec["amount"]:.2f}',
+                "budget_basis_type": "source_estimate_line_cost_not_authorized_spend",
+                "status": (
+                    "needs_quantity_confirmation"
+                    if item.order_quantity_status == "needs_confirmation"
+                    else "not_started"
+                ),
+                "vendor_id": None,
+                "vendor_quote_reference": None,
+                "required_on_site_date": None,
+                "approval": None,
+                "po_number": None,
+                "commitment_created": False,
+            }
+        )
+    plan.update(
+        {
+            "source_quote_id": (metadata.get("award_pricing_baseline") or {}).get(
+                "source_quote_id"
+            ),
+            "source_estimate_workspace_id": str(bid.id),
+            "job_number": project.project_number,
+            "status": "draft",
+            "requirements": requirements,
+            "generated_by": actor_email,
+            "automatic_commitment": False,
+        }
+    )
+    metadata["procurement_plan"] = plan
+    project.metadata_json = metadata
 
 
 def project_summary(db: Session, project_id: UUID, user: AuthenticatedUser) -> ProjectFinancialSummary:

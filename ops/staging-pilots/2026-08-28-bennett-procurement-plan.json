@@ -1,0 +1,88 @@
+{
+  "issue": 375,
+  "parent_issues": [268, 314, 373],
+  "environment": "staging",
+  "source": "bennett_strata_issue_314",
+  "source_revision": "2026-08-27-final",
+  "trigger": "human merge of the exact Build 230 pull request followed by a successful exact-release staging deployment",
+  "approval_scope": "seed four exact source-linked procurement planning requirements for staging job IH2026002",
+  "exact_records": {
+    "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+    "job_number": "IH2026002",
+    "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+    "quote_id": "8f854940-e710-45c2-aae4-7d5706c3a9e2",
+    "quote_number": "Q-2026-002"
+  },
+  "original_cost_budget": "26660.93",
+  "planning_requirements": [
+    {
+      "source_code": "CON-001",
+      "cost_code": "4100",
+      "category": "material",
+      "description": "Ready-mix concrete planning requirement",
+      "scope_quantity": "108.6",
+      "scope_unit": "m2",
+      "order_quantity": null,
+      "order_unit": "m3",
+      "order_quantity_status": "needs_confirmation",
+      "budget_basis": "19860.93",
+      "budget_basis_type": "source_estimate_line_cost_not_authorized_spend"
+    },
+    {
+      "source_code": "EQP-001",
+      "cost_code": "5100",
+      "category": "rental",
+      "description": "14 in cutoff saw including blade wear and consumables",
+      "order_quantity": "1",
+      "order_unit": "day",
+      "order_quantity_status": "planning_basis",
+      "budget_basis": "200.00",
+      "budget_basis_type": "source_estimate_line_cost_not_authorized_spend"
+    },
+    {
+      "source_code": "EQP-002",
+      "cost_code": "5110",
+      "category": "rental",
+      "description": "Skid steer with hydraulic hammer",
+      "order_quantity": "1",
+      "order_unit": "day",
+      "order_quantity_status": "planning_basis",
+      "budget_basis": "1100.00",
+      "budget_basis_type": "source_estimate_line_cost_not_authorized_spend"
+    },
+    {
+      "source_code": "TRK-001",
+      "cost_code": "6100",
+      "category": "trucking",
+      "description": "Tandem allowance for concrete disposal",
+      "order_quantity": "1",
+      "order_unit": "LS",
+      "order_quantity_status": "planning_basis",
+      "budget_basis": "750.00",
+      "budget_basis_type": "source_estimate_line_cost_not_authorized_spend"
+    }
+  ],
+  "excluded_allowance": {
+    "source_code": "RISK",
+    "amount": "4750.00",
+    "reason": "Subgrade and buried deficiencies are an original-budget allowance, not an authorized procurement requirement."
+  },
+  "permitted_actions": [
+    "authenticate through the live HTTPS staging origin",
+    "replace the safe quote-derived procurement shell with four deterministic planning requirements",
+    "record exact estimate, budget, job and cost-code provenance",
+    "repeat generation to prove stable identities and values",
+    "upload immutable evidence retained for 90 days"
+  ],
+  "prohibited_actions": [
+    "select or contact vendors",
+    "infer or confirm the ready-mix order quantity",
+    "set required-on-site dates or approve spend",
+    "book rentals or trucking",
+    "create a commitment, purchase order, actual cost, invoice or accounting export",
+    "mark mobilization ready or complete a project-start checklist item",
+    "issue or externally send the quote",
+    "mutate production",
+    "change DNS, certificates, secrets, backups, authentication or infrastructure"
+  ]
+}
