@@ -720,7 +720,7 @@ function ProjectDetail({
   onInvoicePackageGenerated: () => Promise<void>;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div className="rounded-md border border-iron-100 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -952,7 +952,7 @@ function ProjectSafetyLaunchCard({
   }
 
   return (
-    <section aria-label="Project safety and crew release" className="rounded-md border border-brand-gold/40 bg-white p-5">
+    <section aria-label="Project safety and crew release" className="min-w-0 rounded-md border border-brand-gold/40 bg-white p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -985,7 +985,7 @@ function ProjectSafetyLaunchCard({
           const expectedRecordType = safetyRecordTypeByRequirement[item.code];
           const recordOptions = controls.record_options.filter((record) => record.record_type === expectedRecordType);
           return (
-            <fieldset key={item.code} className="rounded-md border border-iron-100 p-4">
+            <fieldset key={item.code} className="min-w-0 rounded-md border border-iron-100 p-4">
               <legend className="px-1 text-sm font-semibold text-iron-950">{definition?.label ?? label(item.code)}</legend>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
                 <Field label="Applicability">
@@ -1031,8 +1031,8 @@ function ProjectSafetyLaunchCard({
               ) : null}
 
               {item.applicability_status === "applicable" ? (
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  <div>
+                <div className="mt-3 grid min-w-0 gap-3 2xl:grid-cols-2">
+                  <div className="min-w-0">
                     <div className="text-xs font-semibold uppercase tracking-wide text-iron-500">Current project evidence</div>
                     {controls.evidence_documents.length ? (
                       <div className="mt-2 max-h-40 space-y-2 overflow-y-auto rounded-md border border-iron-100 p-3">
@@ -1059,7 +1059,7 @@ function ProjectSafetyLaunchCard({
                       value={item.record_id ?? ""}
                       disabled={saving || !expectedRecordType}
                       onChange={(event) => updateRequirement(item.code, { record_id: event.target.value || null })}
-                      className="mt-2 w-full rounded-md border border-iron-100 px-3 py-2 text-sm disabled:bg-iron-50"
+                      className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm disabled:bg-iron-50"
                     >
                       <option value="">No supporting record selected</option>
                       {recordOptions.map((record) => (
@@ -1074,8 +1074,8 @@ function ProjectSafetyLaunchCard({
         })}
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <fieldset className="rounded-md border border-iron-100 p-4">
+      <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-2">
+        <fieldset className="min-w-0 rounded-md border border-iron-100 p-4">
           <legend className="px-1 text-sm font-semibold text-iron-950">Controlled crew access</legend>
           <Field label="Project portal status">
             <select
@@ -1083,7 +1083,7 @@ function ProjectSafetyLaunchCard({
               value={portalStatus}
               disabled={saving}
               onChange={(event) => setPortalStatus(event.target.value as typeof portalStatus)}
-              className="mt-2 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
             >
               <option value="not_started">Not started</option>
               <option value="active">Active</option>
@@ -1112,7 +1112,7 @@ function ProjectSafetyLaunchCard({
           </div>
         </fieldset>
 
-        <fieldset className="rounded-md border border-iron-100 p-4">
+        <fieldset className="min-w-0 rounded-md border border-iron-100 p-4">
           <legend className="px-1 text-sm font-semibold text-iron-950">Human release decision</legend>
           <Field label="Safety release status">
             <select
@@ -1124,7 +1124,7 @@ function ProjectSafetyLaunchCard({
                 setReleaseStatus(value);
                 if (value !== "ready") setReleaseConfirmation(false);
               }}
-              className="mt-2 w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
+              className="mt-2 min-w-0 max-w-full rounded-md border border-iron-100 px-3 py-2 text-sm"
             >
               <option value="blocked">Blocked</option>
               <option value="at_risk">At risk</option>
@@ -1968,7 +1968,7 @@ function formatDateTime(value: string) {
 
 function Field({ label: itemLabel, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-sm font-medium text-iron-800">{itemLabel}</span>
       {children}
     </label>
