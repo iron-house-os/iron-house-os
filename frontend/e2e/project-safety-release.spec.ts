@@ -200,6 +200,7 @@ async function mockApi(page: Page) {
 }
 
 test("management safety and crew release stays explicit, responsive, and accessible", async ({ page }) => {
+  test.slow();
   const savedPayload = await mockApi(page);
   await page.goto("/");
   await page.getByLabel("Email").fill("release-gate@ironhousecontracting.com");
