@@ -1069,6 +1069,83 @@ def test_employee_bootstrap_is_limited_to_own_records() -> None:
     assert other["id"] not in {item["id"] for item in bootstrap.json()["employees"]}
 
 
+def test_controlled_job_is_hidden_and_rejects_direct_field_posts_without_portal_assignment() -> None:
+    employee = client.post(
+        "/api/v1/field-operations/employees",
+        json={
+            "first_name": "Controlled",
+            "last_name": "Worker",
+            "email": "controlled.worker@ironhousecontracting.com",
+            "portal_role": "employee",
+            "provision_portal_access": False,
+        },
+    ).json()
+    legacy = _project()
+    controlled = client.post(
+        "/api/v1/projects",
+        json={"name": "Controlled Awarded Job", "status": "awarded"},
+    ).json()
+    assert client.post(f"/api/v1/projects/{controlled['id']}/safety-launch").status_code == 201
+
+    def employee_user(request: Request) -> AuthenticatedUser:
+        user = AuthenticatedUser(
+            id=UUID("00000000-0000-0000-0000-000000000049"),
+            email=employee["email"],
+            display_name="Controlled Worker",
+            role="viewer",
+            session_version=1,
+        )
+        request.state.authenticated_user = user
+        return user
+
+    app.dependency_overrides[require_authenticated_user] = employee_user
+    bootstrap = client.get("/api/v1/field-operations/bootstrap")
+
+    assert bootstrap.status_code == 200
+    visible_projects = {item["id"] for item in bootstrap.json()["projects"]}
+    assert legacy["id"] in visible_projects
+    assert controlled["id"] not in visible_projects
+    blocked_time = client.post(
+        "/api/v1/field-operations/time-entries",
+        json={
+            "employee_id": employee["id"],
+            "project_id": controlled["id"],
+            "cost_code": "4100",
+            "work_date": str(date.today()),
+            "regular_hours": 1,
+            "entry_type": "employee",
+        },
+    )
+    blocked_record = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "job_photo",
+            "employee_id": employee["id"],
+            "project_id": controlled["id"],
+            "work_date": str(date.today()),
+            "title": "Unauthorized controlled-job post",
+            "details": {},
+        },
+    )
+
+    assert blocked_time.status_code == 403
+    assert blocked_record.status_code == 403
+    assert "portal access has not been assigned" in blocked_record.text
+
+    legacy_record = client.post(
+        "/api/v1/field-operations/records",
+        json={
+            "record_type": "job_photo",
+            "employee_id": employee["id"],
+            "project_id": legacy["id"],
+            "work_date": str(date.today()),
+            "title": "Legacy project post",
+            "details": {},
+        },
+    )
+    assert legacy_record.status_code == 201
+
+
 def test_operator_profile_label_does_not_grant_operator_actions() -> None:
     employee = _employee()
     project = _project()

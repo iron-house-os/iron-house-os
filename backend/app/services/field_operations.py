@@ -5,7 +5,7 @@ import secrets
 from uuid import NAMESPACE_URL, UUID, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -50,6 +50,7 @@ from app.schemas.field_operations import (
 from app.services.auth import AuthenticatedUser, hash_password
 from app.services.cost_codes import get_cost_code_library
 from app.services.employee_onboarding import deployment_status
+from app.services import project_safety_launch
 
 
 MANAGEMENT_ALERT_RECIPIENTS = ["Jeremie Peters", "Mac Warren"]
@@ -174,11 +175,26 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
     profile = next((item for item in employees if item.email.lower() == user.email.lower()), None)
     field_role = profile.portal_role if profile else None
     projects = list(db.scalars(select(Project).order_by(Project.name)))
+    if user.role == "viewer":
+        projects = [
+            item
+            for item in projects
+            if profile is not None
+            and project_safety_launch.portal_access_allowed(item, profile.id)
+        ]
+    visible_project_ids = {item.id for item in projects}
     suppliers = list(db.scalars(select(Supplier).order_by(Supplier.name)))
     equipment = list(db.scalars(select(Equipment).order_by(Equipment.name)))
     vehicles = list(db.scalars(select(Vehicle).order_by(Vehicle.unit_number)))
     vehicle_logs = list(db.scalars(select(VehicleLog).order_by(VehicleLog.entry_date.desc()).limit(100)))
-    time_entries = list(db.scalars(select(TimeEntry).order_by(TimeEntry.work_date.desc()).limit(200)))
+    time_entries_query = select(TimeEntry)
+    if user.role == "viewer":
+        time_entries_query = time_entries_query.where(
+            TimeEntry.project_id.in_(visible_project_ids)
+        )
+    time_entries = list(
+        db.scalars(time_entries_query.order_by(TimeEntry.work_date.desc()).limit(200))
+    )
     records_query = select(FieldRecord)
     if user.role not in MANAGEMENT_ROLES:
         records_query = records_query.where(FieldRecord.record_type != "completed_work")
@@ -188,16 +204,40 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
         records_query = records_query.where(
             FieldRecord.record_type.not_in(SENSITIVE_OCCURRENCE_TYPES)
         )
+    if user.role == "viewer":
+        records_query = records_query.where(
+            or_(
+                FieldRecord.project_id.is_(None),
+                FieldRecord.project_id.in_(visible_project_ids),
+            )
+        )
     records = list(db.scalars(
         records_query.order_by(FieldRecord.work_date.desc(), FieldRecord.created_at.desc()).limit(200)
     ))
     certifications = list(db.scalars(select(EmployeeCertification).order_by(EmployeeCertification.expiry_date)))
     workbooks, production_items = build_job_workbooks(db)
     material_movement_summary = build_material_movement_summary(db)
+    if user.role == "viewer":
+        visible_project_id_strings = {str(project_id) for project_id in visible_project_ids}
+        workbooks = [
+            item for item in workbooks if item.get("project_id") in visible_project_id_strings
+        ]
+        production_items = [
+            item
+            for item in production_items
+            if item.get("project_id") in visible_project_id_strings
+        ]
+        material_movement_summary = [
+            item
+            for item in material_movement_summary
+            if item.get("project_id") is None
+            or item.get("project_id") in visible_project_id_strings
+        ]
     milestone_recognitions = build_milestone_recognitions(db)
     paperwork_recognitions = build_paperwork_recognitions(db, employees)
     operator_access = operator_access_for_employee(db, profile)
     if user.role == "viewer" and profile is None:
+        projects = []
         employees = []
         time_entries = []
         records = []
@@ -782,7 +822,9 @@ def create_time_entry(db: Session, payload: TimeEntryCreate, user: Authenticated
         raise AppError("You can only submit time for your own employee profile.", status_code=403)
     if payload.entry_type == "operator":
         require_operator_access(db, employee)
-    require_exists(db, Project, payload.project_id, "Project")
+    project = require_exists(db, Project, payload.project_id, "Project")
+    if user.role == "viewer" and profile is not None:
+        project_safety_launch.require_portal_access(project, profile.id)
     item = TimeEntry(**payload.model_dump(), status="submitted", submitted_by=user.email)
     db.add(item)
     commit(db)
@@ -791,8 +833,9 @@ def create_time_entry(db: Session, payload: TimeEntryCreate, user: Authenticated
 
 
 def create_field_record(db: Session, payload: FieldRecordCreate, user: AuthenticatedUser) -> FieldRecordRead:
+    project = None
     if payload.project_id:
-        require_exists(db, Project, payload.project_id, "Project")
+        project = require_exists(db, Project, payload.project_id, "Project")
     if payload.employee_id:
         require_exists(db, Employee, payload.employee_id, "Employee")
     alerts = payload.alert_recipients
@@ -810,6 +853,8 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
     if user.role == "viewer":
         if profile is None:
             raise AppError("Your employee profile is not linked to this account.", status_code=400)
+        if project is not None:
+            project_safety_launch.require_portal_access(project, profile.id)
         if payload.record_type == "crew_shift" and profile.portal_role != "foreman":
             raise AppError("Foreman access is required to schedule crews.", status_code=403)
         if payload.record_type == "daily_hazard_assessment" and profile.portal_role not in {"foreman", "management"}:
@@ -1104,6 +1149,7 @@ def update_safety_record_status(
     profile = db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
     if user.role not in {"admin", "operations_manager"} and (profile is None or profile.portal_role not in {"foreman", "management"}):
         raise AppError("Foreperson or management access is required to verify safety-control records.", status_code=403)
+    _require_field_project_access(db, user, getattr(item, "project_id", None))
     allowed = {
         "safety_permit": {"blocked", "at_risk", "ready"},
         "corrective_action": {"open", "verification", "closed"},
@@ -1229,6 +1275,20 @@ def _flha_profile(db: Session, user: AuthenticatedUser) -> Employee | None:
     return db.scalar(select(Employee).where(Employee.email.ilike(user.email)))
 
 
+def _require_field_project_access(
+    db: Session,
+    user: AuthenticatedUser,
+    project_id: UUID | None,
+) -> None:
+    if user.role != "viewer" or project_id is None:
+        return
+    profile = _flha_profile(db, user)
+    if profile is None:
+        raise AppError("Your employee profile is not linked to this account.", status_code=400)
+    project = require_exists(db, Project, project_id, "Project")
+    project_safety_launch.require_portal_access(project, profile.id)
+
+
 def _can_supervise_flha(db: Session, user: AuthenticatedUser) -> bool:
     profile = _flha_profile(db, user)
     return user.role in {"admin", "operations_manager"} or bool(profile and profile.portal_role in {"foreman", "management"})
@@ -1246,6 +1306,7 @@ def update_flha(db: Session, record_id: UUID, payload: FLHAUpdate, user: Authent
         raise AppError("Signed FLHAs are immutable. Create a re-assessment instead.", status_code=409)
     if item.submitted_by != user.email and not _can_supervise_flha(db, user):
         raise AppError("You do not have permission to edit this FLHA.", status_code=403)
+    _require_field_project_access(db, user, payload.project_id)
     if payload.project_id:
         require_exists(db, Project, payload.project_id, "Project")
     values = prepare_flha_values(
@@ -1277,6 +1338,7 @@ def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user:
     _require_flha(previous)
     if not _can_supervise_flha(db, user):
         raise AppError("Foreperson access is required to re-assess an FLHA.", status_code=403)
+    _require_field_project_access(db, user, payload.project_id)
     if payload.project_id:
         require_exists(db, Project, payload.project_id, "Project")
     previous_details = dict(previous.details or {})
@@ -1320,6 +1382,7 @@ def release_flha(db: Session, record_id: UUID, payload: FLHARelease, user: Authe
         raise AppError("This FLHA has already been released.", status_code=409)
     if not _can_supervise_flha(db, user):
         raise AppError("Foreperson access is required to release an FLHA.", status_code=403)
+    _require_field_project_access(db, user, item.project_id)
     details = dict(item.details or {})
     blockers = flha_release_blockers(item.project_id, item.work_date, details)
     crew_ids = {str(member.get("id")) for member in details.get("crew") or [] if member.get("id")}
@@ -1349,6 +1412,7 @@ def get_flha_for_user(db: Session, record_id: UUID, user: AuthenticatedUser) -> 
     _require_flha(item)
     if user.role != "viewer":
         return item
+    _require_field_project_access(db, user, item.project_id)
     profile = _flha_profile(db, user)
     crew_ids = {str(member.get("id")) for member in (item.details or {}).get("crew") or [] if member.get("id")}
     if not profile or (str(profile.id) not in crew_ids and profile.portal_role not in {"foreman", "management"}):
@@ -1421,6 +1485,7 @@ def sign_field_record(
     user: AuthenticatedUser,
 ) -> FieldRecordRead:
     item = require_exists(db, FieldRecord, record_id, "Field record")
+    _require_field_project_access(db, user, item.project_id)
     employee = require_exists(db, Employee, payload.employee_id, "Employee")
     own_signature = employee.email.lower() == user.email.lower()
     supervised_signature = payload.supervised_shared_device and _can_supervise_flha(db, user)

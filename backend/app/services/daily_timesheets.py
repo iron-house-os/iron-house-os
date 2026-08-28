@@ -21,6 +21,7 @@ from app.schemas.daily_timesheet import DailyTimesheetAction, DailyTimesheetBoot
 from app.services.auth import AuthenticatedUser
 from app.services.field_operations import commit
 from app.services.media_access import require_document_access
+from app.services import project_safety_launch
 
 
 MANAGEMENT_ROLES = {"admin", "operations_manager"}
@@ -101,15 +102,49 @@ def _records(db: Session, user: AuthenticatedUser) -> list[FieldRecord]:
 
 def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
     _require_foreman(db, user)
+    profile = _profile(db, user)
     projects = list(db.scalars(select(Project).order_by(Project.project_number, Project.name)))
+    if not _is_management(user):
+        projects = [
+            item
+            for item in projects
+            if profile is not None
+            and project_safety_launch.portal_access_allowed(item, profile.id)
+        ]
+    visible_project_ids = {str(item.id) for item in projects}
     employees = list(db.scalars(select(Employee).where(Employee.status == "active").order_by(Employee.last_name, Employee.first_name)))
     equipment = list(db.scalars(select(Equipment).where(Equipment.status.in_(["active", "available"])).order_by(Equipment.name)))
     vendors = list(db.scalars(select(Supplier).order_by(Supplier.name)))
     rentals = list(db.scalars(select(FieldRecord).where(FieldRecord.record_type == "rental_equipment", FieldRecord.status.not_in(["inactive", "void", "closed"])).order_by(FieldRecord.work_date.desc())))
+    if not _is_management(user):
+        rentals = [
+            item
+            for item in rentals
+            if item.project_id is None or str(item.project_id) in visible_project_ids
+        ]
     receipt_statement = select(Receipt).where(Receipt.status != "void")
     if not _is_management(user):
         receipt_statement = receipt_statement.where(func.lower(Receipt.submitter_email) == user.email.lower())
     receipts = list(db.scalars(receipt_statement.order_by(Receipt.receipt_date.desc()).limit(100)))
+    project_cost_codes = _project_cost_codes(db)
+    assigned_crew = _assigned_crew(db)
+    sheets = _records(db, user)
+    if not _is_management(user):
+        project_cost_codes = {
+            project_id: values
+            for project_id, values in project_cost_codes.items()
+            if project_id in visible_project_ids
+        }
+        assigned_crew = {
+            project_id: values
+            for project_id, values in assigned_crew.items()
+            if project_id in visible_project_ids
+        }
+        sheets = [
+            item
+            for item in sheets
+            if item.project_id is None or str(item.project_id) in visible_project_ids
+        ]
     return DailyTimesheetBootstrap(
         projects=[{"id": str(item.id), "name": item.name, "project_number": item.project_number or "Unnumbered", "status": item.status} for item in projects if item.status not in {"closed", "cancelled", "inactive"}],
         employees=[{"id": str(item.id), "code": "EMP-" + str(item.id)[:6].upper(), "name": f"{item.first_name} {item.last_name}", "classification": item.role or item.portal_role.replace("_", " ").title(), "portal_role": item.portal_role} for item in employees],
@@ -117,7 +152,7 @@ def bootstrap(db: Session, user: AuthenticatedUser) -> DailyTimesheetBootstrap:
         rentals=[{"id": str(item.id), "name": item.title, "project_id": str(item.project_id) if item.project_id else None, "vendor_id": str(item.supplier_id) if item.supplier_id else None, "status": item.status} for item in rentals],
         vendors=[{"id": str(item.id), "name": item.name, "category": item.category} for item in vendors],
         receipts=[{"id": str(item.id), "reference": item.reference, "vendor_name": item.vendor_name, "receipt_date": item.receipt_date, "status": item.status} for item in receipts],
-        project_cost_codes=_project_cost_codes(db), assigned_crew=_assigned_crew(db), sheets=[_read(item) for item in _records(db, user)], can_approve=_is_management(user),
+        project_cost_codes=project_cost_codes, assigned_crew=assigned_crew, sheets=[_read(item) for item in sheets], can_approve=_is_management(user),
     )
 
 
@@ -140,6 +175,7 @@ def _validated_details(db: Session, payload: DailyTimesheetWrite, user: Authenti
         profile = _profile(db, user)
         if profile is None or supervisor.id != profile.id:
             raise AppError("A foreman can only submit a daily sheet under their own supervisor identity.", status_code=403)
+        project_safety_launch.require_portal_access(project, profile.id)
     manager = _active(db, Employee, payload.project_manager_id, "Project manager", {"active"}) if payload.project_manager_id else None
     def validate_document(document_id: UUID) -> None:
         document = db.get(Document, document_id)

@@ -211,3 +211,27 @@ def test_foreman_identity_receipt_and_sheet_scoping_and_office_permissions() -> 
         app.dependency_overrides.pop(require_authenticated_user, None)
     else:
         app.dependency_overrides[require_authenticated_user] = original_override
+
+
+def test_foreman_cannot_see_or_post_to_controlled_job_without_portal_assignment() -> None:
+    data = _setup()
+    controlled = client.post(
+        "/api/v1/projects",
+        json={"name": "Controlled Daily Sheet Job", "status": "awarded"},
+    ).json()
+    assert client.post(f"/api/v1/projects/{controlled['id']}/safety-launch").status_code == 201
+    app.dependency_overrides[require_authenticated_user] = _override(_principal(data, "foreman"))
+
+    bootstrap = client.get("/api/v1/daily-timesheets/bootstrap")
+    assert bootstrap.status_code == 200
+    assert controlled["id"] not in {item["id"] for item in bootstrap.json()["projects"]}
+    assert data["project"]["id"] in {item["id"] for item in bootstrap.json()["projects"]}
+
+    payload = _payload(data)
+    payload["project_id"] = controlled["id"]
+    payload["document_ids"] = []
+    payload["materials"][0]["document_id"] = None
+    blocked = client.post("/api/v1/daily-timesheets", json=payload)
+
+    assert blocked.status_code == 403
+    assert "portal access has not been assigned" in blocked.text

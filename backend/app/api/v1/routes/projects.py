@@ -21,6 +21,7 @@ from app.schemas.project_closeout import (
 )
 from app.schemas.project_launch import ProjectLaunchDashboard
 from app.schemas.project_readiness import ProjectReadinessResponse
+from app.schemas.project_safety_launch import ProjectSafetyLaunchRead
 from app.schemas.project_start import ProjectStartChecklistRead, ProjectStartChecklistUpdate
 from app.services import project_folders, project_launch, project_readiness, projects
 
@@ -107,6 +108,28 @@ def read_awarded_project_workspace(project_id: UUID, db: DBSession) -> AwardedPr
 @router.get("/{project_id}/start-checklist", response_model=ProjectStartChecklistRead)
 def read_project_start_checklist(project_id: UUID, db: DBSession) -> ProjectStartChecklistRead:
     return projects.get_project_start_checklist(db, project_id)
+
+
+@router.get("/{project_id}/safety-launch", response_model=ProjectSafetyLaunchRead)
+def read_project_safety_launch(
+    project_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectSafetyLaunchRead:
+    return projects.get_project_safety_launch(db, project_id, user)
+
+
+@router.post(
+    "/{project_id}/safety-launch",
+    response_model=ProjectSafetyLaunchRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def initialize_project_safety_launch(
+    project_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+) -> ProjectSafetyLaunchRead:
+    return projects.initialize_project_safety_launch(db, project_id, user)
 
 
 @router.get("/{project_id}/closeout-checklist", response_model=ProjectCloseoutChecklistRead)

@@ -144,6 +144,11 @@ export type ProjectLaunchDashboard = {
   po_request_count: number;
   pending_po_request_count: number;
   safety_record_counts: Record<string, number>;
+  safety_release_status: string;
+  safety_requirement_count: number;
+  safety_folder_status: string;
+  portal_access_status: string;
+  portal_assignment_count: number;
   document_count: number;
   award_baseline_source: string | null;
   award_pricing_subtotal: number;

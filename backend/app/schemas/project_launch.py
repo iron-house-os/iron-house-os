@@ -24,6 +24,11 @@ class ProjectLaunchDashboard(BaseModel):
     po_request_count: int
     pending_po_request_count: int
     safety_record_counts: dict[str, int]
+    safety_release_status: str
+    safety_requirement_count: int
+    safety_folder_status: str
+    portal_access_status: str
+    portal_assignment_count: int
     document_count: int
     award_baseline_source: str | None
     award_pricing_subtotal: float
