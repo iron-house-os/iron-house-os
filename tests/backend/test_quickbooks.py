@@ -805,11 +805,13 @@ def test_live_disconnect_remains_available_after_approval_is_removed(
 ) -> None:
     _configure_production(monkeypatch, approved=True)
     _connected(environment="production")
-    revoked: list[str] = []
+    revoked: list[tuple[str, str | None]] = []
     monkeypatch.setattr(
         quickbooks_routes,
         "revoke_token",
-        lambda token, credentials=None: revoked.append(token),
+        lambda token, credentials=None: revoked.append(
+            (token, credentials.client_id if credentials else None)
+        ),
     )
     monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "false")
     get_settings.cache_clear()
@@ -822,7 +824,7 @@ def test_live_disconnect_remains_available_after_approval_is_removed(
     assert response.status_code == 200
     assert response.json()["enabled"] is False
     assert response.json()["connected"] is False
-    assert revoked == ["refresh-token"]
+    assert revoked == [("refresh-token", "production-client-id")]
 
 
 @pytest.mark.parametrize("corrupt_ciphertext", ["corrupt-ciphertext", "not-ascii-\N{SNOWMAN}"])

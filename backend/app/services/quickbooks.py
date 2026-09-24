@@ -87,6 +87,23 @@ def environment_credentials() -> QuickBooksCredentials | None:
     )
 
 
+def environment_credentials_for_teardown() -> QuickBooksCredentials | None:
+    """Return configured credentials for revocation without reopening live OAuth."""
+    settings = get_settings()
+    quickbooks_environment()
+    if not (
+        settings.quickbooks_client_id
+        and settings.quickbooks_client_secret
+        and settings.quickbooks_token_encryption_key
+    ):
+        return None
+    return QuickBooksCredentials(
+        client_id=settings.quickbooks_client_id,
+        client_secret=settings.quickbooks_client_secret,
+        token_encryption_key=settings.quickbooks_token_encryption_key,
+    )
+
+
 def quickbooks_is_configured(credentials: QuickBooksCredentials | None = None) -> bool:
     return bool((credentials or environment_credentials()) and get_settings().quickbooks_redirect_uri)
 

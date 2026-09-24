@@ -34,6 +34,7 @@ from app.services.quickbooks import (
     encrypt_token,
     encrypt_configuration_secret,
     environment_credentials,
+    environment_credentials_for_teardown,
     exchange_authorization_code,
     get_company_info,
     live_read_only_is_approved,
@@ -127,6 +128,19 @@ def _credentials(db: Session) -> QuickBooksCredentials | None:
             ),
         )
     return environment_credentials()
+
+
+def _teardown_credentials(db: Session) -> QuickBooksCredentials | None:
+    configuration = _stored_configuration(db)
+    if configuration is not None:
+        return QuickBooksCredentials(
+            client_id=configuration.client_id,
+            client_secret=decrypt_configuration_secret(configuration.encrypted_client_secret),
+            token_encryption_key=decrypt_configuration_secret(
+                configuration.encrypted_token_encryption_key
+            ),
+        )
+    return environment_credentials_for_teardown()
 
 
 def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> bool:
@@ -479,7 +493,7 @@ def disconnect_quickbooks(
     revocation = "not_available"
     token = None
     try:
-        credentials = _credentials(db)
+        credentials = _teardown_credentials(db)
         if connection.encrypted_refresh_token:
             token = decrypt_token(
                 connection.encrypted_refresh_token,
