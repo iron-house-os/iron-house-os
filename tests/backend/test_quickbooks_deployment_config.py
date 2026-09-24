@@ -51,6 +51,7 @@ def test_all_deployed_proxies_suppress_callback_access_logging() -> None:
         blocks = _callback_blocks(source)
         assert len(blocks) == count
         assert all("access_log off;" in block for block in blocks)
+        assert all('add_header Referrer-Policy "no-referrer" always;' in block for block in blocks)
 
 
 def test_staging_environment_generator_keeps_quickbooks_disabled_with_exact_host_urls() -> None:
