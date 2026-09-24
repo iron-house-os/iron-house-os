@@ -29,6 +29,7 @@ describe("LegalPage", () => {
     expect(screen.getByRole("heading", { name: "End-User Licence Terms", level: 1 })).toBeInTheDocument();
     expect(screen.getByText(/limited, revocable, non-exclusive, non-transferable right/i)).toBeInTheDocument();
     expect(screen.getByText(/retrieves CompanyInfo solely to verify the selected company/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not create, update, delete, email, import, export, or synchronise/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/legal/privacy");
   });
 });

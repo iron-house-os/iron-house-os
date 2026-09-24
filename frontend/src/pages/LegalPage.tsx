@@ -165,8 +165,9 @@ function TermsOfUse() {
           Only an authorised administrator may connect or disconnect a QuickBooks Online company.
           Intuit's separate terms and privacy policy also apply to the provider authorisation. The
           current IHOS connection retrieves CompanyInfo solely to verify the selected company. It
-          does not create or change invoices, bills, customers, vendors, payments, payroll, taxes,
-          journal entries, attachments, or other accounting records.
+          does not create, update, delete, email, import, export, or synchronise invoices, bills,
+          customers, vendors, payments, payroll, taxes, journal entries, attachments, or other
+          accounting records.
         </p>
       </LegalSection>
 
