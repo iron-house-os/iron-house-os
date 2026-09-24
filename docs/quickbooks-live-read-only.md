@@ -60,8 +60,11 @@ select the Intuit production host there.
 3. Complete the Intuit app details and assessment without exposing production
    credentials.
 4. Obtain production keys and confirm the production redirect URI in Intuit.
-5. Open a separate activation issue/PR that changes only the production target
-   to `production` and records the owner's live-read-only approval.
+5. Open a separate activation issue/PR that changes the production target to
+   `production`, records the owner's live-read-only approval, and provisions a
+   protected random `QUICKBOOKS_TOKEN_ENCRYPTION_KEY` of at least 32 characters
+   through the approved production secret path. Never place that key in GitHub,
+   chat, screenshots, or deployment logs.
 6. Pass CI and release readiness, then request the protected production
    deployment approval. Do not bypass the required reviewer.
 7. An IHOS administrator enters the production keys in Financial Control. The
