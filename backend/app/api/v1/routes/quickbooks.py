@@ -199,7 +199,14 @@ def quickbooks_oauth_callback(
     _require_admin(user)
     _require_enabled()
     if not _consume_oauth_state(db, state=state, owner_account_id=user.id):
-        raise HTTPException(status_code=400, detail="The QuickBooks connection request expired.")
+        _audit(
+            request,
+            action="quickbooks_oauth_callback",
+            outcome="failed",
+            actor=user.email,
+            metadata={"environment": "sandbox", "reason": "invalid_or_expired_state"},
+        )
+        return _oauth_redirect("failed")
 
     if error:
         _audit(
@@ -211,14 +218,25 @@ def quickbooks_oauth_callback(
         )
         return _oauth_redirect("denied")
     if not code or not realm_id:
-        raise HTTPException(status_code=400, detail="QuickBooks returned an incomplete authorization response.")
+        _audit(
+            request,
+            action="quickbooks_oauth_callback",
+            outcome="failed",
+            actor=user.email,
+            metadata={"environment": "sandbox", "reason": "incomplete_response"},
+        )
+        return _oauth_redirect("failed")
 
     connection = _connection(db)
     if connection and connection.status == "connected" and connection.realm_id != realm_id:
-        raise HTTPException(
-            status_code=409,
-            detail="Disconnect the current QuickBooks sandbox company before connecting a different company.",
+        _audit(
+            request,
+            action="quickbooks_oauth_callback",
+            outcome="failed",
+            actor=user.email,
+            metadata={"environment": "sandbox", "reason": "realm_mismatch"},
         )
+        return _oauth_redirect("failed")
     try:
         existing_refresh = None
         if connection and connection.encrypted_refresh_token:

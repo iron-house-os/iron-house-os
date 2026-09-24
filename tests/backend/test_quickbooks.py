@@ -180,7 +180,10 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
         params={"state": state, "code": "provider-code", "realmId": "9341457990023688"},
         follow_redirects=False,
     )
-    assert replay.status_code == 400
+    assert replay.status_code == 303
+    assert replay.headers["location"].endswith("?quickbooks=failed")
+    assert replay.headers["cache-control"] == "no-store"
+    assert replay.headers["referrer-policy"] == "no-referrer"
 
 
 def test_oauth_state_consumption_is_atomic_compare_and_set(
@@ -213,7 +216,10 @@ def test_callback_rejects_incomplete_response_and_different_bound_realm(
         params={"state": missing_realm_state, "code": "provider-code"},
         follow_redirects=False,
     )
-    assert missing_realm.status_code == 400
+    assert missing_realm.status_code == 303
+    assert missing_realm.headers["location"].endswith("?quickbooks=failed")
+    assert missing_realm.headers["cache-control"] == "no-store"
+    assert missing_realm.headers["referrer-policy"] == "no-referrer"
 
     _connected(realm_id="1111111111111111")
     different_realm_state = _start_state()
@@ -226,8 +232,10 @@ def test_callback_rejects_incomplete_response_and_different_bound_realm(
         },
         follow_redirects=False,
     )
-    assert mismatch.status_code == 409
-    assert "different company" in mismatch.json()["detail"]
+    assert mismatch.status_code == 303
+    assert mismatch.headers["location"].endswith("?quickbooks=failed")
+    assert mismatch.headers["cache-control"] == "no-store"
+    assert mismatch.headers["referrer-policy"] == "no-referrer"
 
 
 def test_disconnect_requires_confirmation_revokes_and_clears_local_tokens(
@@ -322,6 +330,16 @@ def test_token_result_accepts_omitted_scope_but_rejects_explicitly_insufficient_
                 "scope": "openid profile",
             }
         )
+
+    for invalid_scope in (None, [REQUIRED_SCOPE], {"scope": REQUIRED_SCOPE}):
+        with pytest.raises(QuickBooksUnavailable, match="invalid permission response"):
+            quickbooks_service._token_result(
+                {
+                    "access_token": "sandbox-access-token",
+                    "refresh_token": "sandbox-refresh-token",
+                    "scope": invalid_scope,
+                }
+            )
 
 
 def test_revoke_token_uses_intuit_json_payload(

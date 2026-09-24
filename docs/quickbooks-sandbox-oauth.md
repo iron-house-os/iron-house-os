@@ -39,7 +39,7 @@ QUICKBOOKS_TOKEN_ENCRYPTION_KEY=<independent random value of at least 32 charact
 
 Never place the client secret, encryption key, access token, or refresh token in GitHub, screenshots, chat, URLs, browser storage, logs, or audit metadata. Intuit temporarily returns the authorization code and state in the callback URL; never copy or retain that callback URL, and never include it in screenshots, logs, or support messages.
 
-The deployed frontend proxy, host proxy, and backend runtime suppress access logging for the OAuth callback path. The callback response also disables caching and referrer forwarding so the short-lived authorization code is not propagated after the redirect.
+The deployed frontend proxy, host proxy, and backend runtime suppress access logging for the OAuth callback path. Every handled callback outcome uses a sanitized redirect that disables caching and referrer forwarding so the short-lived authorization code is not retained or propagated after the redirect.
 
 ## Controlled flow
 

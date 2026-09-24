@@ -212,10 +212,15 @@ def _token_result(
     refresh_token = result.get("refresh_token")
     if not isinstance(refresh_token, str) or not refresh_token:
         refresh_token = existing_refresh_token
-    if "scope" not in result or result["scope"] is None:
+    if "scope" not in result:
         scopes = [REQUIRED_SCOPE]
     else:
-        scopes = [scope for scope in str(result["scope"]).split() if scope]
+        raw_scope = result["scope"]
+        if not isinstance(raw_scope, str):
+            raise QuickBooksUnavailable(
+                "QuickBooks returned an invalid permission response."
+            )
+        scopes = [scope for scope in raw_scope.split() if scope]
     if REQUIRED_SCOPE not in scopes:
         raise QuickBooksUnavailable("The required QuickBooks accounting permission was not granted.")
     now = datetime.now(UTC)
