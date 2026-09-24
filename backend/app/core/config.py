@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     quickbooks_enabled: bool = False
     quickbooks_force_disabled: bool = False
     quickbooks_environment: str = "sandbox"
+    quickbooks_live_read_only_approved: bool = False
     quickbooks_client_id: str | None = None
     quickbooks_client_secret: str | None = None
     quickbooks_redirect_uri: str = (
@@ -109,9 +110,22 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("SMTP_FROM_EMAIL must be configured when onboarding email delivery is enabled")
         if not settings.smtp_starttls and not settings.smtp_use_ssl:
             errors.append("SMTP_STARTTLS or SMTP_USE_SSL must be enabled in production")
+    quickbooks_environment = settings.quickbooks_environment.strip().lower()
+    if quickbooks_environment not in {"sandbox", "production"}:
+        errors.append("QUICKBOOKS_ENVIRONMENT must be sandbox or production")
+    if settings.quickbooks_live_read_only_approved and quickbooks_environment != "production":
+        errors.append(
+            "QUICKBOOKS_LIVE_READ_ONLY_APPROVED may only be true when "
+            "QUICKBOOKS_ENVIRONMENT is production"
+        )
     if settings.quickbooks_enabled:
-        if settings.quickbooks_environment.strip().lower() != "sandbox":
-            errors.append("QUICKBOOKS_ENVIRONMENT must remain sandbox until live accounting is separately approved")
+        if (
+            quickbooks_environment == "production"
+            and not settings.quickbooks_live_read_only_approved
+        ):
+            errors.append(
+                "QUICKBOOKS_LIVE_READ_ONLY_APPROVED must be true before live QuickBooks is enabled"
+            )
         if _looks_insecure(settings.quickbooks_client_id):
             errors.append("QUICKBOOKS_CLIENT_ID must be configured when QuickBooks is enabled")
         if _looks_insecure(settings.quickbooks_client_secret, minimum_length=12):

@@ -22,6 +22,7 @@ const connected = {
   connected: true,
   status: "connected",
   environment: "sandbox" as const,
+  live_read_only_approved: true,
   required_scope: "com.intuit.quickbooks.accounting",
   realm_id: "9341457990023688",
   company_name: "Sandbox Company US 3969",
@@ -53,7 +54,7 @@ describe("QuickBooksConnectionCard", () => {
     await waitFor(() => expect(quickBooksApi.configure).toHaveBeenCalledWith({
       client_id: "sandbox-client-id",
       client_secret: "sandbox-client-secret-value",
-      sandbox_confirmed: true,
+      environment_confirmed: true,
     }));
     expect(screen.queryByDisplayValue("sandbox-client-secret-value")).not.toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent("not displayed or stored in this browser");
@@ -73,6 +74,44 @@ describe("QuickBooksConnectionCard", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Credentials rejected");
     expect(screen.getByLabelText("Development Client Secret")).toHaveValue("");
+  });
+
+  it("requires the separate live acknowledgement before saving production credentials", async () => {
+    const user = userEvent.setup();
+    const unconfigured = {
+      ...connected,
+      connected: false,
+      configured: false,
+      database_configured: false,
+      enabled: false,
+      environment: "production" as const,
+      status: "not_connected",
+    };
+    vi.mocked(quickBooksApi.status).mockResolvedValue(unconfigured);
+    vi.mocked(quickBooksApi.configure).mockResolvedValue({
+      ...unconfigured,
+      configured: true,
+      database_configured: true,
+      enabled: true,
+    });
+    render(<QuickBooksConnectionCard />);
+
+    const save = await screen.findByRole("button", { name: "Save live credentials" });
+    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText("Production Client ID"), "production-client-id");
+    await user.type(
+      screen.getByLabelText("Production Client Secret"),
+      "production-client-secret-value",
+    );
+    await user.click(screen.getByRole("checkbox", { name: /production credentials/i }));
+    await user.click(save);
+
+    await waitFor(() => expect(quickBooksApi.configure).toHaveBeenCalledWith({
+      client_id: "production-client-id",
+      client_secret: "production-client-secret-value",
+      environment_confirmed: true,
+    }));
+    expect(screen.queryByDisplayValue("production-client-secret-value")).not.toBeInTheDocument();
   });
 
   it("only offers credential removal for database-managed credentials", async () => {
@@ -117,6 +156,39 @@ describe("QuickBooksConnectionCard", () => {
     expect(screen.getByText("Sandbox only")).toBeInTheDocument();
     expect(screen.getByText(/cannot create or change accounting records/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /export|sync|create invoice/i })).not.toBeInTheDocument();
+  });
+
+  it("labels live mode as IHOS read-only while warning that Intuit scope is broader", async () => {
+    vi.mocked(quickBooksApi.status).mockResolvedValue({
+      ...connected,
+      environment: "production",
+      company_name: "Iron House Contracting Ltd.",
+      legal_name: "Iron House Contracting Ltd.",
+    });
+    render(<QuickBooksConnectionCard />);
+
+    expect(await screen.findByText("Connected: Iron House Contracting Ltd.")).toBeInTheDocument();
+    expect(screen.getByText("Live · IHOS read-only")).toBeInTheDocument();
+    expect(screen.getByText(/Intuit's accounting permission is broader/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export|sync|create invoice/i })).not.toBeInTheDocument();
+  });
+
+  it("does not accept production credentials before the live approval gate", async () => {
+    vi.mocked(quickBooksApi.status).mockResolvedValue({
+      ...connected,
+      connected: false,
+      configured: false,
+      database_configured: false,
+      enabled: false,
+      environment: "production",
+      live_read_only_approved: false,
+      status: "not_connected",
+    });
+    render(<QuickBooksConnectionCard />);
+
+    expect(await screen.findByText(/awaiting owner-approved production activation/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Production Client Secret")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect live company" })).toBeDisabled();
   });
 
   it("requires explicit confirmation before disconnecting", async () => {

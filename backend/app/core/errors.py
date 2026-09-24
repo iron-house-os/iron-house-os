@@ -63,7 +63,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         if _is_quickbooks_configuration_write(request):
             return JSONResponse(
                 status_code=422,
-                content={"detail": "Enter valid Intuit development credentials."},
+                content={"detail": "Enter valid Intuit QuickBooks credentials."},
             )
         return await request_validation_exception_handler(request, exc)
 

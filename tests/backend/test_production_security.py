@@ -62,3 +62,45 @@ def test_enabled_production_onboarding_email_accepts_protected_tls_configuration
     }
 
     validate_production_settings(Settings(**values))
+
+
+def test_live_quickbooks_fails_closed_without_separate_read_only_approval() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": True,
+        "quickbooks_environment": "production",
+        "quickbooks_client_id": "production-client-id",
+        "quickbooks_client_secret": "production-client-secret-value",
+        "quickbooks_token_encryption_key": "production-token-key-with-enough-length",
+        "quickbooks_redirect_uri": (
+            "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+        ),
+    }
+
+    with pytest.raises(RuntimeError, match="QUICKBOOKS_LIVE_READ_ONLY_APPROVED"):
+        validate_production_settings(Settings(**values))
+
+
+def test_live_quickbooks_accepts_explicit_read_only_approval_and_secure_settings() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": True,
+        "quickbooks_environment": "production",
+        "quickbooks_live_read_only_approved": True,
+        "quickbooks_client_id": "production-client-id",
+        "quickbooks_client_secret": "production-client-secret-value",
+        "quickbooks_token_encryption_key": "production-token-key-with-enough-length",
+        "quickbooks_redirect_uri": (
+            "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+        ),
+    }
+
+    validate_production_settings(Settings(**values))
+
+
+def test_live_quickbooks_approval_cannot_be_set_for_sandbox() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_environment": "sandbox",
+        "quickbooks_live_read_only_approved": True,
+    }
+
+    with pytest.raises(RuntimeError, match="may only be true"):
+        validate_production_settings(Settings(**values))

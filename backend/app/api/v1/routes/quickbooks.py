@@ -36,6 +36,8 @@ from app.services.quickbooks import (
     environment_credentials,
     exchange_authorization_code,
     get_company_info,
+    live_read_only_is_approved,
+    quickbooks_environment,
     quickbooks_is_configured,
     revoke_token,
     state_digest,
@@ -54,31 +56,48 @@ def _require_admin(user: CurrentUser) -> None:
         )
 
 
-def _require_sandbox_environment() -> None:
-    settings = get_settings()
-    if settings.quickbooks_environment.strip().lower() != "sandbox":
+def _environment() -> str:
+    try:
+        return quickbooks_environment()
+    except QuickBooksUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _environment_label(environment: str) -> str:
+    return "live read-only" if environment == "production" else "sandbox"
+
+
+def _require_environment_approved() -> str:
+    environment = _environment()
+    if not live_read_only_is_approved(environment):
         raise HTTPException(
             status_code=503,
-            detail="Only the approved QuickBooks sandbox connection is available.",
+            detail="QuickBooks live read-only connection is awaiting owner approval.",
         )
+    return environment
 
 
 def _require_enabled(db: Session) -> None:
-    _require_sandbox_environment()
+    environment = _require_environment_approved()
     if not _feature_enabled(db):
-        raise HTTPException(status_code=503, detail="QuickBooks sandbox connection is disabled.")
+        raise HTTPException(
+            status_code=503,
+            detail=f"QuickBooks {_environment_label(environment)} connection is disabled.",
+        )
 
 
 def _connection(db: Session) -> QuickBooksConnection | None:
     return db.scalar(
-        select(QuickBooksConnection).where(QuickBooksConnection.environment == "sandbox")
+        select(QuickBooksConnection).where(
+            QuickBooksConnection.environment == _environment()
+        )
     )
 
 
 def _stored_configuration(db: Session) -> QuickBooksConfiguration | None:
     return db.scalar(
         select(QuickBooksConfiguration).where(
-            QuickBooksConfiguration.environment == "sandbox",
+            QuickBooksConfiguration.environment == _environment(),
         )
     )
 
@@ -91,6 +110,8 @@ def _configuration(db: Session) -> QuickBooksConfiguration | None:
 def _feature_enabled(db: Session) -> bool:
     settings = get_settings()
     if settings.quickbooks_force_disabled:
+        return False
+    if not live_read_only_is_approved(_environment()):
         return False
     return bool(settings.quickbooks_enabled or _configuration(db))
 
@@ -116,7 +137,7 @@ def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> 
         .where(
             QuickBooksOAuthState.state_digest == state_digest(state),
             QuickBooksOAuthState.owner_account_id == owner_account_id,
-            QuickBooksOAuthState.environment == "sandbox",
+            QuickBooksOAuthState.environment == _environment(),
             QuickBooksOAuthState.used_at.is_(None),
             QuickBooksOAuthState.expires_at > now,
         )
@@ -131,6 +152,7 @@ def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> 
 
 
 def _status(db: Session) -> QuickBooksStatus:
+    environment = _environment()
     database_configured = _stored_configuration(db) is not None
     configuration_error = None
     try:
@@ -151,7 +173,8 @@ def _status(db: Session) -> QuickBooksStatus:
         database_configured=database_configured,
         connected=connected,
         status=connection.status if connection else "not_connected",
-        environment="sandbox",
+        environment=environment,
+        live_read_only_approved=live_read_only_is_approved(environment),
         required_scope=REQUIRED_SCOPE,
         realm_id=connection.realm_id if connection else None,
         company_name=connection.company_name if connection else None,
@@ -195,9 +218,13 @@ def configure_quickbooks(
     db: DBSession,
 ) -> QuickBooksStatus:
     _require_admin(user)
-    _require_sandbox_environment()
-    if not payload.sandbox_confirmed:
-        raise HTTPException(status_code=400, detail="Confirm sandbox-only configuration first.")
+    environment = _require_environment_approved()
+    label = _environment_label(environment)
+    if not payload.environment_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Confirm {label} configuration first.",
+        )
     connection = _connection(db)
     if connection and connection.status == "connected":
         raise HTTPException(status_code=409, detail="Disconnect QuickBooks before changing credentials.")
@@ -205,12 +232,15 @@ def configure_quickbooks(
     client_id = payload.client_id.strip()
     client_secret = payload.client_secret.get_secret_value().strip()
     if not (10 <= len(client_id) <= 255) or not (12 <= len(client_secret) <= 1000):
-        raise HTTPException(status_code=422, detail="Enter valid Intuit development credentials.")
+        raise HTTPException(
+            status_code=422,
+            detail="Enter valid Intuit QuickBooks credentials.",
+        )
 
     configuration = _stored_configuration(db)
     if configuration is None:
         configuration = QuickBooksConfiguration(
-            environment="sandbox",
+            environment=environment,
             configured_by_account_id=user.id,
             client_id=client_id,
             encrypted_client_secret=encrypt_configuration_secret(client_secret),
@@ -234,7 +264,7 @@ def configure_quickbooks(
         action="quickbooks_configuration",
         outcome="saved",
         actor=user.email,
-        metadata={"environment": "sandbox"},
+        metadata={"environment": environment},
     )
     return _status(db)
 
@@ -247,7 +277,7 @@ def remove_quickbooks_configuration(
     db: DBSession,
 ) -> QuickBooksStatus:
     _require_admin(user)
-    _require_sandbox_environment()
+    environment = _environment()
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Confirm credential removal first.")
     connection = _connection(db)
@@ -255,7 +285,7 @@ def remove_quickbooks_configuration(
         raise HTTPException(status_code=409, detail="Disconnect QuickBooks before removing credentials.")
     db.execute(
         delete(QuickBooksConfiguration).where(
-            QuickBooksConfiguration.environment == "sandbox"
+            QuickBooksConfiguration.environment == environment
         )
     )
     db.commit()
@@ -264,7 +294,7 @@ def remove_quickbooks_configuration(
         action="quickbooks_configuration",
         outcome="removed",
         actor=user.email,
-        metadata={"environment": "sandbox"},
+        metadata={"environment": environment},
     )
     return _status(db)
 
@@ -277,24 +307,25 @@ def start_quickbooks_oauth(
 ) -> QuickBooksAuthorization:
     _require_admin(user)
     _require_enabled(db)
+    environment = _environment()
     try:
         credentials = _credentials(db)
     except QuickBooksUnavailable as exc:
         raise HTTPException(
             status_code=503,
             detail=(
-                "QuickBooks sandbox credentials are unavailable. "
+                "QuickBooks credentials are unavailable. "
                 "Replace or remove the saved credentials."
             ),
         ) from exc
     if not quickbooks_is_configured(credentials):
-        raise HTTPException(status_code=503, detail="QuickBooks sandbox OAuth is not configured.")
+        raise HTTPException(status_code=503, detail="QuickBooks OAuth is not configured.")
     state = secrets.token_urlsafe(48)
     db.add(
         QuickBooksOAuthState(
             state_digest=state_digest(state),
             owner_account_id=user.id,
-            environment="sandbox",
+            environment=environment,
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
         )
     )
@@ -304,7 +335,7 @@ def start_quickbooks_oauth(
         action="quickbooks_oauth_start",
         outcome="started",
         actor=user.email,
-        metadata={"environment": "sandbox", "scope": REQUIRED_SCOPE},
+        metadata={"environment": environment, "scope": REQUIRED_SCOPE},
     )
     return QuickBooksAuthorization(authorization_url=authorization_url(state, credentials))
 
@@ -321,6 +352,7 @@ def quickbooks_oauth_callback(
 ):
     _require_admin(user)
     _require_enabled(db)
+    environment = _environment()
     credentials = _credentials(db)
     if credentials is None:
         return quickbooks_oauth_redirect("failed")
@@ -330,7 +362,7 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="failed",
             actor=user.email,
-            metadata={"environment": "sandbox", "reason": "invalid_or_expired_state"},
+            metadata={"environment": environment, "reason": "invalid_or_expired_state"},
         )
         return quickbooks_oauth_redirect("failed")
 
@@ -340,7 +372,7 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="denied",
             actor=user.email,
-            metadata={"environment": "sandbox", "provider_error": error[:100]},
+            metadata={"environment": environment, "provider_error": error[:100]},
         )
         return quickbooks_oauth_redirect("denied")
     if not code or not realm_id:
@@ -349,7 +381,7 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="failed",
             actor=user.email,
-            metadata={"environment": "sandbox", "reason": "incomplete_response"},
+            metadata={"environment": environment, "reason": "incomplete_response"},
         )
         return quickbooks_oauth_redirect("failed")
 
@@ -360,7 +392,7 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="failed",
             actor=user.email,
-            metadata={"environment": "sandbox", "reason": "realm_mismatch"},
+            metadata={"environment": environment, "reason": "realm_mismatch"},
         )
         return quickbooks_oauth_redirect("failed")
     try:
@@ -373,7 +405,7 @@ def quickbooks_oauth_callback(
         result = exchange_authorization_code(code, existing_refresh, credentials)
         if not result.refresh_token:
             raise QuickBooksUnavailable("QuickBooks returned no refresh token.")
-        company = get_company_info(result.access_token, realm_id)
+        company = get_company_info(result.access_token, realm_id, environment)
     except QuickBooksUnavailable as exc:
         if connection:
             connection.last_error = str(exc)[:500]
@@ -383,13 +415,13 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="failed",
             actor=user.email,
-            metadata={"environment": "sandbox", "reason": "provider_rejected"},
+            metadata={"environment": environment, "reason": "provider_rejected"},
         )
         return quickbooks_oauth_redirect("failed")
 
     if connection is None:
         connection = QuickBooksConnection(
-            environment="sandbox",
+            environment=environment,
             connected_by_account_id=user.id,
             realm_id=realm_id,
             company_name=company.company_name,
@@ -420,7 +452,7 @@ def quickbooks_oauth_callback(
         outcome="connected",
         actor=user.email,
         metadata={
-            "environment": "sandbox",
+            "environment": environment,
             "scope": REQUIRED_SCOPE,
             "realm_id": realm_id,
             "company_name": company.company_name,
@@ -437,7 +469,7 @@ def disconnect_quickbooks(
     db: DBSession,
 ) -> QuickBooksStatus:
     _require_admin(user)
-    _require_sandbox_environment()
+    environment = _environment()
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Confirm the QuickBooks disconnect first.")
     connection = _connection(db)
@@ -486,7 +518,7 @@ def disconnect_quickbooks(
         outcome="completed",
         actor=user.email,
         metadata={
-            "environment": "sandbox",
+            "environment": environment,
             "realm_id": connection.realm_id,
             "revocation": revocation,
         },

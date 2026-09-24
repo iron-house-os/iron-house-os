@@ -11,7 +11,10 @@ Status: sandbox-only connection foundation
 
 This integration connects one QuickBooks Online **sandbox** company to IHOS Finance. It verifies the company identity through the read-only `CompanyInfo` endpoint. It does not create, update, export, email, pay, void, or delete any QuickBooks accounting record.
 
-Production QuickBooks credentials, live-company authorization, and every accounting write remain behind the separate owner and accountant approval gate in #389.
+Production QuickBooks credentials and live-company authorization remain behind
+the separate owner approval and protected deployment sequence in #401. Every
+accounting write remains outside both slices and requires separate owner and
+accountant approval under #389.
 
 ## Registered redirect URI
 
@@ -39,6 +42,7 @@ Set these values only in the protected server environment:
 QUICKBOOKS_ENABLED=true
 QUICKBOOKS_FORCE_DISABLED=false
 QUICKBOOKS_ENVIRONMENT=sandbox
+QUICKBOOKS_LIVE_READ_ONLY_APPROVED=false
 QUICKBOOKS_CLIENT_ID=<Intuit development client ID>
 QUICKBOOKS_CLIENT_SECRET=<Intuit development client secret>
 QUICKBOOKS_REDIRECT_URI=https://<approved-host>/api/v1/finance/quickbooks/oauth/callback

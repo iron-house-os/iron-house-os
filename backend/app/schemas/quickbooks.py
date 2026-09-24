@@ -10,6 +10,7 @@ class QuickBooksStatus(BaseModel):
     connected: bool
     status: str
     environment: str
+    live_read_only_approved: bool
     required_scope: str
     realm_id: str | None = None
     company_name: str | None = None
@@ -33,7 +34,7 @@ class QuickBooksConfigurationWrite(BaseModel):
     # response, including values that fail before route execution.
     client_id: str
     client_secret: SecretStr
-    sandbox_confirmed: bool = False
+    environment_confirmed: bool = False
 
 
 class QuickBooksConfigurationRemove(BaseModel):
