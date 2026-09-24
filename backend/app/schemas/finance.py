@@ -246,3 +246,21 @@ class CustomerInvoiceList(BaseModel):
 
 class CustomerInvoiceStatusUpdate(BaseModel):
     status: InvoiceStatus
+
+
+class QuickBooksInvoicePreview(BaseModel):
+    invoice_id: UUID
+    invoice_number: str
+    customer_name: str
+    project_id: UUID | None
+    invoice_date: date
+    due_date: date
+    status: InvoiceStatus
+    subtotal: str
+    gst: str
+    total: str
+    line_items: list[dict[str, str]]
+    source_checks_passed: bool
+    blockers: list[str]
+    accounting_setup_required: list[str]
+    export_enabled: bool
