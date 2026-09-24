@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CALLBACK = "/api/v1/finance/quickbooks/oauth/callback"
 QUICKBOOKS_SETTINGS = (
     "QUICKBOOKS_ENABLED",
+    "QUICKBOOKS_FORCE_DISABLED",
     "QUICKBOOKS_ENVIRONMENT",
     "QUICKBOOKS_CLIENT_ID",
     "QUICKBOOKS_CLIENT_SECRET",
@@ -59,6 +60,7 @@ def test_staging_environment_generator_keeps_quickbooks_disabled_with_exact_host
     deploy = (ROOT / "ops/digitalocean/staging-deploy.sh").read_text()
 
     assert 'echo "QUICKBOOKS_ENABLED=false"' in deploy
+    assert 'echo "QUICKBOOKS_FORCE_DISABLED=false"' in deploy
     assert 'echo "QUICKBOOKS_ENVIRONMENT=sandbox"' in deploy
     assert (
         'echo "QUICKBOOKS_REDIRECT_URI=https://$staging_host'

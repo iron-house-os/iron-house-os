@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     google_calendar_frontend_return_url: str = "http://localhost:5173/google-calendar"
     google_calendar_token_encryption_key: str | None = None
     quickbooks_enabled: bool = False
+    quickbooks_force_disabled: bool = False
     quickbooks_environment: str = "sandbox"
     quickbooks_client_id: str | None = None
     quickbooks_client_secret: str | None = None

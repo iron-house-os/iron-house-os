@@ -27,6 +27,11 @@ def _is_quickbooks_callback(request: Request) -> bool:
     return request.url.path == f"{prefix}/finance/quickbooks/oauth/callback"
 
 
+def _is_quickbooks_configuration(request: Request) -> bool:
+    prefix = get_settings().api_v1_prefix.rstrip("/")
+    return request.url.path == f"{prefix}/finance/quickbooks/configuration"
+
+
 def quickbooks_oauth_redirect(outcome: str) -> RedirectResponse:
     target = get_settings().quickbooks_frontend_return_url
     separator = "&" if "?" in target else "?"
@@ -52,6 +57,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         if _is_quickbooks_callback(request):
             return quickbooks_oauth_redirect("failed")
+        if _is_quickbooks_configuration(request):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Enter valid Intuit development credentials."},
+            )
         return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(AppError)
@@ -73,6 +83,17 @@ def register_exception_handlers(app: FastAPI) -> None:
                 error_type=type(exc).__name__,
             )
             return quickbooks_oauth_redirect("failed")
+        if _is_quickbooks_configuration(request):
+            logger.exception(
+                "quickbooks_configuration_unhandled_error",
+                path=request.url.path,
+                request_id=getattr(request.state, "request_id", None),
+                error_type=type(exc).__name__,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"error": {"message": "Unable to save QuickBooks credentials."}},
+            )
         logger.exception(
             "unhandled_error",
             path=request.url.path,
