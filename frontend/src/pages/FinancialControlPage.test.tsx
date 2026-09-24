@@ -12,6 +12,7 @@ vi.mock("../api/finance", () => ({ financeApi: { getBackupsReview: vi.fn(), getS
 vi.mock("../api/projects", () => ({ projectsApi: { list: vi.fn(() => Promise.resolve({ items: [] })) } }));
 vi.mock("../api/media", () => ({ mediaApi: { contentUrl: vi.fn((id: string) => `/private-media/${id}`), upload: vi.fn(), link: vi.fn() } }));
 vi.mock("../components/ReceiptCapturePanel", () => ({ ReceiptCapturePanel: () => <div>Controlled receipt workflow</div> }));
+vi.mock("../components/QuickBooksConnectionCard", () => ({ QuickBooksConnectionCard: () => <div>QuickBooks sandbox connection</div> }));
 vi.mock("../components/UniversalPhotoField", () => ({ UniversalPhotoField: () => <div>Photo field</div> }));
 
 const item: BackupsIntake = {

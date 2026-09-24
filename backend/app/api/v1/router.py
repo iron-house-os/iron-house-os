@@ -27,6 +27,7 @@ from app.api.v1.routes import (
     meeting_minutes,
     operations,
     projects,
+    quickbooks,
     quotes,
     rfq_automation,
     rfqs,
@@ -77,6 +78,11 @@ protected_router.include_router(tenders.router, prefix="/tenders", tags=["tender
 protected_router.include_router(equipment.router, prefix="/equipment", tags=["equipment"])
 protected_router.include_router(field_operations.router, prefix="/field-operations", tags=["field-operations"])
 protected_router.include_router(finance.router, prefix="/finance", tags=["finance"])
+protected_router.include_router(
+    quickbooks.router,
+    prefix="/finance/quickbooks",
+    tags=["finance", "quickbooks"],
+)
 protected_router.include_router(media.router, prefix="/media", tags=["media"])
 protected_router.include_router(help_coach.router, prefix="/help-coach", tags=["help-coach"])
 protected_router.include_router(assistant.router, prefix="/iron-house-chat", tags=["iron-house-chat"])
