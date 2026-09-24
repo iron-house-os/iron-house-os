@@ -15,6 +15,7 @@ INTUIT_AUTHORIZATION_URL = "https://appcenter.intuit.com/connect/oauth2"
 INTUIT_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 INTUIT_REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
 QUICKBOOKS_SANDBOX_API_URL = "https://sandbox-quickbooks.api.intuit.com"
+QUICKBOOKS_PRODUCTION_API_URL = "https://quickbooks.api.intuit.com"
 REQUIRED_SCOPE = "com.intuit.quickbooks.accounting"
 
 
@@ -44,11 +45,54 @@ class QuickBooksCredentials:
     token_encryption_key: str
 
 
+def quickbooks_environment() -> str:
+    settings = get_settings()
+    environment = settings.quickbooks_environment.strip().lower()
+    if environment not in {"sandbox", "production"}:
+        raise QuickBooksUnavailable("QuickBooks environment is not supported.")
+    if (
+        environment == "production"
+        and settings.environment.strip().lower() != "production"
+    ):
+        raise QuickBooksUnavailable(
+            "QuickBooks live access is restricted to the protected production deployment."
+        )
+    return environment
+
+
+def live_read_only_is_approved(environment: str | None = None) -> bool:
+    selected = environment or quickbooks_environment()
+    settings = get_settings()
+    return selected == "sandbox" or (
+        selected == "production"
+        and settings.environment.strip().lower() == "production"
+        and settings.quickbooks_live_read_only_approved
+    )
+
+
 def environment_credentials() -> QuickBooksCredentials | None:
     settings = get_settings()
+    environment = quickbooks_environment()
     if not (
-        settings.quickbooks_environment.strip().lower() == "sandbox"
+        live_read_only_is_approved(environment)
         and settings.quickbooks_client_id
+        and settings.quickbooks_client_secret
+        and settings.quickbooks_token_encryption_key
+    ):
+        return None
+    return QuickBooksCredentials(
+        client_id=settings.quickbooks_client_id,
+        client_secret=settings.quickbooks_client_secret,
+        token_encryption_key=settings.quickbooks_token_encryption_key,
+    )
+
+
+def environment_credentials_for_teardown() -> QuickBooksCredentials | None:
+    """Return configured credentials for revocation without reopening live OAuth."""
+    settings = get_settings()
+    quickbooks_environment()
+    if not (
+        settings.quickbooks_client_id
         and settings.quickbooks_client_secret
         and settings.quickbooks_token_encryption_key
     ):
@@ -66,9 +110,12 @@ def quickbooks_is_configured(credentials: QuickBooksCredentials | None = None) -
 
 def authorization_url(state: str, credentials: QuickBooksCredentials | None = None) -> str:
     settings = get_settings()
+    environment = quickbooks_environment()
+    if not live_read_only_is_approved(environment):
+        raise QuickBooksUnavailable("QuickBooks live read-only connection is not approved.")
     credentials = credentials or environment_credentials()
     if not quickbooks_is_configured(credentials) or credentials is None:
-        raise QuickBooksUnavailable("QuickBooks sandbox OAuth is not configured.")
+        raise QuickBooksUnavailable("QuickBooks OAuth is not configured.")
     return f"{INTUIT_AUTHORIZATION_URL}?{urlencode({
         'client_id': credentials.client_id,
         'redirect_uri': settings.quickbooks_redirect_uri,
@@ -113,12 +160,25 @@ def exchange_authorization_code(
     return _token_result(result, existing_refresh_token=existing_refresh_token)
 
 
-def get_company_info(access_token: str, realm_id: str) -> QuickBooksCompanyInfo:
+def get_company_info(
+    access_token: str,
+    realm_id: str,
+    environment: str | None = None,
+) -> QuickBooksCompanyInfo:
     if not realm_id.isdigit() or len(realm_id) > 64:
         raise QuickBooksUnavailable("QuickBooks returned an invalid company identifier.")
+    selected = environment or quickbooks_environment()
+    if not live_read_only_is_approved(selected):
+        raise QuickBooksUnavailable("QuickBooks live read-only connection is not approved.")
+    api_base_url = {
+        "sandbox": QUICKBOOKS_SANDBOX_API_URL,
+        "production": QUICKBOOKS_PRODUCTION_API_URL,
+    }.get(selected)
+    if api_base_url is None:
+        raise QuickBooksUnavailable("QuickBooks environment is not supported.")
     safe_realm = quote(realm_id, safe="")
     payload = _json_request(
-        f"{QUICKBOOKS_SANDBOX_API_URL}/v3/company/{safe_realm}/companyinfo/{safe_realm}?minorversion=75",
+        f"{api_base_url}/v3/company/{safe_realm}/companyinfo/{safe_realm}?minorversion=75",
         access_token=access_token,
     )
     raw = payload.get("CompanyInfo")
@@ -175,7 +235,7 @@ def _token_cipher(encryption_key: str | None = None) -> Fernet:
 def _basic_authorization(credentials: QuickBooksCredentials | None = None) -> str:
     credentials = credentials or environment_credentials()
     if credentials is None:
-        raise QuickBooksUnavailable("QuickBooks sandbox OAuth is not configured.")
+        raise QuickBooksUnavailable("QuickBooks OAuth is not configured.")
     encoded = base64.b64encode(
         f"{credentials.client_id}:{credentials.client_secret}".encode("utf-8")
     ).decode("ascii")

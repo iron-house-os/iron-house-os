@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 import json
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request as URLRequest
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -74,17 +75,53 @@ def _configure(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
+def _configure_production(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    approved: bool,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("QUICKBOOKS_ENABLED", "true")
+    monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "QUICKBOOKS_LIVE_READ_ONLY_APPROVED",
+        "true" if approved else "false",
+    )
+    monkeypatch.setenv("QUICKBOOKS_CLIENT_ID", "production-client-id")
+    monkeypatch.setenv(
+        "QUICKBOOKS_CLIENT_SECRET",
+        "production-client-secret-value",
+    )
+    monkeypatch.setenv(
+        "QUICKBOOKS_REDIRECT_URI",
+        "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback",
+    )
+    monkeypatch.setenv(
+        "QUICKBOOKS_FRONTEND_RETURN_URL",
+        "https://os.ironhousecivil.com/finance",
+    )
+    monkeypatch.setenv(
+        "QUICKBOOKS_TOKEN_ENCRYPTION_KEY",
+        "production-quickbooks-encryption-key-with-enough-length",
+    )
+    get_settings.cache_clear()
+
+
 def _start_state() -> str:
     response = client.post("/api/v1/finance/quickbooks/oauth/start")
     assert response.status_code == 200
     return parse_qs(urlparse(response.json()["authorization_url"]).query)["state"][0]
 
 
-def _connected(*, realm_id: str = "9341457990023688") -> None:
+def _connected(
+    *,
+    realm_id: str = "9341457990023688",
+    environment: str = "sandbox",
+) -> None:
     with TestingSessionLocal() as db:
         db.add(
             QuickBooksConnection(
-                environment="sandbox",
+                environment=environment,
                 connected_by_account_id=USER_ID,
                 realm_id=realm_id,
                 company_name="Sandbox Company US 3969",
@@ -106,6 +143,7 @@ def test_status_is_admin_only_and_never_exposes_tokens() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["environment"] == "sandbox"
+    assert body["live_read_only_approved"] is False
     assert body["connected"] is False
     assert body["database_configured"] is False
     assert "token" not in json.dumps(body).lower()
@@ -116,13 +154,85 @@ def test_status_is_admin_only_and_never_exposes_tokens() -> None:
     assert "Administrator" in denied.json()["detail"]
 
 
+def test_live_connection_fails_closed_without_owner_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_production(monkeypatch, approved=False)
+
+    status_response = client.get("/api/v1/finance/quickbooks/status")
+    configure_response = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "production-client-id",
+            "client_secret": "production-client-secret-value",
+            "environment_confirmed": True,
+        },
+    )
+    oauth_response = client.post("/api/v1/finance/quickbooks/oauth/start")
+
+    assert status_response.status_code == 200
+    assert status_response.json()["environment"] == "production"
+    assert status_response.json()["live_read_only_approved"] is False
+    assert status_response.json()["enabled"] is False
+    assert configure_response.status_code == 503
+    assert configure_response.json()["detail"] == (
+        "QuickBooks live read-only connection is awaiting owner approval."
+    )
+    assert oauth_response.status_code == 503
+
+
+def test_admin_can_store_production_credentials_only_after_live_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_production(monkeypatch, approved=True)
+
+    response = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "database-production-client-id",
+            "client_secret": "database-production-client-secret-value",
+            "environment_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "production"
+    assert body["live_read_only_approved"] is True
+    assert body["configured"] is True
+    assert body["database_configured"] is True
+    assert "production-client" not in json.dumps(body)
+    with TestingSessionLocal() as db:
+        configuration = db.query(QuickBooksConfiguration).one()
+        assert configuration.environment == "production"
+        assert configuration.client_id == "database-production-client-id"
+        assert "database-production-client-secret-value" not in (
+            configuration.encrypted_client_secret
+        )
+
+
+def test_production_oauth_start_binds_state_to_production_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_production(monkeypatch, approved=True)
+
+    response = client.post("/api/v1/finance/quickbooks/oauth/start")
+
+    assert response.status_code == 200
+    query = parse_qs(urlparse(response.json()["authorization_url"]).query)
+    assert query["client_id"] == ["production-client-id"]
+    with TestingSessionLocal() as db:
+        state = db.query(QuickBooksOAuthState).one()
+        assert state.environment == "production"
+
+
 def test_admin_can_store_encrypted_sandbox_configuration_without_secret_disclosure() -> None:
     response = client.put(
         "/api/v1/finance/quickbooks/configuration",
         json={
             "client_id": "sandbox-client-id",
             "client_secret": "sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
 
@@ -149,7 +259,7 @@ def test_sandbox_configuration_requires_confirmation_and_admin() -> None:
         json={
             "client_id": "sandbox-client-id",
             "client_secret": "sandbox-client-secret-value",
-            "sandbox_confirmed": False,
+            "environment_confirmed": False,
         },
     )
     assert unconfirmed.status_code == 400
@@ -160,7 +270,7 @@ def test_sandbox_configuration_requires_confirmation_and_admin() -> None:
         json={
             "client_id": "sandbox-client-id",
             "client_secret": "sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     assert denied.status_code == 403
@@ -172,7 +282,7 @@ def test_invalid_configuration_never_echoes_client_secret() -> None:
         json={
             "client_id": "sandbox-client-id",
             "client_secret": "too-short",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
 
@@ -195,12 +305,12 @@ def test_schema_validation_never_echoes_malformed_client_secret(
         json={
             "client_id": "sandbox-client-id",
             "client_secret": malformed_secret,
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "Enter valid Intuit development credentials."}
+    assert response.json() == {"detail": "Enter valid Intuit QuickBooks credentials."}
     assert "malformed-client-secret-value" not in response.text
 
 
@@ -212,7 +322,7 @@ def test_malformed_configuration_removal_uses_standard_validation_message() -> N
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] != "Enter valid Intuit development credentials."
+    assert response.json()["detail"] != "Enter valid Intuit QuickBooks credentials."
 
 
 def test_unexpected_configuration_failure_uses_sanitized_client_error_shape(
@@ -231,7 +341,7 @@ def test_unexpected_configuration_failure_uses_sanitized_client_error_shape(
         json={
             "client_id": "sandbox-client-id",
             "client_secret": client_secret,
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
 
@@ -246,7 +356,7 @@ def test_configuration_removal_requires_confirmation_and_clears_encrypted_values
         json={
             "client_id": "sandbox-client-id",
             "client_secret": "sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     assert saved.status_code == 200
@@ -276,7 +386,7 @@ def test_stored_configuration_starts_sandbox_oauth_without_environment_secrets()
         json={
             "client_id": "database-sandbox-client-id",
             "client_secret": "database-sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     assert saved.status_code == 200
@@ -308,7 +418,7 @@ def test_force_disable_blocks_oauth_with_saved_database_configuration(
         json={
             "client_id": "database-sandbox-client-id",
             "client_secret": "database-sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     assert saved.status_code == 200
@@ -337,7 +447,7 @@ def test_corrupt_database_configuration_is_unusable_and_oauth_start_is_sanitized
         json={
             "client_id": "database-sandbox-client-id",
             "client_secret": "database-sandbox-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     assert saved.status_code == 200
@@ -355,7 +465,7 @@ def test_corrupt_database_configuration_is_unusable_and_oauth_start_is_sanitized
     assert "cannot be decrypted" in status_response.json()["last_error"]
     assert oauth_response.status_code == 503
     assert oauth_response.json()["detail"] == (
-        "QuickBooks sandbox credentials are unavailable. "
+        "QuickBooks credentials are unavailable. "
         "Replace or remove the saved credentials."
     )
 
@@ -371,7 +481,7 @@ def test_connected_company_blocks_credential_replacement_and_removal(
         json={
             "client_id": "replacement-client-id",
             "client_secret": "replacement-client-secret-value",
-            "sandbox_confirmed": True,
+            "environment_confirmed": True,
         },
     )
     removal = client.request(
@@ -424,7 +534,7 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
     monkeypatch.setattr(
         quickbooks_routes,
         "get_company_info",
-        lambda token, realm_id: QuickBooksCompanyInfo(
+        lambda token, realm_id, environment: QuickBooksCompanyInfo(
             company_name="Sandbox Company US 3969",
             legal_name="Sandbox Company US 3969",
         ),
@@ -457,6 +567,52 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
     assert replay.headers["location"].endswith("?quickbooks=failed")
     assert replay.headers["cache-control"] == "no-store"
     assert replay.headers["referrer-policy"] == "no-referrer"
+
+
+def test_live_callback_binds_production_company_without_accounting_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_production(monkeypatch, approved=True)
+    state = _start_state()
+    environments: list[str] = []
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "exchange_authorization_code",
+        lambda code, existing_refresh_token=None, credentials=None: QuickBooksTokenResult(
+            access_token="provider-live-access-token",
+            refresh_token="provider-live-refresh-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            refresh_token_expires_at=datetime.now(UTC) + timedelta(days=100),
+            scopes=[REQUIRED_SCOPE],
+        ),
+    )
+
+    def verify_company(
+        token: str,
+        realm_id: str,
+        environment: str,
+    ) -> QuickBooksCompanyInfo:
+        environments.append(environment)
+        return QuickBooksCompanyInfo(
+            company_name="Iron House Contracting Ltd.",
+            legal_name="Iron House Contracting Ltd.",
+        )
+
+    monkeypatch.setattr(quickbooks_routes, "get_company_info", verify_company)
+
+    callback = client.get(
+        "/api/v1/finance/quickbooks/oauth/callback",
+        params={"state": state, "code": "provider-code", "realmId": "9341457990023688"},
+        follow_redirects=False,
+    )
+
+    assert callback.status_code == 303
+    assert callback.headers["location"].endswith("?quickbooks=connected")
+    assert environments == ["production"]
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert connection.environment == "production"
+        assert connection.company_name == "Iron House Contracting Ltd."
 
 
 def test_oauth_state_consumption_is_atomic_compare_and_set(
@@ -646,6 +802,33 @@ def test_disconnect_remains_available_after_feature_is_disabled(
     assert revoked == ["refresh-token"]
 
 
+def test_live_disconnect_remains_available_after_approval_is_removed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_production(monkeypatch, approved=True)
+    _connected(environment="production")
+    revoked: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "revoke_token",
+        lambda token, credentials=None: revoked.append(
+            (token, credentials.client_id if credentials else None)
+        ),
+    )
+    monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "false")
+    get_settings.cache_clear()
+
+    response = client.post(
+        "/api/v1/finance/quickbooks/disconnect",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["connected"] is False
+    assert revoked == [("refresh-token", "production-client-id")]
+
+
 @pytest.mark.parametrize("corrupt_ciphertext", ["corrupt-ciphertext", "not-ascii-\N{SNOWMAN}"])
 def test_disconnect_clears_local_tokens_when_decryption_fails(
     monkeypatch: pytest.MonkeyPatch,
@@ -722,6 +905,97 @@ def test_revoke_token_uses_intuit_json_payload(
     assert json.loads((request.data or b"").decode("utf-8")) == {
         "token": "sandbox-refresh-token"
     }
+
+
+@pytest.mark.parametrize(
+    ("environment", "approved", "expected_host"),
+    [
+        ("sandbox", False, "https://sandbox-quickbooks.api.intuit.com"),
+        ("production", True, "https://quickbooks.api.intuit.com"),
+    ],
+)
+def test_company_verification_uses_environment_specific_read_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+    approved: bool,
+    expected_host: str,
+) -> None:
+    monkeypatch.setenv(
+        "ENVIRONMENT",
+        "production" if environment == "production" else "development",
+    )
+    monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", environment)
+    monkeypatch.setenv(
+        "QUICKBOOKS_LIVE_READ_ONLY_APPROVED",
+        "true" if approved else "false",
+    )
+    get_settings.cache_clear()
+    requests: list[str] = []
+    monkeypatch.setattr(
+        quickbooks_service,
+        "_json_request",
+        lambda url, *, access_token: requests.append(url)
+        or {"CompanyInfo": {"CompanyName": "Verified Company"}},
+    )
+
+    company = quickbooks_service.get_company_info(
+        "access-token",
+        "9341457990023688",
+        environment,
+    )
+
+    assert company.company_name == "Verified Company"
+    assert len(requests) == 1
+    assert requests[0].startswith(
+        f"{expected_host}/v3/company/9341457990023688/companyinfo/"
+    )
+
+
+def test_company_verification_sends_the_access_token_as_a_bearer_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[URLRequest] = []
+    monkeypatch.setattr(
+        quickbooks_service,
+        "_read_json_response",
+        lambda request: requests.append(request) or {},
+    )
+
+    quickbooks_service._json_request(
+        "https://quickbooks.api.intuit.com/v3/company/123/companyinfo/123",
+        access_token="provider-access-token",
+    )
+
+    assert len(requests) == 1
+    assert requests[0].get_header("Authorization") == "Bearer provider-access-token"
+
+
+def test_production_company_verification_rejects_missing_live_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
+    monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "false")
+    get_settings.cache_clear()
+
+    with pytest.raises(QuickBooksUnavailable, match="not approved"):
+        quickbooks_service.get_company_info(
+            "access-token",
+            "9341457990023688",
+            "production",
+        )
+
+
+def test_staging_cannot_select_live_quickbooks_even_with_approval_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
+    monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "true")
+    get_settings.cache_clear()
+
+    with pytest.raises(QuickBooksUnavailable, match="protected production deployment"):
+        quickbooks_service.quickbooks_environment()
 
 
 def test_tokens_are_encrypted_at_rest(monkeypatch: pytest.MonkeyPatch) -> None:

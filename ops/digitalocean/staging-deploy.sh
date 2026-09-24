@@ -140,6 +140,7 @@ write_staging_environment() {
     echo "QUICKBOOKS_ENABLED=false"
     echo "QUICKBOOKS_FORCE_DISABLED=false"
     echo "QUICKBOOKS_ENVIRONMENT=sandbox"
+    echo "QUICKBOOKS_LIVE_READ_ONLY_APPROVED=false"
     echo "QUICKBOOKS_CLIENT_ID="
     echo "QUICKBOOKS_CLIENT_SECRET="
     echo "QUICKBOOKS_REDIRECT_URI=https://$staging_host/api/v1/finance/quickbooks/oauth/callback"

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     quickbooks_enabled: bool = False
     quickbooks_force_disabled: bool = False
     quickbooks_environment: str = "sandbox"
+    quickbooks_live_read_only_approved: bool = False
     quickbooks_client_id: str | None = None
     quickbooks_client_secret: str | None = None
     quickbooks_redirect_uri: str = (
@@ -73,6 +74,10 @@ def get_settings() -> Settings:
 
 
 _INSECURE_VALUE_MARKERS = ("change-me", "replace-with", "example", "<", "minimum-", "random-")
+_QUICKBOOKS_PRODUCTION_REDIRECT_URI = (
+    "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+)
+_QUICKBOOKS_PRODUCTION_FRONTEND_RETURN_URL = "https://os.ironhousecivil.com/finance"
 
 
 def _looks_insecure(value: str | None, *, minimum_length: int = 1) -> bool:
@@ -84,7 +89,22 @@ def _looks_insecure(value: str | None, *, minimum_length: int = 1) -> bool:
 
 def validate_production_settings(settings: Settings) -> None:
     """Fail closed before a production application accepts traffic."""
-    if settings.environment.strip().lower() != "production":
+    application_environment = settings.environment.strip().lower()
+    quickbooks_environment = settings.quickbooks_environment.strip().lower()
+    if quickbooks_environment == "production" and application_environment != "production":
+        raise RuntimeError(
+            "Insecure QuickBooks configuration: QUICKBOOKS_ENVIRONMENT=production "
+            "requires ENVIRONMENT=production"
+        )
+    if (
+        settings.quickbooks_live_read_only_approved
+        and application_environment != "production"
+    ):
+        raise RuntimeError(
+            "Insecure QuickBooks configuration: QUICKBOOKS_LIVE_READ_ONLY_APPROVED "
+            "requires ENVIRONMENT=production"
+        )
+    if application_environment != "production":
         return
 
     errors: list[str] = []
@@ -109,17 +129,44 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("SMTP_FROM_EMAIL must be configured when onboarding email delivery is enabled")
         if not settings.smtp_starttls and not settings.smtp_use_ssl:
             errors.append("SMTP_STARTTLS or SMTP_USE_SSL must be enabled in production")
+    if quickbooks_environment not in {"sandbox", "production"}:
+        errors.append("QUICKBOOKS_ENVIRONMENT must be sandbox or production")
+    if settings.quickbooks_live_read_only_approved and quickbooks_environment != "production":
+        errors.append(
+            "QUICKBOOKS_LIVE_READ_ONLY_APPROVED may only be true when "
+            "QUICKBOOKS_ENVIRONMENT is production"
+        )
     if settings.quickbooks_enabled:
-        if settings.quickbooks_environment.strip().lower() != "sandbox":
-            errors.append("QUICKBOOKS_ENVIRONMENT must remain sandbox until live accounting is separately approved")
+        if (
+            quickbooks_environment == "production"
+            and not settings.quickbooks_live_read_only_approved
+        ):
+            errors.append(
+                "QUICKBOOKS_LIVE_READ_ONLY_APPROVED must be true before live QuickBooks is enabled"
+            )
         if _looks_insecure(settings.quickbooks_client_id):
             errors.append("QUICKBOOKS_CLIENT_ID must be configured when QuickBooks is enabled")
         if _looks_insecure(settings.quickbooks_client_secret, minimum_length=12):
             errors.append("QUICKBOOKS_CLIENT_SECRET must be a protected non-placeholder value")
+    if settings.quickbooks_enabled or settings.quickbooks_live_read_only_approved:
         if _looks_insecure(settings.quickbooks_token_encryption_key, minimum_length=32):
             errors.append("QUICKBOOKS_TOKEN_ENCRYPTION_KEY must be a protected value of at least 32 characters")
         if not settings.quickbooks_redirect_uri.strip().lower().startswith("https://"):
             errors.append("QUICKBOOKS_REDIRECT_URI must use HTTPS in production")
+        if not settings.quickbooks_frontend_return_url.strip().lower().startswith("https://"):
+            errors.append("QUICKBOOKS_FRONTEND_RETURN_URL must use HTTPS in production")
+    if settings.quickbooks_live_read_only_approved:
+        if settings.quickbooks_redirect_uri != _QUICKBOOKS_PRODUCTION_REDIRECT_URI:
+            errors.append(
+                "QUICKBOOKS_REDIRECT_URI must match the approved production callback"
+            )
+        if (
+            settings.quickbooks_frontend_return_url
+            != _QUICKBOOKS_PRODUCTION_FRONTEND_RETURN_URL
+        ):
+            errors.append(
+                "QUICKBOOKS_FRONTEND_RETURN_URL must match the approved production return URL"
+            )
 
     if errors:
         raise RuntimeError("Insecure production configuration: " + "; ".join(errors))
