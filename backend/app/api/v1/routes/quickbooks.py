@@ -1,16 +1,15 @@
 from datetime import UTC, datetime, timedelta
 import secrets
 from typing import Annotated
-from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
 from app.core.config import get_settings
+from app.core.errors import quickbooks_oauth_redirect
 from app.db.session import get_db
 from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
 from app.schemas.quickbooks import (
@@ -112,24 +111,6 @@ def _status(db: Session) -> QuickBooksStatus:
     )
 
 
-def _return_url(outcome: str) -> str:
-    target = get_settings().quickbooks_frontend_return_url
-    separator = "&" if "?" in target else "?"
-    return f"{target}{separator}{urlencode({'quickbooks': outcome})}"
-
-
-def _oauth_redirect(outcome: str) -> RedirectResponse:
-    return RedirectResponse(
-        _return_url(outcome),
-        status_code=303,
-        headers={
-            "Cache-Control": "no-store",
-            "Pragma": "no-cache",
-            "Referrer-Policy": "no-referrer",
-        },
-    )
-
-
 def _audit(
     request: Request,
     *,
@@ -206,7 +187,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "reason": "invalid_or_expired_state"},
         )
-        return _oauth_redirect("failed")
+        return quickbooks_oauth_redirect("failed")
 
     if error:
         _audit(
@@ -216,7 +197,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "provider_error": error[:100]},
         )
-        return _oauth_redirect("denied")
+        return quickbooks_oauth_redirect("denied")
     if not code or not realm_id:
         _audit(
             request,
@@ -225,7 +206,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "reason": "incomplete_response"},
         )
-        return _oauth_redirect("failed")
+        return quickbooks_oauth_redirect("failed")
 
     connection = _connection(db)
     if connection and connection.status == "connected" and connection.realm_id != realm_id:
@@ -236,7 +217,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "reason": "realm_mismatch"},
         )
-        return _oauth_redirect("failed")
+        return quickbooks_oauth_redirect("failed")
     try:
         existing_refresh = None
         if connection and connection.encrypted_refresh_token:
@@ -256,7 +237,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "reason": "provider_rejected"},
         )
-        return _oauth_redirect("failed")
+        return quickbooks_oauth_redirect("failed")
 
     if connection is None:
         connection = QuickBooksConnection(
@@ -291,7 +272,7 @@ def quickbooks_oauth_callback(
             "company_name": company.company_name,
         },
     )
-    return _oauth_redirect("connected")
+    return quickbooks_oauth_redirect("connected")
 
 
 @router.post("/disconnect", response_model=QuickBooksStatus)
