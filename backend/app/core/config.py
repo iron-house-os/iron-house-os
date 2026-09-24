@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     )
     google_calendar_frontend_return_url: str = "http://localhost:5173/google-calendar"
     google_calendar_token_encryption_key: str | None = None
+    quickbooks_enabled: bool = False
+    quickbooks_environment: str = "sandbox"
+    quickbooks_client_id: str | None = None
+    quickbooks_client_secret: str | None = None
+    quickbooks_redirect_uri: str = (
+        "http://localhost:8000/api/v1/finance/quickbooks/oauth/callback"
+    )
+    quickbooks_frontend_return_url: str = "http://localhost:5173/finance"
+    quickbooks_token_encryption_key: str | None = None
     onboarding_email_delivery_enabled: bool = False
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -99,6 +108,17 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("SMTP_FROM_EMAIL must be configured when onboarding email delivery is enabled")
         if not settings.smtp_starttls and not settings.smtp_use_ssl:
             errors.append("SMTP_STARTTLS or SMTP_USE_SSL must be enabled in production")
+    if settings.quickbooks_enabled:
+        if settings.quickbooks_environment.strip().lower() != "sandbox":
+            errors.append("QUICKBOOKS_ENVIRONMENT must remain sandbox until live accounting is separately approved")
+        if _looks_insecure(settings.quickbooks_client_id):
+            errors.append("QUICKBOOKS_CLIENT_ID must be configured when QuickBooks is enabled")
+        if _looks_insecure(settings.quickbooks_client_secret, minimum_length=12):
+            errors.append("QUICKBOOKS_CLIENT_SECRET must be a protected non-placeholder value")
+        if _looks_insecure(settings.quickbooks_token_encryption_key, minimum_length=32):
+            errors.append("QUICKBOOKS_TOKEN_ENCRYPTION_KEY must be a protected value of at least 32 characters")
+        if not settings.quickbooks_redirect_uri.strip().lower().startswith("https://"):
+            errors.append("QUICKBOOKS_REDIRECT_URI must use HTTPS in production")
 
     if errors:
         raise RuntimeError("Insecure production configuration: " + "; ".join(errors))
