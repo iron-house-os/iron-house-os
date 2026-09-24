@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 import json
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request as URLRequest
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -947,6 +948,25 @@ def test_company_verification_uses_environment_specific_read_endpoint(
     assert requests[0].startswith(
         f"{expected_host}/v3/company/9341457990023688/companyinfo/"
     )
+
+
+def test_company_verification_sends_the_access_token_as_a_bearer_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[URLRequest] = []
+    monkeypatch.setattr(
+        quickbooks_service,
+        "_read_json_response",
+        lambda request: requests.append(request) or {},
+    )
+
+    quickbooks_service._json_request(
+        "https://quickbooks.api.intuit.com/v3/company/123/companyinfo/123",
+        access_token="provider-access-token",
+    )
+
+    assert len(requests) == 1
+    assert requests[0].get_header("Authorization") == "Bearer provider-access-token"
 
 
 def test_production_company_verification_rejects_missing_live_approval(
