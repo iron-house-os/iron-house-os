@@ -27,7 +27,11 @@ from app.models.project import (
     ProjectStartChecklistItem,
     ProjectSupplier,
 )
-from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
+from app.models.quickbooks import (
+    QuickBooksConfiguration,
+    QuickBooksConnection,
+    QuickBooksOAuthState,
+)
 from app.models.rfq import (
     RFQ,
     Quote,
@@ -81,6 +85,7 @@ __all__ = [
     "ProjectCloseoutChecklistItem",
     "ProjectStartChecklistItem",
     "ProjectSupplier",
+    "QuickBooksConfiguration",
     "QuickBooksConnection",
     "QuickBooksOAuthState",
     "Quote",

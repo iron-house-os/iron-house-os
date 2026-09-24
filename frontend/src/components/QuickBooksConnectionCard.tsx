@@ -6,6 +6,10 @@ import { QuickBooksStatus, quickBooksApi } from "../api/quickBooks";
 export function QuickBooksConnectionCard() {
   const [connection, setConnection] = useState<QuickBooksStatus | null>(null);
   const [disconnectConfirmed, setDisconnectConfirmed] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [sandboxConfirmed, setSandboxConfirmed] = useState(false);
+  const [removeConfirmed, setRemoveConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -47,6 +51,43 @@ export function QuickBooksConnectionCard() {
     }
   }
 
+  async function configure(event: React.FormEvent) {
+    event.preventDefault();
+    if (!sandboxConfirmed || !clientId.trim() || !clientSecret.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setConnection(await quickBooksApi.configure({
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        sandbox_confirmed: true,
+      }));
+      setClientId("");
+      setClientSecret("");
+      setSandboxConfirmed(false);
+      setNotice("QuickBooks sandbox credentials saved securely. The Client Secret is not displayed or stored in this browser.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save QuickBooks credentials.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeConfiguration() {
+    if (!removeConfirmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setConnection(await quickBooksApi.removeConfiguration());
+      setRemoveConfirmed(false);
+      setNotice("QuickBooks sandbox credentials were removed from IHOS.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to remove QuickBooks credentials.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <section className="rounded-md border border-iron-100 bg-white p-5">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
@@ -59,6 +100,14 @@ export function QuickBooksConnectionCard() {
     {notice ? <div role="status" className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div> : null}
     {error ? <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
     {connection?.last_error ? <div className="mt-3 text-sm text-amber-800">{connection.last_error}</div> : null}
+    {connection && !connection.configured ? <form onSubmit={(event) => void configure(event)} className="mt-4 grid gap-3 border-t border-iron-100 pt-4" autoComplete="off">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Use only the <strong>Development</strong> Client ID and Client Secret from Intuit. These credentials enable sandbox company verification only.</div>
+      <label className="grid gap-1 text-sm font-semibold text-iron-700">Development Client ID<input value={clientId} onChange={(event) => setClientId(event.target.value)} spellCheck={false} autoCapitalize="none" autoCorrect="off" autoComplete="off" className="rounded-md border border-iron-100 px-3 py-2 font-normal" /></label>
+      <label className="grid gap-1 text-sm font-semibold text-iron-700">Development Client Secret<input type="password" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} spellCheck={false} autoCapitalize="none" autoCorrect="off" autoComplete="off" className="rounded-md border border-iron-100 px-3 py-2 font-normal" /></label>
+      <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={sandboxConfirmed} onChange={(event) => setSandboxConfirmed(event.target.checked)} className="mt-1" /><span>I confirm these are Intuit development credentials for the sandbox company, not live QuickBooks credentials.</span></label>
+      <button type="submit" disabled={busy || !sandboxConfirmed || !clientId.trim() || !clientSecret.trim()} className="w-fit rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{busy ? "Saving securely…" : "Save sandbox credentials"}</button>
+    </form> : null}
     {connection?.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={disconnectConfirmed} onChange={(event) => setDisconnectConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to disconnect the QuickBooks sandbox company and clear the stored IHOS tokens.</span></label><button type="button" onClick={() => void disconnect()} disabled={!disconnectConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Disconnecting…" : "Disconnect sandbox"}</button></div> : null}
+    {connection?.configured && !connection.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to remove the saved QuickBooks sandbox credentials from IHOS.</span></label><button type="button" onClick={() => void removeConfiguration()} disabled={!removeConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Removing…" : "Remove sandbox credentials"}</button></div> : null}
   </section>;
 }

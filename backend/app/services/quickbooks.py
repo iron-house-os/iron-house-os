@@ -37,23 +37,40 @@ class QuickBooksCompanyInfo:
     legal_name: str | None
 
 
-def quickbooks_is_configured() -> bool:
+@dataclass(frozen=True)
+class QuickBooksCredentials:
+    client_id: str
+    client_secret: str
+    token_encryption_key: str
+
+
+def environment_credentials() -> QuickBooksCredentials | None:
     settings = get_settings()
-    return bool(
+    if not (
         settings.quickbooks_environment.strip().lower() == "sandbox"
         and settings.quickbooks_client_id
         and settings.quickbooks_client_secret
-        and settings.quickbooks_redirect_uri
         and settings.quickbooks_token_encryption_key
+    ):
+        return None
+    return QuickBooksCredentials(
+        client_id=settings.quickbooks_client_id,
+        client_secret=settings.quickbooks_client_secret,
+        token_encryption_key=settings.quickbooks_token_encryption_key,
     )
 
 
-def authorization_url(state: str) -> str:
+def quickbooks_is_configured(credentials: QuickBooksCredentials | None = None) -> bool:
+    return bool((credentials or environment_credentials()) and get_settings().quickbooks_redirect_uri)
+
+
+def authorization_url(state: str, credentials: QuickBooksCredentials | None = None) -> str:
     settings = get_settings()
-    if not quickbooks_is_configured():
+    credentials = credentials or environment_credentials()
+    if not quickbooks_is_configured(credentials) or credentials is None:
         raise QuickBooksUnavailable("QuickBooks sandbox OAuth is not configured.")
     return f"{INTUIT_AUTHORIZATION_URL}?{urlencode({
-        'client_id': settings.quickbooks_client_id,
+        'client_id': credentials.client_id,
         'redirect_uri': settings.quickbooks_redirect_uri,
         'response_type': 'code',
         'scope': REQUIRED_SCOPE,
@@ -65,13 +82,13 @@ def state_digest(state: str) -> str:
     return hashlib.sha256(state.encode("utf-8")).hexdigest()
 
 
-def encrypt_token(token: str) -> str:
-    return _cipher().encrypt(token.encode("utf-8")).decode("ascii")
+def encrypt_token(token: str, encryption_key: str | None = None) -> str:
+    return _token_cipher(encryption_key).encrypt(token.encode("utf-8")).decode("ascii")
 
 
-def decrypt_token(encrypted_token: str) -> str:
+def decrypt_token(encrypted_token: str, encryption_key: str | None = None) -> str:
     try:
-        return _cipher().decrypt(encrypted_token.encode("ascii")).decode("utf-8")
+        return _token_cipher(encryption_key).decrypt(encrypted_token.encode("ascii")).decode("utf-8")
     except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
         raise QuickBooksUnavailable(
             "The stored QuickBooks connection cannot be decrypted. Reconnect QuickBooks."
@@ -81,6 +98,7 @@ def decrypt_token(encrypted_token: str) -> str:
 def exchange_authorization_code(
     code: str,
     existing_refresh_token: str | None = None,
+    credentials: QuickBooksCredentials | None = None,
 ) -> QuickBooksTokenResult:
     settings = get_settings()
     result = _form_request(
@@ -90,6 +108,7 @@ def exchange_authorization_code(
             "redirect_uri": settings.quickbooks_redirect_uri,
             "grant_type": "authorization_code",
         },
+        credentials=credentials,
     )
     return _token_result(result, existing_refresh_token=existing_refresh_token)
 
@@ -112,13 +131,13 @@ def get_company_info(access_token: str, realm_id: str) -> QuickBooksCompanyInfo:
     )
 
 
-def revoke_token(token: str) -> None:
+def revoke_token(token: str, credentials: QuickBooksCredentials | None = None) -> None:
     request = Request(
         INTUIT_REVOKE_URL,
         data=json.dumps({"token": token}).encode("utf-8"),
         headers={
             "Accept": "application/json",
-            "Authorization": _basic_authorization(),
+            "Authorization": _basic_authorization(credentials),
             "Content-Type": "application/json",
         },
         method="POST",
@@ -126,29 +145,55 @@ def revoke_token(token: str) -> None:
     _read_json_response(request)
 
 
-def _cipher() -> Fernet:
-    source = get_settings().quickbooks_token_encryption_key
+def encrypt_configuration_secret(value: str) -> str:
+    return _configuration_cipher().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_configuration_secret(value: str) -> str:
+    try:
+        return _configuration_cipher().decrypt(value.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
+        raise QuickBooksUnavailable(
+            "The stored QuickBooks configuration cannot be decrypted. Remove and configure it again."
+        ) from exc
+
+
+def _configuration_cipher() -> Fernet:
+    source = get_settings().secret_key
+    digest = hashlib.sha256(b"ihos-quickbooks-configuration-v1\0" + source.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _token_cipher(encryption_key: str | None = None) -> Fernet:
+    source = encryption_key or get_settings().quickbooks_token_encryption_key
     if not source:
         raise QuickBooksUnavailable("QuickBooks token encryption is not configured.")
     key = base64.urlsafe_b64encode(hashlib.sha256(source.encode("utf-8")).digest())
     return Fernet(key)
 
 
-def _basic_authorization() -> str:
-    settings = get_settings()
-    client_id = settings.quickbooks_client_id or ""
-    client_secret = settings.quickbooks_client_secret or ""
-    encoded = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode("ascii")
+def _basic_authorization(credentials: QuickBooksCredentials | None = None) -> str:
+    credentials = credentials or environment_credentials()
+    if credentials is None:
+        raise QuickBooksUnavailable("QuickBooks sandbox OAuth is not configured.")
+    encoded = base64.b64encode(
+        f"{credentials.client_id}:{credentials.client_secret}".encode("utf-8")
+    ).decode("ascii")
     return f"Basic {encoded}"
 
 
-def _form_request(url: str, fields: dict[str, str]) -> dict:
+def _form_request(
+    url: str,
+    fields: dict[str, str],
+    *,
+    credentials: QuickBooksCredentials | None = None,
+) -> dict:
     request = Request(
         url,
         data=urlencode(fields).encode("utf-8"),
         headers={
             "Accept": "application/json",
-            "Authorization": _basic_authorization(),
+            "Authorization": _basic_authorization(credentials),
             "Content-Type": "application/x-www-form-urlencoded",
         },
         method="POST",

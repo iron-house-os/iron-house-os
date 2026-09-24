@@ -11,7 +11,11 @@ from app.api.dependencies.auth import require_authenticated_user
 from app.api.v1.routes import quickbooks as quickbooks_routes
 from app.core.config import get_settings
 from app.main import app
-from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
+from app.models.quickbooks import (
+    QuickBooksConfiguration,
+    QuickBooksConnection,
+    QuickBooksOAuthState,
+)
 from app.services.auth import AuthenticatedUser
 from app.services import quickbooks as quickbooks_service
 from app.services.quickbooks import (
@@ -111,6 +115,140 @@ def test_status_is_admin_only_and_never_exposes_tokens() -> None:
     assert "Administrator" in denied.json()["detail"]
 
 
+def test_admin_can_store_encrypted_sandbox_configuration_without_secret_disclosure() -> None:
+    response = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": "sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is True
+    assert body["configured"] is True
+    serialized = json.dumps(body)
+    assert "sandbox-client-id" not in serialized
+    assert "sandbox-client-secret-value" not in serialized
+    assert "token_encryption" not in serialized
+
+    with TestingSessionLocal() as db:
+        configuration = db.query(QuickBooksConfiguration).one()
+        assert configuration.client_id == "sandbox-client-id"
+        assert "sandbox-client-secret-value" not in configuration.encrypted_client_secret
+        assert configuration.encrypted_token_encryption_key
+
+
+def test_sandbox_configuration_requires_confirmation_and_admin() -> None:
+    unconfirmed = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": "sandbox-client-secret-value",
+            "sandbox_confirmed": False,
+        },
+    )
+    assert unconfirmed.status_code == 400
+
+    _authenticate_as("operations_manager")
+    denied = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": "sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    assert denied.status_code == 403
+
+
+def test_invalid_configuration_never_echoes_client_secret() -> None:
+    response = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": "too-short",
+            "sandbox_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "too-short" not in response.text
+
+
+def test_configuration_removal_requires_confirmation_and_clears_encrypted_values() -> None:
+    saved = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": "sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    assert saved.status_code == 200
+
+    unconfirmed = client.request(
+        "DELETE",
+        "/api/v1/finance/quickbooks/configuration",
+        json={"confirmed": False},
+    )
+    assert unconfirmed.status_code == 400
+
+    removed = client.request(
+        "DELETE",
+        "/api/v1/finance/quickbooks/configuration",
+        json={"confirmed": True},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["configured"] is False
+    with TestingSessionLocal() as db:
+        assert db.query(QuickBooksConfiguration).count() == 0
+
+
+def test_stored_configuration_starts_sandbox_oauth_without_environment_secrets() -> None:
+    saved = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "database-sandbox-client-id",
+            "client_secret": "database-sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    assert saved.status_code == 200
+
+    started = client.post("/api/v1/finance/quickbooks/oauth/start")
+    assert started.status_code == 200
+    query = parse_qs(urlparse(started.json()["authorization_url"]).query)
+    assert query["client_id"] == ["database-sandbox-client-id"]
+    assert query["scope"] == [REQUIRED_SCOPE]
+
+
+def test_connected_company_blocks_credential_replacement_and_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+
+    replacement = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "replacement-client-id",
+            "client_secret": "replacement-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    removal = client.request(
+        "DELETE",
+        "/api/v1/finance/quickbooks/configuration",
+        json={"confirmed": True},
+    )
+
+    assert replacement.status_code == 409
+    assert removal.status_code == 409
+
+
 def test_oauth_start_uses_accounting_scope_and_stores_only_state_digest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -140,7 +278,7 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
     monkeypatch.setattr(
         quickbooks_routes,
         "exchange_authorization_code",
-        lambda code, existing_refresh_token=None: QuickBooksTokenResult(
+        lambda code, existing_refresh_token=None, credentials=None: QuickBooksTokenResult(
             access_token="provider-access-token",
             refresh_token="provider-refresh-token",
             expires_at=datetime.now(UTC) + timedelta(hours=1),
@@ -321,7 +459,11 @@ def test_disconnect_requires_confirmation_revokes_and_clears_local_tokens(
     _configure(monkeypatch)
     _connected()
     revoked: list[str] = []
-    monkeypatch.setattr(quickbooks_routes, "revoke_token", revoked.append)
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "revoke_token",
+        lambda token, credentials=None: revoked.append(token),
+    )
 
     denied = client.post(
         "/api/v1/finance/quickbooks/disconnect",
@@ -350,7 +492,11 @@ def test_disconnect_remains_available_after_feature_is_disabled(
     _configure(monkeypatch)
     _connected()
     revoked: list[str] = []
-    monkeypatch.setattr(quickbooks_routes, "revoke_token", revoked.append)
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "revoke_token",
+        lambda token, credentials=None: revoked.append(token),
+    )
     monkeypatch.setenv("QUICKBOOKS_ENABLED", "false")
     get_settings.cache_clear()
 

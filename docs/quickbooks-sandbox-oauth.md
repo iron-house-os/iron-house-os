@@ -25,7 +25,13 @@ Keep the existing Intuit playground and quickstart redirect URIs. Add the IHOS U
 
 For staging, use the approved HTTPS staging hostname with the same path. Do not use `staging.invalid`; it is an example placeholder.
 
-## Server configuration
+## Secure administrator configuration
+
+An IHOS administrator can enter the Intuit **Development** Client ID and Client Secret in Financial Control. The HTTPS request body is never logged, the browser clears both fields after submission, and the API never returns either stored value. The Client Secret and an independently generated token-encryption key are encrypted at rest using a key derived from the protected IHOS application secret.
+
+Credential replacement or removal is blocked while a sandbox company is connected. Disconnect first so IHOS can attempt provider revocation and clear the encrypted OAuth tokens.
+
+The protected server environment remains a supported fallback for recovery or managed deployments:
 
 Set these values only in the protected server environment:
 
@@ -39,7 +45,7 @@ QUICKBOOKS_FRONTEND_RETURN_URL=https://<approved-host>/finance
 QUICKBOOKS_TOKEN_ENCRYPTION_KEY=<independent random value of at least 32 characters>
 ```
 
-Never place the client secret, encryption key, access token, or refresh token in GitHub, screenshots, chat, URLs, browser storage, logs, or audit metadata. Intuit temporarily returns the authorization code and state in the callback URL; never copy or retain that callback URL, and never include it in screenshots, logs, or support messages.
+Never place the client secret, encryption key, access token, or refresh token in GitHub, screenshots, chat, URLs, browser storage, logs, or audit metadata. Enter a Client Secret only in the password field on the authenticated IHOS Financial Control page over HTTPS. Intuit temporarily returns the authorization code and state in the callback URL; never copy or retain that callback URL, and never include it in screenshots, logs, or support messages.
 
 The deployed frontend proxy, host proxy, and backend runtime suppress access logging for the OAuth callback path. Callback-specific proxy error logging is also discarded so an upstream outage cannot persist the request URI. Every callback outcome uses a sanitized redirect that disables caching and referrer forwarding, including query-validation failures, expired or unauthorized sessions, and unexpected server errors, so the short-lived authorization code is not retained or propagated after the redirect.
 

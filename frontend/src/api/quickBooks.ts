@@ -37,4 +37,16 @@ export const quickBooksApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmed: true }),
     }).then(read<QuickBooksStatus>),
+  configure: (payload: { client_id: string; client_secret: string; sandbox_confirmed: boolean }) =>
+    apiFetch(`${API_BASE_URL}/finance/quickbooks/configuration`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(read<QuickBooksStatus>),
+  removeConfiguration: () =>
+    apiFetch(`${API_BASE_URL}/finance/quickbooks/configuration`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed: true }),
+    }).then(read<QuickBooksStatus>),
 };

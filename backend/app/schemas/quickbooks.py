@@ -23,3 +23,16 @@ class QuickBooksAuthorization(BaseModel):
 
 class QuickBooksDisconnect(BaseModel):
     confirmed: bool = False
+
+
+class QuickBooksConfigurationWrite(BaseModel):
+    # Length checks are intentionally performed in the route. Pydantic's default
+    # validation response includes invalid input values, which must never echo a
+    # Client Secret back to the browser.
+    client_id: str
+    client_secret: str
+    sandbox_confirmed: bool = False
+
+
+class QuickBooksConfigurationRemove(BaseModel):
+    confirmed: bool = False
