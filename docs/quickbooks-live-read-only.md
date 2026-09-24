@@ -48,6 +48,11 @@ Production mode cannot save credentials, start OAuth, or call CompanyInfo while
 `QUICKBOOKS_LIVE_READ_ONLY_APPROVED=false`. Disconnect and credential removal
 remain available so recovery does not depend on the enable gate.
 
+Live QuickBooks is also bound to the protected IHOS production application
+environment. Shared staging hardcodes `QUICKBOOKS_ENVIRONMENT=sandbox` and
+`QUICKBOOKS_LIVE_READ_ONLY_APPROVED=false`; environment-file overrides cannot
+select the Intuit production host there.
+
 ## Controlled release sequence
 
 1. Merge #401 only after CI, security review, and sandbox regression evidence.

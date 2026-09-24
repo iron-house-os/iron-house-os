@@ -44,6 +44,17 @@ def test_development_defaults_remain_available_for_local_work() -> None:
     validate_production_settings(Settings())
 
 
+def test_staging_cannot_select_live_quickbooks_or_live_approval() -> None:
+    with pytest.raises(RuntimeError, match="QUICKBOOKS_ENVIRONMENT=production"):
+        validate_production_settings(
+            Settings(
+                environment="staging",
+                quickbooks_environment="production",
+                quickbooks_live_read_only_approved=True,
+            )
+        )
+
+
 def test_enabled_production_onboarding_email_requires_secure_mail_settings() -> None:
     values = SECURE_PRODUCTION | {"onboarding_email_delivery_enabled": True}
 

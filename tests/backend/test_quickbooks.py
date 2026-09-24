@@ -79,6 +79,7 @@ def _configure_production(
     *,
     approved: bool,
 ) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("QUICKBOOKS_ENABLED", "true")
     monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
     monkeypatch.setenv(
@@ -915,6 +916,10 @@ def test_company_verification_uses_environment_specific_read_endpoint(
     approved: bool,
     expected_host: str,
 ) -> None:
+    monkeypatch.setenv(
+        "ENVIRONMENT",
+        "production" if environment == "production" else "development",
+    )
     monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", environment)
     monkeypatch.setenv(
         "QUICKBOOKS_LIVE_READ_ONLY_APPROVED",
@@ -945,6 +950,7 @@ def test_company_verification_uses_environment_specific_read_endpoint(
 def test_production_company_verification_rejects_missing_live_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
     monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "false")
     get_settings.cache_clear()
@@ -955,6 +961,18 @@ def test_production_company_verification_rejects_missing_live_approval(
             "9341457990023688",
             "production",
         )
+
+
+def test_staging_cannot_select_live_quickbooks_even_with_approval_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    monkeypatch.setenv("QUICKBOOKS_ENVIRONMENT", "production")
+    monkeypatch.setenv("QUICKBOOKS_LIVE_READ_ONLY_APPROVED", "true")
+    get_settings.cache_clear()
+
+    with pytest.raises(QuickBooksUnavailable, match="protected production deployment"):
+        quickbooks_service.quickbooks_environment()
 
 
 def test_tokens_are_encrypted_at_rest(monkeypatch: pytest.MonkeyPatch) -> None:

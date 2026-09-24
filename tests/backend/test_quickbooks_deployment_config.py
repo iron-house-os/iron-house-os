@@ -58,8 +58,13 @@ def test_all_deployed_proxies_suppress_callback_access_logging() -> None:
 
 
 def test_staging_environment_generator_keeps_quickbooks_disabled_with_exact_host_urls() -> None:
+    compose = (ROOT / "docker-compose.staging.yml").read_text()
     deploy = (ROOT / "ops/digitalocean/staging-deploy.sh").read_text()
 
+    assert "QUICKBOOKS_ENVIRONMENT: sandbox" in compose
+    assert 'QUICKBOOKS_LIVE_READ_ONLY_APPROVED: "false"' in compose
+    assert "QUICKBOOKS_ENVIRONMENT: ${" not in compose
+    assert "QUICKBOOKS_LIVE_READ_ONLY_APPROVED: ${" not in compose
     assert 'echo "QUICKBOOKS_ENABLED=false"' in deploy
     assert 'echo "QUICKBOOKS_FORCE_DISABLED=false"' in deploy
     assert 'echo "QUICKBOOKS_ENVIRONMENT=sandbox"' in deploy

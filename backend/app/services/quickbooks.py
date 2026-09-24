@@ -46,15 +46,28 @@ class QuickBooksCredentials:
 
 
 def quickbooks_environment() -> str:
-    environment = get_settings().quickbooks_environment.strip().lower()
+    settings = get_settings()
+    environment = settings.quickbooks_environment.strip().lower()
     if environment not in {"sandbox", "production"}:
         raise QuickBooksUnavailable("QuickBooks environment is not supported.")
+    if (
+        environment == "production"
+        and settings.environment.strip().lower() != "production"
+    ):
+        raise QuickBooksUnavailable(
+            "QuickBooks live access is restricted to the protected production deployment."
+        )
     return environment
 
 
 def live_read_only_is_approved(environment: str | None = None) -> bool:
     selected = environment or quickbooks_environment()
-    return selected == "sandbox" or get_settings().quickbooks_live_read_only_approved
+    settings = get_settings()
+    return selected == "sandbox" or (
+        selected == "production"
+        and settings.environment.strip().lower() == "production"
+        and settings.quickbooks_live_read_only_approved
+    )
 
 
 def environment_credentials() -> QuickBooksCredentials | None:

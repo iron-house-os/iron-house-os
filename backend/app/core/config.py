@@ -85,7 +85,22 @@ def _looks_insecure(value: str | None, *, minimum_length: int = 1) -> bool:
 
 def validate_production_settings(settings: Settings) -> None:
     """Fail closed before a production application accepts traffic."""
-    if settings.environment.strip().lower() != "production":
+    application_environment = settings.environment.strip().lower()
+    quickbooks_environment = settings.quickbooks_environment.strip().lower()
+    if quickbooks_environment == "production" and application_environment != "production":
+        raise RuntimeError(
+            "Insecure QuickBooks configuration: QUICKBOOKS_ENVIRONMENT=production "
+            "requires ENVIRONMENT=production"
+        )
+    if (
+        settings.quickbooks_live_read_only_approved
+        and application_environment != "production"
+    ):
+        raise RuntimeError(
+            "Insecure QuickBooks configuration: QUICKBOOKS_LIVE_READ_ONLY_APPROVED "
+            "requires ENVIRONMENT=production"
+        )
+    if application_environment != "production":
         return
 
     errors: list[str] = []
@@ -110,7 +125,6 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("SMTP_FROM_EMAIL must be configured when onboarding email delivery is enabled")
         if not settings.smtp_starttls and not settings.smtp_use_ssl:
             errors.append("SMTP_STARTTLS or SMTP_USE_SSL must be enabled in production")
-    quickbooks_environment = settings.quickbooks_environment.strip().lower()
     if quickbooks_environment not in {"sandbox", "production"}:
         errors.append("QUICKBOOKS_ENVIRONMENT must be sandbox or production")
     if settings.quickbooks_live_read_only_approved and quickbooks_environment != "production":
