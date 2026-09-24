@@ -18,6 +18,7 @@ vi.mock("../api/quickBooks", () => ({
 const connected = {
   enabled: true,
   configured: true,
+  database_configured: true,
   connected: true,
   status: "connected",
   environment: "sandbox" as const,
@@ -56,6 +57,56 @@ describe("QuickBooksConnectionCard", () => {
     }));
     expect(screen.queryByDisplayValue("sandbox-client-secret-value")).not.toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent("not displayed or stored in this browser");
+  });
+
+  it("clears the client secret after a failed configuration request", async () => {
+    const user = userEvent.setup();
+    const unconfigured = { ...connected, connected: false, configured: false, database_configured: false, enabled: false, status: "not_connected" };
+    vi.mocked(quickBooksApi.status).mockResolvedValue(unconfigured);
+    vi.mocked(quickBooksApi.configure).mockRejectedValue(new Error("Credentials rejected"));
+    render(<QuickBooksConnectionCard />);
+
+    await user.type(await screen.findByLabelText("Development Client ID"), "sandbox-client-id");
+    await user.type(screen.getByLabelText("Development Client Secret"), "sandbox-client-secret-value");
+    await user.click(screen.getByRole("checkbox", { name: /development credentials/i }));
+    await user.click(screen.getByRole("button", { name: "Save sandbox credentials" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Credentials rejected");
+    expect(screen.getByLabelText("Development Client Secret")).toHaveValue("");
+  });
+
+  it("only offers credential removal for database-managed credentials", async () => {
+    vi.mocked(quickBooksApi.status).mockResolvedValue({
+      ...connected,
+      connected: false,
+      database_configured: false,
+      status: "not_connected",
+    });
+    render(<QuickBooksConnectionCard />);
+
+    expect(await screen.findByText("Ready to connect a sandbox company.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove sandbox credentials" })).not.toBeInTheDocument();
+  });
+
+  it("removes database-managed credentials only after confirmation", async () => {
+    const user = userEvent.setup();
+    const saved = { ...connected, connected: false, database_configured: true, status: "not_connected" };
+    vi.mocked(quickBooksApi.status).mockResolvedValue(saved);
+    vi.mocked(quickBooksApi.removeConfiguration).mockResolvedValue({
+      ...saved,
+      configured: false,
+      database_configured: false,
+      enabled: false,
+    });
+    render(<QuickBooksConnectionCard />);
+
+    const remove = await screen.findByRole("button", { name: "Remove sandbox credentials" });
+    expect(remove).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /remove the saved QuickBooks sandbox credentials/i }));
+    await user.click(remove);
+
+    await waitFor(() => expect(quickBooksApi.removeConfiguration).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("status")).toHaveTextContent("removed from IHOS");
   });
 
   it("labels the connection as sandbox-only and exposes no accounting write control", async () => {

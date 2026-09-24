@@ -107,6 +107,7 @@ def test_status_is_admin_only_and_never_exposes_tokens() -> None:
     body = response.json()
     assert body["environment"] == "sandbox"
     assert body["connected"] is False
+    assert body["database_configured"] is False
     assert "token" not in json.dumps(body).lower()
 
     _authenticate_as("operations_manager")
@@ -129,6 +130,7 @@ def test_admin_can_store_encrypted_sandbox_configuration_without_secret_disclosu
     body = response.json()
     assert body["enabled"] is True
     assert body["configured"] is True
+    assert body["database_configured"] is True
     serialized = json.dumps(body)
     assert "sandbox-client-id" not in serialized
     assert "sandbox-client-secret-value" not in serialized
@@ -178,6 +180,30 @@ def test_invalid_configuration_never_echoes_client_secret() -> None:
     assert "too-short" not in response.text
 
 
+@pytest.mark.parametrize(
+    "malformed_secret",
+    [
+        ["malformed-client-secret-value"],
+        {"nested": "malformed-client-secret-value"},
+    ],
+)
+def test_schema_validation_never_echoes_malformed_client_secret(
+    malformed_secret: object,
+) -> None:
+    response = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": malformed_secret,
+            "sandbox_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Enter valid Intuit development credentials."}
+    assert "malformed-client-secret-value" not in response.text
+
+
 def test_configuration_removal_requires_confirmation_and_clears_encrypted_values() -> None:
     saved = client.put(
         "/api/v1/finance/quickbooks/configuration",
@@ -203,6 +229,7 @@ def test_configuration_removal_requires_confirmation_and_clears_encrypted_values
     )
     assert removed.status_code == 200
     assert removed.json()["configured"] is False
+    assert removed.json()["database_configured"] is False
     with TestingSessionLocal() as db:
         assert db.query(QuickBooksConfiguration).count() == 0
 
@@ -223,6 +250,76 @@ def test_stored_configuration_starts_sandbox_oauth_without_environment_secrets()
     query = parse_qs(urlparse(started.json()["authorization_url"]).query)
     assert query["client_id"] == ["database-sandbox-client-id"]
     assert query["scope"] == [REQUIRED_SCOPE]
+
+
+def test_environment_credentials_are_not_reported_as_database_managed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+
+    response = client.get("/api/v1/finance/quickbooks/status")
+
+    assert response.status_code == 200
+    assert response.json()["configured"] is True
+    assert response.json()["database_configured"] is False
+
+
+def test_force_disable_blocks_oauth_with_saved_database_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    saved = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "database-sandbox-client-id",
+            "client_secret": "database-sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    assert saved.status_code == 200
+    monkeypatch.setenv("QUICKBOOKS_FORCE_DISABLED", "true")
+    get_settings.cache_clear()
+
+    status_response = client.get("/api/v1/finance/quickbooks/status")
+    oauth_response = client.post("/api/v1/finance/quickbooks/oauth/start")
+
+    assert status_response.status_code == 200
+    assert status_response.json()["enabled"] is False
+    assert status_response.json()["configured"] is True
+    assert status_response.json()["database_configured"] is True
+    assert oauth_response.status_code == 503
+    assert oauth_response.json()["detail"] == "QuickBooks sandbox connection is disabled."
+
+
+def test_corrupt_database_configuration_is_unusable_and_oauth_start_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    saved = client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "database-sandbox-client-id",
+            "client_secret": "database-sandbox-client-secret-value",
+            "sandbox_confirmed": True,
+        },
+    )
+    assert saved.status_code == 200
+    with TestingSessionLocal() as db:
+        configuration = db.query(QuickBooksConfiguration).one()
+        configuration.encrypted_client_secret = "corrupt-ciphertext"
+        db.commit()
+
+    status_response = client.get("/api/v1/finance/quickbooks/status")
+    oauth_response = client.post("/api/v1/finance/quickbooks/oauth/start")
+
+    assert status_response.status_code == 200
+    assert status_response.json()["configured"] is False
+    assert status_response.json()["database_configured"] is True
+    assert "cannot be decrypted" in status_response.json()["last_error"]
+    assert oauth_response.status_code == 503
+    assert oauth_response.json()["detail"] == (
+        "QuickBooks sandbox credentials are unavailable. "
+        "Replace or remove the saved credentials."
+    )
 
 
 def test_connected_company_blocks_credential_replacement_and_removal(
@@ -497,7 +594,7 @@ def test_disconnect_remains_available_after_feature_is_disabled(
         "revoke_token",
         lambda token, credentials=None: revoked.append(token),
     )
-    monkeypatch.setenv("QUICKBOOKS_ENABLED", "false")
+    monkeypatch.setenv("QUICKBOOKS_FORCE_DISABLED", "true")
     get_settings.cache_clear()
 
     response = client.post(

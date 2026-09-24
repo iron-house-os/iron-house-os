@@ -138,6 +138,7 @@ write_staging_environment() {
     echo "GOOGLE_CALENDAR_FRONTEND_RETURN_URL=https://$staging_host/google-calendar"
     echo "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY="
     echo "QUICKBOOKS_ENABLED=false"
+    echo "QUICKBOOKS_FORCE_DISABLED=false"
     echo "QUICKBOOKS_ENVIRONMENT=sandbox"
     echo "QUICKBOOKS_CLIENT_ID="
     echo "QUICKBOOKS_CLIENT_SECRET="

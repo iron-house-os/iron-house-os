@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 
 class QuickBooksStatus(BaseModel):
     enabled: bool
     configured: bool
+    database_configured: bool
     connected: bool
     status: str
     environment: str
@@ -26,11 +27,12 @@ class QuickBooksDisconnect(BaseModel):
 
 
 class QuickBooksConfigurationWrite(BaseModel):
-    # Length checks are intentionally performed in the route. Pydantic's default
-    # validation response includes invalid input values, which must never echo a
-    # Client Secret back to the browser.
+    # Length checks are performed in the route and validation errors for this
+    # endpoint are sanitized by the application exception handler. The latter is
+    # required because Pydantic includes malformed input values in its default
+    # response, including values that fail before route execution.
     client_id: str
-    client_secret: str
+    client_secret: SecretStr
     sandbox_confirmed: bool = False
 
 

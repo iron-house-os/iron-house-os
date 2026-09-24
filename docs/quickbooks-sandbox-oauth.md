@@ -37,6 +37,7 @@ Set these values only in the protected server environment:
 
 ```text
 QUICKBOOKS_ENABLED=true
+QUICKBOOKS_FORCE_DISABLED=false
 QUICKBOOKS_ENVIRONMENT=sandbox
 QUICKBOOKS_CLIENT_ID=<Intuit development client ID>
 QUICKBOOKS_CLIENT_SECRET=<Intuit development client secret>
@@ -70,4 +71,4 @@ Staging evidence must show the registered staging redirect, successful sandbox c
 
 ## Rollback
 
-Disable `QUICKBOOKS_ENABLED`, then use the administrator disconnect control to attempt Intuit revocation and clear the local encrypted tokens. The disconnect recovery path remains available while the feature is disabled and clears local tokens even if decryption or provider revocation fails. Revoke the Intuit app connection directly if the IHOS status reports that revocation was not confirmed, then roll back the application release. The migration downgrade removes only the sandbox OAuth connection/state tables; it does not touch IHOS invoices or any QuickBooks accounting record.
+Set `QUICKBOOKS_FORCE_DISABLED=true` to block OAuth even when encrypted credentials have been saved in IHOS. Then use the administrator disconnect control to attempt Intuit revocation and clear the local encrypted tokens. The disconnect recovery path remains available while the feature is disabled and clears local tokens even if decryption or provider revocation fails. Remove the saved database credentials in Financial Control when rollback requires a full local credential purge. Revoke the Intuit app connection directly if the IHOS status reports that revocation was not confirmed, then roll back the application release. The migration downgrade removes only the sandbox OAuth connection/state tables; it does not touch IHOS invoices or any QuickBooks accounting record.

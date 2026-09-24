@@ -69,6 +69,7 @@ export function QuickBooksConnectionCard() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save QuickBooks credentials.");
     } finally {
+      setClientSecret("");
       setBusy(false);
     }
   }
@@ -93,7 +94,7 @@ export function QuickBooksConnectionCard() {
       <div>
         <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /><h2 className="font-semibold text-iron-950">QuickBooks Online connection</h2><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">Sandbox only</span></div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">Administrator-controlled OAuth connection. This stage verifies the selected sandbox company only; it cannot create or change accounting records.</p>
-        {connection?.connected ? <div className="mt-3 text-sm"><div className="font-semibold text-emerald-700">Connected: {connection.company_name}</div><div className="mt-1 text-iron-500">Realm {connection.realm_id} · read-only company verification</div></div> : <div className="mt-3 text-sm font-semibold text-iron-700">{connection?.configured ? "Ready to connect a sandbox company." : "Server credentials are not configured yet."}</div>}
+        {connection?.connected ? <div className="mt-3 text-sm"><div className="font-semibold text-emerald-700">Connected: {connection.company_name}</div><div className="mt-1 text-iron-500">Realm {connection.realm_id} · read-only company verification</div></div> : <div className="mt-3 text-sm font-semibold text-iron-700">{connection?.configured ? (connection.enabled ? "Ready to connect a sandbox company." : "QuickBooks sandbox connection is administratively disabled.") : "Server credentials are not configured yet."}</div>}
       </div>
       {!connection?.connected ? <button type="button" onClick={() => void connect()} disabled={busy || !connection?.enabled || !connection.configured} className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50"><Link2 className="h-4 w-4" />{busy ? "Opening Intuit…" : "Connect sandbox"}</button> : null}
     </div>
@@ -108,6 +109,6 @@ export function QuickBooksConnectionCard() {
       <button type="submit" disabled={busy || !sandboxConfirmed || !clientId.trim() || !clientSecret.trim()} className="w-fit rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{busy ? "Saving securely…" : "Save sandbox credentials"}</button>
     </form> : null}
     {connection?.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={disconnectConfirmed} onChange={(event) => setDisconnectConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to disconnect the QuickBooks sandbox company and clear the stored IHOS tokens.</span></label><button type="button" onClick={() => void disconnect()} disabled={!disconnectConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Disconnecting…" : "Disconnect sandbox"}</button></div> : null}
-    {connection?.configured && !connection.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to remove the saved QuickBooks sandbox credentials from IHOS.</span></label><button type="button" onClick={() => void removeConfiguration()} disabled={!removeConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Removing…" : "Remove sandbox credentials"}</button></div> : null}
+    {connection?.database_configured && !connection.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to remove the saved QuickBooks sandbox credentials from IHOS.</span></label><button type="button" onClick={() => void removeConfiguration()} disabled={!removeConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Removing…" : "Remove sandbox credentials"}</button></div> : null}
   </section>;
 }

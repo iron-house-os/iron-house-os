@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000
 export type QuickBooksStatus = {
   enabled: boolean;
   configured: boolean;
+  database_configured: boolean;
   connected: boolean;
   status: string;
   environment: "sandbox";

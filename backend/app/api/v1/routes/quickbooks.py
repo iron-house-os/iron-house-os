@@ -75,17 +75,24 @@ def _connection(db: Session) -> QuickBooksConnection | None:
     )
 
 
-def _configuration(db: Session) -> QuickBooksConfiguration | None:
+def _stored_configuration(db: Session) -> QuickBooksConfiguration | None:
     return db.scalar(
         select(QuickBooksConfiguration).where(
             QuickBooksConfiguration.environment == "sandbox",
-            QuickBooksConfiguration.enabled.is_(True),
         )
     )
 
 
+def _configuration(db: Session) -> QuickBooksConfiguration | None:
+    configuration = _stored_configuration(db)
+    return configuration if configuration and configuration.enabled else None
+
+
 def _feature_enabled(db: Session) -> bool:
-    return bool(get_settings().quickbooks_enabled or _configuration(db))
+    settings = get_settings()
+    if settings.quickbooks_force_disabled:
+        return False
+    return bool(settings.quickbooks_enabled or _configuration(db))
 
 
 def _credentials(db: Session) -> QuickBooksCredentials | None:
@@ -124,6 +131,7 @@ def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> 
 
 
 def _status(db: Session) -> QuickBooksStatus:
+    database_configured = _stored_configuration(db) is not None
     configuration_error = None
     try:
         credentials = _credentials(db)
@@ -139,7 +147,8 @@ def _status(db: Session) -> QuickBooksStatus:
     )
     return QuickBooksStatus(
         enabled=_feature_enabled(db),
-        configured=quickbooks_is_configured(credentials),
+        configured=credentials is not None and quickbooks_is_configured(credentials),
+        database_configured=database_configured,
         connected=connected,
         status=connection.status if connection else "not_connected",
         environment="sandbox",
@@ -194,15 +203,11 @@ def configure_quickbooks(
         raise HTTPException(status_code=409, detail="Disconnect QuickBooks before changing credentials.")
 
     client_id = payload.client_id.strip()
-    client_secret = payload.client_secret.strip()
+    client_secret = payload.client_secret.get_secret_value().strip()
     if not (10 <= len(client_id) <= 255) or not (12 <= len(client_secret) <= 1000):
         raise HTTPException(status_code=422, detail="Enter valid Intuit development credentials.")
 
-    configuration = db.scalar(
-        select(QuickBooksConfiguration).where(
-            QuickBooksConfiguration.environment == "sandbox"
-        )
-    )
+    configuration = _stored_configuration(db)
     if configuration is None:
         configuration = QuickBooksConfiguration(
             environment="sandbox",
@@ -272,7 +277,16 @@ def start_quickbooks_oauth(
 ) -> QuickBooksAuthorization:
     _require_admin(user)
     _require_enabled(db)
-    credentials = _credentials(db)
+    try:
+        credentials = _credentials(db)
+    except QuickBooksUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "QuickBooks sandbox credentials are unavailable. "
+                "Replace or remove the saved credentials."
+            ),
+        ) from exc
     if not quickbooks_is_configured(credentials):
         raise HTTPException(status_code=503, detail="QuickBooks sandbox OAuth is not configured.")
     state = secrets.token_urlsafe(48)
