@@ -22,6 +22,7 @@ from app.schemas.finance import (
     CustomerInvoiceList,
     CustomerInvoiceRead,
     CustomerInvoiceStatusUpdate,
+    QuickBooksInvoicePreview,
     EstimateBudgetImportRequest,
     FinancialEntryCreate,
     FinancialEntryRead,
@@ -43,6 +44,7 @@ from app.services import (
     completed_work_costs,
     finance,
     project_invoice_packages,
+    quickbooks_preview,
     receipt_extraction,
     receipts,
 )
@@ -74,6 +76,13 @@ def list_customer_invoices(db: DBSession, user: CurrentUser) -> CustomerInvoiceL
 @router.get("/customer-invoices/{invoice_id}", response_model=CustomerInvoiceRead)
 def get_customer_invoice(invoice_id: UUID, db: DBSession, user: CurrentUser) -> CustomerInvoiceRead:
     return customer_invoices.get_invoice(db, invoice_id, user)
+
+
+@router.get("/customer-invoices/{invoice_id}/quickbooks-preview", response_model=QuickBooksInvoicePreview)
+def customer_invoice_quickbooks_preview(
+    invoice_id: UUID, db: DBSession, user: CurrentUser
+) -> QuickBooksInvoicePreview:
+    return quickbooks_preview.preview_invoice(db, invoice_id, user)
 
 
 @router.patch("/customer-invoices/{invoice_id}/status", response_model=CustomerInvoiceRead)

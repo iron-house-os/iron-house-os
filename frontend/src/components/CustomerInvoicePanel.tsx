@@ -1,7 +1,7 @@
 import { Download, Plus } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
-import { CustomerInvoice, financeApi } from "../api/finance";
+import { CustomerInvoice, financeApi, QuickBooksInvoicePreview } from "../api/finance";
 
 const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 const today = () => new Date().toISOString().slice(0, 10);
@@ -19,6 +19,7 @@ export function CustomerInvoicePanel() {
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [quickBooksPreview, setQuickBooksPreview] = useState<QuickBooksInvoicePreview | null>(null);
 
   async function refresh() { try { setItems((await financeApi.getCustomerInvoices()).items); } catch (current) { setError(current instanceof Error ? current.message : "Unable to load customer invoices."); } }
   useEffect(() => { void refresh(); }, []);
@@ -30,17 +31,30 @@ export function CustomerInvoicePanel() {
     } catch (current) { setError(current instanceof Error ? current.message : "Unable to create customer invoice."); }
   }
   async function transition(invoice: CustomerInvoice, status: CustomerInvoice["status"]) { try { await financeApi.updateCustomerInvoiceStatus(invoice.id, status); await refresh(); } catch (current) { setError(current instanceof Error ? current.message : "Unable to update invoice."); } }
+  async function previewQuickBooks(invoice: CustomerInvoice) {
+    setError(null);
+    setQuickBooksPreview(null);
+    try { setQuickBooksPreview(await financeApi.getQuickBooksInvoicePreview(invoice.id)); }
+    catch (current) { setError(current instanceof Error ? current.message : "Unable to check QuickBooks readiness."); }
+  }
 
   return <section className="rounded-md border border-iron-100 bg-white p-5">
     <div className="flex items-center gap-2"><Plus className="h-4 w-4" /><h2 className="font-semibold">Customer billing</h2></div>
     <p className="mt-1 text-sm text-iron-500">Server-calculated CAD invoices. Approval is required before issue; development records are clearly identified.</p>
     {error ? <div role="alert" className="mt-3 text-sm text-red-700">{error}</div> : null}
+    {quickBooksPreview ? <div role="status" className="mt-3 rounded-md border border-iron-100 bg-iron-50 p-4 text-sm">
+      <strong>QuickBooks preview: {quickBooksPreview.invoice_number}</strong>
+      <p className="mt-1">CAD {quickBooksPreview.subtotal} + GST {quickBooksPreview.gst} = {quickBooksPreview.total}. {quickBooksPreview.source_checks_passed ? "IHOS source checks passed." : "IHOS source checks need attention."} Accounting export is not enabled.</p>
+      {quickBooksPreview.blockers.length ? <ul className="mt-2 list-disc pl-5">{quickBooksPreview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul> : null}
+      <p className="mt-2">Before connecting: {quickBooksPreview.accounting_setup_required.join(" ")}</p>
+      <button className="mt-2 font-semibold underline" onClick={() => setQuickBooksPreview(null)}>Close preview</button>
+    </div> : null}
     <form onSubmit={submit} className="mt-4 grid gap-3 border-t border-iron-100 pt-4 md:grid-cols-2 xl:grid-cols-4">
       <Field label="Invoice number" value={invoiceNumber} onChange={setInvoiceNumber} /><Field label="Customer" value={customer} onChange={setCustomer} /><Field label="Customer address" value={address} onChange={setAddress} /><Field label="Project" value={project} onChange={setProject} /><Field label="Job-site address" value={site} onChange={setSite} /><Field label="Invoice date" value={invoiceDate} onChange={setInvoiceDate} type="date" /><Field label="Due date" value={dueDate} onChange={setDueDate} type="date" /><Field label="Description" value={description} onChange={setDescription} /><Field label="Quantity" value={quantity} onChange={setQuantity} type="number" /><Field label="Unit price" value={unitPrice} onChange={setUnitPrice} type="number" />
       <button disabled={!invoiceNumber || !customer || !address || !project || !description || !unitPrice} className="self-end rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">Create draft invoice</button>
     </form>
     <div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label="Customer invoice register">
-      <table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-iron-50 text-xs uppercase text-iron-500"><tr><th className="px-4 py-3">Invoice</th><th>Customer</th><th>Project / site</th><th>Total</th><th>Status</th><th>Controls</th></tr></thead><tbody>{items.map((invoice) => <tr key={invoice.id} className="border-t border-iron-100"><td className="px-4 py-3 font-semibold">{invoice.invoice_number}{invoice.development_seed_key ? <span className="ml-2 rounded bg-amber-100 px-2 py-1 text-xs">Development only</span> : null}</td><td>{invoice.customer_name}</td><td>{invoice.project_name}<div className="text-xs text-iron-500">{invoice.site_address || "Job-site address not provided"}</div></td><td>{money.format(Number(invoice.total))}</td><td>{invoice.status}</td><td><div className="flex gap-2">{invoice.status === "draft" ? <button onClick={() => void transition(invoice, "approved")} className="font-semibold underline">Approve</button> : null}{invoice.status === "approved" ? <button onClick={() => void transition(invoice, "issued")} className="font-semibold underline">Issue</button> : null}<a href={financeApi.customerInvoicePdfUrl(invoice.id)} className="inline-flex items-center gap-1 font-semibold underline"><Download className="h-3 w-3" />PDF</a></div></td></tr>)}</tbody></table>
+      <table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-iron-50 text-xs uppercase text-iron-500"><tr><th className="px-4 py-3">Invoice</th><th>Customer</th><th>Project / site</th><th>Total</th><th>Status</th><th>Controls</th></tr></thead><tbody>{items.map((invoice) => <tr key={invoice.id} className="border-t border-iron-100"><td className="px-4 py-3 font-semibold">{invoice.invoice_number}{invoice.development_seed_key ? <span className="ml-2 rounded bg-amber-100 px-2 py-1 text-xs">Development only</span> : null}</td><td>{invoice.customer_name}</td><td>{invoice.project_name}<div className="text-xs text-iron-500">{invoice.site_address || "Job-site address not provided"}</div></td><td>{money.format(Number(invoice.total))}</td><td>{invoice.status}</td><td><div className="flex gap-2">{invoice.status === "draft" ? <button onClick={() => void transition(invoice, "approved")} className="font-semibold underline">Approve</button> : null}{invoice.status === "approved" ? <button onClick={() => void transition(invoice, "issued")} className="font-semibold underline">Issue</button> : null}<button onClick={() => void previewQuickBooks(invoice)} className="font-semibold underline">QuickBooks preview</button><a href={financeApi.customerInvoicePdfUrl(invoice.id)} className="inline-flex items-center gap-1 font-semibold underline"><Download className="h-3 w-3" />PDF</a></div></td></tr>)}</tbody></table>
     </div>
   </section>;
 }
