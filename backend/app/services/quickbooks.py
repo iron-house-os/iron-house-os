@@ -113,7 +113,17 @@ def get_company_info(access_token: str, realm_id: str) -> QuickBooksCompanyInfo:
 
 
 def revoke_token(token: str) -> None:
-    _form_request(INTUIT_REVOKE_URL, {"token": token})
+    request = Request(
+        INTUIT_REVOKE_URL,
+        data=json.dumps({"token": token}).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": _basic_authorization(),
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    _read_json_response(request)
 
 
 def _cipher() -> Fernet:
@@ -202,8 +212,15 @@ def _token_result(
     refresh_token = result.get("refresh_token")
     if not isinstance(refresh_token, str) or not refresh_token:
         refresh_token = existing_refresh_token
-    raw_scope = result.get("scope") or ""
-    scopes = [scope for scope in str(raw_scope).split() if scope]
+    if "scope" not in result:
+        scopes = [REQUIRED_SCOPE]
+    else:
+        raw_scope = result["scope"]
+        if not isinstance(raw_scope, str):
+            raise QuickBooksUnavailable(
+                "QuickBooks returned an invalid permission response."
+            )
+        scopes = [scope for scope in raw_scope.split() if scope]
     if REQUIRED_SCOPE not in scopes:
         raise QuickBooksUnavailable("The required QuickBooks accounting permission was not granted.")
     now = datetime.now(UTC)

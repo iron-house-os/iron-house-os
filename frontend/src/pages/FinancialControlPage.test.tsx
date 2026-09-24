@@ -8,12 +8,15 @@ import { financeApi } from "../api/finance";
 import { projectsApi } from "../api/projects";
 import { FinancialControlPage } from "./FinancialControlPage";
 
+const auth = vi.hoisted(() => ({ role: "admin" }));
+
 vi.mock("../api/finance", () => ({ financeApi: { getBackupsReview: vi.fn(), getStartupExpenses: vi.fn(), getCustomerInvoices: vi.fn(() => Promise.resolve({ items: [], total: 0 })), getProject: vi.fn(), importEstimate: vi.fn(), createEntry: vi.fn(), createStartupExpense: vi.fn(), updateStartupExpense: vi.fn(), startupQuickBooksUrl: vi.fn(() => "#"), quickBooksUrl: vi.fn(() => "#"), customerInvoicePdfUrl: vi.fn(() => "#") } }));
 vi.mock("../api/projects", () => ({ projectsApi: { list: vi.fn(() => Promise.resolve({ items: [] })) } }));
 vi.mock("../api/media", () => ({ mediaApi: { contentUrl: vi.fn((id: string) => `/private-media/${id}`), upload: vi.fn(), link: vi.fn() } }));
 vi.mock("../components/ReceiptCapturePanel", () => ({ ReceiptCapturePanel: () => <div>Controlled receipt workflow</div> }));
 vi.mock("../components/QuickBooksConnectionCard", () => ({ QuickBooksConnectionCard: () => <div>QuickBooks sandbox connection</div> }));
 vi.mock("../components/UniversalPhotoField", () => ({ UniversalPhotoField: () => <div>Photo field</div> }));
+vi.mock("../contexts/AuthContext", () => ({ useAuth: () => ({ user: { role: auth.role } }) }));
 
 const item: BackupsIntake = {
   id: "intake-1", media_id: "media-1", media_hash: "a".repeat(64), uploader_id: "user-1", uploader_email: "crew@example.com", uploader_role: "foreman", upload_timestamp: "2026-08-06T10:00:00Z", note: null, project_hint: "Main Street", status: "routed", detected_type: "packing_slip", confidence: 0.94, classification_source: "local_ocr", review_destination: "finance_packing_slips", destination_type: null, destination_record_id: null, error: null, sensitive_quarantine: false, attempt_count: 1, last_attempt_at: "2026-08-06T10:01:00Z", processing_started_at: "2026-08-06T10:01:00Z", processed_at: "2026-08-06T10:02:00Z", routed_at: "2026-08-06T10:02:00Z", failed_at: null, created_at: "2026-08-06T10:00:00Z", updated_at: "2026-08-06T10:02:00Z", audit_history: [],
@@ -22,6 +25,7 @@ const item: BackupsIntake = {
 describe("FinancialControlPage Backups queues", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    auth.role = "admin";
     window.localStorage.clear();
     window.history.replaceState({}, "", "/finance");
     vi.mocked(financeApi.getStartupExpenses).mockResolvedValue({ total_startup_costs: 0, owner_loan_payable: 0, reimbursed_to_owner: 0, pending_review: 0, approved_unreimbursed: 0, entries: [] });
@@ -99,6 +103,15 @@ describe("FinancialControlPage Backups queues", () => {
 
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue("project-8"));
     await waitFor(() => expect(financeApi.getProject).toHaveBeenCalledWith("project-8"));
+  });
+
+  it("hides the administrator-only QuickBooks control from operations managers", async () => {
+    auth.role = "operations_manager";
+
+    renderFinancial("/finance");
+
+    expect(screen.queryByText("QuickBooks sandbox connection")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Backups review queues" })).toBeInTheDocument();
   });
 });
 

@@ -2,6 +2,8 @@
 
 Issue: #391
 
+Security hardening follow-up: #393
+
 Parent objective: #389
 Status: sandbox-only connection foundation
 
@@ -37,7 +39,9 @@ QUICKBOOKS_FRONTEND_RETURN_URL=https://<approved-host>/finance
 QUICKBOOKS_TOKEN_ENCRYPTION_KEY=<independent random value of at least 32 characters>
 ```
 
-Never place the client secret, encryption key, authorization code, access token, or refresh token in GitHub, screenshots, chat, URLs, browser storage, logs, or audit metadata.
+Never place the client secret, encryption key, access token, or refresh token in GitHub, screenshots, chat, URLs, browser storage, logs, or audit metadata. Intuit temporarily returns the authorization code and state in the callback URL; never copy or retain that callback URL, and never include it in screenshots, logs, or support messages.
+
+The deployed frontend proxy, host proxy, and backend runtime suppress access logging for the OAuth callback path. Callback-specific proxy error logging is also discarded so an upstream outage cannot persist the request URI. Every callback outcome uses a sanitized redirect that disables caching and referrer forwarding, including query-validation failures, expired or unauthorized sessions, and unexpected server errors, so the short-lived authorization code is not retained or propagated after the redirect.
 
 ## Controlled flow
 
@@ -45,7 +49,7 @@ Never place the client secret, encryption key, authorization code, access token,
 2. IHOS stores only a SHA-256 digest of a one-time state value that expires after ten minutes.
 3. The administrator signs into Intuit and selects the sandbox company.
 4. Intuit returns the browser to the exact IHOS callback with the code, state, and `realmId`.
-5. IHOS validates and consumes the state once, exchanges the code server-side, encrypts both tokens, and calls read-only `CompanyInfo`.
+5. IHOS atomically validates and consumes the state once, exchanges the code server-side, encrypts both tokens, and calls read-only `CompanyInfo`.
 6. IHOS stores the sandbox realm and verified company name. A different realm is refused until the current connection is explicitly disconnected.
 7. Disconnect requires a separate confirmation, attempts Intuit token revocation, and clears the local encrypted tokens even if Intuit is temporarily unavailable.
 
@@ -60,4 +64,4 @@ Staging evidence must show the registered staging redirect, successful sandbox c
 
 ## Rollback
 
-Disable `QUICKBOOKS_ENABLED`, disconnect the sandbox company from IHOS, revoke the Intuit app connection if needed, and roll back the application release. The migration downgrade removes only the sandbox OAuth connection/state tables; it does not touch IHOS invoices or any QuickBooks accounting record.
+Disable `QUICKBOOKS_ENABLED`, then use the administrator disconnect control to attempt Intuit revocation and clear the local encrypted tokens. The disconnect recovery path remains available while the feature is disabled and clears local tokens even if decryption or provider revocation fails. Revoke the Intuit app connection directly if the IHOS status reports that revocation was not confirmed, then roll back the application release. The migration downgrade removes only the sandbox OAuth connection/state tables; it does not touch IHOS invoices or any QuickBooks accounting record.

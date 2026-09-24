@@ -57,6 +57,13 @@ services:
       GOOGLE_CALENDAR_REDIRECT_URI: ${GOOGLE_CALENDAR_REDIRECT_URI:?staging Google redirect URI is required}
       GOOGLE_CALENDAR_FRONTEND_RETURN_URL: ${GOOGLE_CALENDAR_FRONTEND_RETURN_URL:?staging Google return URL is required}
       GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY: ${GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY:-}
+      QUICKBOOKS_ENABLED: ${QUICKBOOKS_ENABLED:-false}
+      QUICKBOOKS_ENVIRONMENT: ${QUICKBOOKS_ENVIRONMENT:-sandbox}
+      QUICKBOOKS_CLIENT_ID: ${QUICKBOOKS_CLIENT_ID:-}
+      QUICKBOOKS_CLIENT_SECRET: ${QUICKBOOKS_CLIENT_SECRET:-}
+      QUICKBOOKS_REDIRECT_URI: ${QUICKBOOKS_REDIRECT_URI:-https://staging.invalid/api/v1/finance/quickbooks/oauth/callback}
+      QUICKBOOKS_FRONTEND_RETURN_URL: ${QUICKBOOKS_FRONTEND_RETURN_URL:-https://staging.invalid/finance}
+      QUICKBOOKS_TOKEN_ENCRYPTION_KEY: ${QUICKBOOKS_TOKEN_ENCRYPTION_KEY:-}
     command:
       - /bin/sh
       - -c
@@ -64,7 +71,7 @@ services:
         alembic upgrade head &&
         python -m app.db.bootstrap_admin &&
         exec uvicorn app.main:app --host 0.0.0.0 --port 8000
-        --proxy-headers --forwarded-allow-ips="*"
+        --proxy-headers --forwarded-allow-ips="*" --no-access-log
     depends_on:
       postgres:
         condition: service_healthy

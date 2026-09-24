@@ -3,7 +3,7 @@ import json
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 import pytest
 
@@ -13,9 +13,11 @@ from app.core.config import get_settings
 from app.main import app
 from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
 from app.services.auth import AuthenticatedUser
+from app.services import quickbooks as quickbooks_service
 from app.services.quickbooks import (
     REQUIRED_SCOPE,
     QuickBooksCompanyInfo,
+    QuickBooksUnavailable,
     QuickBooksTokenResult,
     decrypt_token,
     encrypt_token,
@@ -161,6 +163,8 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
     )
     assert callback.status_code == 303
     assert callback.headers["location"].endswith("?quickbooks=connected")
+    assert callback.headers["cache-control"] == "no-store"
+    assert callback.headers["referrer-policy"] == "no-referrer"
 
     with TestingSessionLocal() as db:
         connection = db.query(QuickBooksConnection).one()
@@ -176,7 +180,30 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
         params={"state": state, "code": "provider-code", "realmId": "9341457990023688"},
         follow_redirects=False,
     )
-    assert replay.status_code == 400
+    assert replay.status_code == 303
+    assert replay.headers["location"].endswith("?quickbooks=failed")
+    assert replay.headers["cache-control"] == "no-store"
+    assert replay.headers["referrer-policy"] == "no-referrer"
+
+
+def test_oauth_state_consumption_is_atomic_compare_and_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    state = _start_state()
+
+    with TestingSessionLocal() as db:
+        assert quickbooks_routes._consume_oauth_state(
+            db,
+            state=state,
+            owner_account_id=USER_ID,
+        )
+    with TestingSessionLocal() as db:
+        assert not quickbooks_routes._consume_oauth_state(
+            db,
+            state=state,
+            owner_account_id=USER_ID,
+        )
 
 
 def test_callback_rejects_incomplete_response_and_different_bound_realm(
@@ -189,7 +216,10 @@ def test_callback_rejects_incomplete_response_and_different_bound_realm(
         params={"state": missing_realm_state, "code": "provider-code"},
         follow_redirects=False,
     )
-    assert missing_realm.status_code == 400
+    assert missing_realm.status_code == 303
+    assert missing_realm.headers["location"].endswith("?quickbooks=failed")
+    assert missing_realm.headers["cache-control"] == "no-store"
+    assert missing_realm.headers["referrer-policy"] == "no-referrer"
 
     _connected(realm_id="1111111111111111")
     different_realm_state = _start_state()
@@ -202,8 +232,87 @@ def test_callback_rejects_incomplete_response_and_different_bound_realm(
         },
         follow_redirects=False,
     )
-    assert mismatch.status_code == 409
-    assert "different company" in mismatch.json()["detail"]
+    assert mismatch.status_code == 303
+    assert mismatch.headers["location"].endswith("?quickbooks=failed")
+    assert mismatch.headers["cache-control"] == "no-store"
+    assert mismatch.headers["referrer-policy"] == "no-referrer"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"code": "provider-code", "realmId": "9341457990023688"},
+        {"state": "s" * 19, "code": "provider-code", "realmId": "9341457990023688"},
+        {"state": "s" * 501, "code": "provider-code", "realmId": "9341457990023688"},
+        {"state": "s" * 48, "code": "c" * 4001, "realmId": "9341457990023688"},
+        {"state": "s" * 48, "code": "provider-code", "realmId": "r" * 65},
+        {"state": "s" * 48, "error": "e" * 201},
+    ],
+)
+def test_callback_validation_failures_use_sanitized_redirect(params: dict[str, str]) -> None:
+    response = client.get(
+        "/api/v1/finance/quickbooks/oauth/callback",
+        params=params,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?quickbooks=failed")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
+def test_callback_authentication_failure_uses_sanitized_redirect() -> None:
+    def expired_session(_: Request) -> None:
+        raise HTTPException(status_code=401, detail="Your session is invalid or expired.")
+
+    app.dependency_overrides[require_authenticated_user] = expired_session
+
+    response = client.get(
+        "/api/v1/finance/quickbooks/oauth/callback",
+        params={
+            "state": "s" * 48,
+            "code": "provider-code",
+            "realmId": "9341457990023688",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?quickbooks=failed")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
+def test_callback_unhandled_failure_uses_sanitized_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    state = _start_state()
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "_consume_oauth_state",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("unexpected failure")),
+    )
+
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+    response = no_raise_client.get(
+        "/api/v1/finance/quickbooks/oauth/callback",
+        params={
+            "state": state,
+            "code": "provider-code",
+            "realmId": "9341457990023688",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?quickbooks=failed")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["referrer-policy"] == "no-referrer"
 
 
 def test_disconnect_requires_confirmation_revokes_and_clears_local_tokens(
@@ -233,6 +342,103 @@ def test_disconnect_requires_confirmation_revokes_and_clears_local_tokens(
         connection = db.query(QuickBooksConnection).one()
         assert connection.encrypted_access_token is None
         assert connection.encrypted_refresh_token is None
+
+
+def test_disconnect_remains_available_after_feature_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    revoked: list[str] = []
+    monkeypatch.setattr(quickbooks_routes, "revoke_token", revoked.append)
+    monkeypatch.setenv("QUICKBOOKS_ENABLED", "false")
+    get_settings.cache_clear()
+
+    response = client.post(
+        "/api/v1/finance/quickbooks/disconnect",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["connected"] is False
+    assert revoked == ["refresh-token"]
+
+
+def test_disconnect_clears_local_tokens_when_decryption_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        connection.encrypted_refresh_token = "corrupt-ciphertext"
+        db.commit()
+
+    response = client.post(
+        "/api/v1/finance/quickbooks/disconnect",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is False
+    assert "revocation could not be confirmed" in response.json()["last_error"]
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert connection.encrypted_access_token is None
+        assert connection.encrypted_refresh_token is None
+
+
+def test_token_result_accepts_omitted_scope_but_rejects_explicitly_insufficient_scope() -> None:
+    result = quickbooks_service._token_result(
+        {
+            "access_token": "sandbox-access-token",
+            "refresh_token": "sandbox-refresh-token",
+            "expires_in": 3600,
+        }
+    )
+    assert result.scopes == [REQUIRED_SCOPE]
+
+    with pytest.raises(QuickBooksUnavailable, match="accounting permission"):
+        quickbooks_service._token_result(
+            {
+                "access_token": "sandbox-access-token",
+                "refresh_token": "sandbox-refresh-token",
+                "scope": "openid profile",
+            }
+        )
+
+    for invalid_scope in (None, [REQUIRED_SCOPE], {"scope": REQUIRED_SCOPE}):
+        with pytest.raises(QuickBooksUnavailable, match="invalid permission response"):
+            quickbooks_service._token_result(
+                {
+                    "access_token": "sandbox-access-token",
+                    "refresh_token": "sandbox-refresh-token",
+                    "scope": invalid_scope,
+                }
+            )
+
+
+def test_revoke_token_uses_intuit_json_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    requests = []
+    monkeypatch.setattr(
+        quickbooks_service,
+        "_read_json_response",
+        lambda request: requests.append(request) or {},
+    )
+
+    quickbooks_service.revoke_token("sandbox-refresh-token")
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/json"
+    assert json.loads((request.data or b"").decode("utf-8")) == {
+        "token": "sandbox-refresh-token"
+    }
 
 
 def test_tokens_are_encrypted_at_rest(monkeypatch: pytest.MonkeyPatch) -> None:
