@@ -2,10 +2,11 @@ from datetime import UTC, datetime, timedelta
 import secrets
 from typing import Annotated
 from urllib.parse import urlencode
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
@@ -44,15 +45,19 @@ def _require_admin(user: CurrentUser) -> None:
         )
 
 
-def _require_enabled() -> None:
+def _require_sandbox_environment() -> None:
     settings = get_settings()
-    if not settings.quickbooks_enabled:
-        raise HTTPException(status_code=503, detail="QuickBooks sandbox connection is disabled.")
     if settings.quickbooks_environment.strip().lower() != "sandbox":
         raise HTTPException(
             status_code=503,
             detail="Only the approved QuickBooks sandbox connection is available.",
         )
+
+
+def _require_enabled() -> None:
+    _require_sandbox_environment()
+    if not get_settings().quickbooks_enabled:
+        raise HTTPException(status_code=503, detail="QuickBooks sandbox connection is disabled.")
 
 
 def _connection(db: Session) -> QuickBooksConnection | None:
@@ -61,10 +66,26 @@ def _connection(db: Session) -> QuickBooksConnection | None:
     )
 
 
-def _aware(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    return value if value.tzinfo else value.replace(tzinfo=UTC)
+def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> bool:
+    """Atomically consume one valid state so concurrent callbacks cannot reuse it."""
+    now = datetime.now(UTC)
+    result = db.execute(
+        update(QuickBooksOAuthState)
+        .where(
+            QuickBooksOAuthState.state_digest == state_digest(state),
+            QuickBooksOAuthState.owner_account_id == owner_account_id,
+            QuickBooksOAuthState.environment == "sandbox",
+            QuickBooksOAuthState.used_at.is_(None),
+            QuickBooksOAuthState.expires_at > now,
+        )
+        .values(used_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        return False
+    db.commit()
+    return True
 
 
 def _status(db: Session) -> QuickBooksStatus:
@@ -95,6 +116,18 @@ def _return_url(outcome: str) -> str:
     target = get_settings().quickbooks_frontend_return_url
     separator = "&" if "?" in target else "?"
     return f"{target}{separator}{urlencode({'quickbooks': outcome})}"
+
+
+def _oauth_redirect(outcome: str) -> RedirectResponse:
+    return RedirectResponse(
+        _return_url(outcome),
+        status_code=303,
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
 
 
 def _audit(
@@ -165,22 +198,8 @@ def quickbooks_oauth_callback(
 ):
     _require_admin(user)
     _require_enabled()
-    oauth_state = db.scalar(
-        select(QuickBooksOAuthState).where(
-            QuickBooksOAuthState.state_digest == state_digest(state),
-            QuickBooksOAuthState.owner_account_id == user.id,
-            QuickBooksOAuthState.environment == "sandbox",
-        )
-    )
-    if (
-        oauth_state is None
-        or oauth_state.used_at is not None
-        or (_aware(oauth_state.expires_at) or datetime.min.replace(tzinfo=UTC))
-        <= datetime.now(UTC)
-    ):
+    if not _consume_oauth_state(db, state=state, owner_account_id=user.id):
         raise HTTPException(status_code=400, detail="The QuickBooks connection request expired.")
-    oauth_state.used_at = datetime.now(UTC)
-    db.commit()
 
     if error:
         _audit(
@@ -190,7 +209,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "provider_error": error[:100]},
         )
-        return RedirectResponse(_return_url("denied"), status_code=303)
+        return _oauth_redirect("denied")
     if not code or not realm_id:
         raise HTTPException(status_code=400, detail="QuickBooks returned an incomplete authorization response.")
 
@@ -200,10 +219,10 @@ def quickbooks_oauth_callback(
             status_code=409,
             detail="Disconnect the current QuickBooks sandbox company before connecting a different company.",
         )
-    existing_refresh = None
-    if connection and connection.encrypted_refresh_token:
-        existing_refresh = decrypt_token(connection.encrypted_refresh_token)
     try:
+        existing_refresh = None
+        if connection and connection.encrypted_refresh_token:
+            existing_refresh = decrypt_token(connection.encrypted_refresh_token)
         result = exchange_authorization_code(code, existing_refresh)
         if not result.refresh_token:
             raise QuickBooksUnavailable("QuickBooks returned no refresh token.")
@@ -219,7 +238,7 @@ def quickbooks_oauth_callback(
             actor=user.email,
             metadata={"environment": "sandbox", "reason": "provider_rejected"},
         )
-        return RedirectResponse(_return_url("failed"), status_code=303)
+        return _oauth_redirect("failed")
 
     if connection is None:
         connection = QuickBooksConnection(
@@ -254,7 +273,7 @@ def quickbooks_oauth_callback(
             "company_name": company.company_name,
         },
     )
-    return RedirectResponse(_return_url("connected"), status_code=303)
+    return _oauth_redirect("connected")
 
 
 @router.post("/disconnect", response_model=QuickBooksStatus)
@@ -265,7 +284,7 @@ def disconnect_quickbooks(
     db: DBSession,
 ) -> QuickBooksStatus:
     _require_admin(user)
-    _require_enabled()
+    _require_sandbox_environment()
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Confirm the QuickBooks disconnect first.")
     connection = _connection(db)
@@ -274,16 +293,20 @@ def disconnect_quickbooks(
 
     revocation = "not_available"
     token = None
-    if connection.encrypted_refresh_token:
-        token = decrypt_token(connection.encrypted_refresh_token)
-    elif connection.encrypted_access_token:
-        token = decrypt_token(connection.encrypted_access_token)
-    if token:
-        try:
-            revoke_token(token)
-            revocation = "completed"
-        except QuickBooksUnavailable:
-            revocation = "provider_unavailable"
+    try:
+        if connection.encrypted_refresh_token:
+            token = decrypt_token(connection.encrypted_refresh_token)
+        elif connection.encrypted_access_token:
+            token = decrypt_token(connection.encrypted_access_token)
+    except QuickBooksUnavailable:
+        revocation = "decryption_failed"
+    else:
+        if token:
+            try:
+                revoke_token(token)
+                revocation = "completed"
+            except QuickBooksUnavailable:
+                revocation = "provider_unavailable"
 
     connection.encrypted_access_token = None
     connection.encrypted_refresh_token = None

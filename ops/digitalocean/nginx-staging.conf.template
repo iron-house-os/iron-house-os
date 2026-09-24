@@ -2,7 +2,14 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${IHOS_STAGING_HOST};
-    return 301 https://$host$request_uri;
+    location = /api/v1/finance/quickbooks/oauth/callback {
+        access_log off;
+        return 301 https://$host$request_uri;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
@@ -18,6 +25,18 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "same-origin" always;
+
+    # The Intuit callback query contains a short-lived authorization code.
+    location = /api/v1/finance/quickbooks/oauth/callback {
+        access_log off;
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_read_timeout 300s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8081;

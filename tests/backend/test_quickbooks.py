@@ -13,9 +13,11 @@ from app.core.config import get_settings
 from app.main import app
 from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
 from app.services.auth import AuthenticatedUser
+from app.services import quickbooks as quickbooks_service
 from app.services.quickbooks import (
     REQUIRED_SCOPE,
     QuickBooksCompanyInfo,
+    QuickBooksUnavailable,
     QuickBooksTokenResult,
     decrypt_token,
     encrypt_token,
@@ -161,6 +163,8 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
     )
     assert callback.status_code == 303
     assert callback.headers["location"].endswith("?quickbooks=connected")
+    assert callback.headers["cache-control"] == "no-store"
+    assert callback.headers["referrer-policy"] == "no-referrer"
 
     with TestingSessionLocal() as db:
         connection = db.query(QuickBooksConnection).one()
@@ -177,6 +181,26 @@ def test_oauth_callback_is_single_use_binds_company_and_encrypts_tokens(
         follow_redirects=False,
     )
     assert replay.status_code == 400
+
+
+def test_oauth_state_consumption_is_atomic_compare_and_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    state = _start_state()
+
+    with TestingSessionLocal() as db:
+        assert quickbooks_routes._consume_oauth_state(
+            db,
+            state=state,
+            owner_account_id=USER_ID,
+        )
+    with TestingSessionLocal() as db:
+        assert not quickbooks_routes._consume_oauth_state(
+            db,
+            state=state,
+            owner_account_id=USER_ID,
+        )
 
 
 def test_callback_rejects_incomplete_response_and_different_bound_realm(
@@ -233,6 +257,93 @@ def test_disconnect_requires_confirmation_revokes_and_clears_local_tokens(
         connection = db.query(QuickBooksConnection).one()
         assert connection.encrypted_access_token is None
         assert connection.encrypted_refresh_token is None
+
+
+def test_disconnect_remains_available_after_feature_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    revoked: list[str] = []
+    monkeypatch.setattr(quickbooks_routes, "revoke_token", revoked.append)
+    monkeypatch.setenv("QUICKBOOKS_ENABLED", "false")
+    get_settings.cache_clear()
+
+    response = client.post(
+        "/api/v1/finance/quickbooks/disconnect",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["connected"] is False
+    assert revoked == ["refresh-token"]
+
+
+def test_disconnect_clears_local_tokens_when_decryption_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        connection.encrypted_refresh_token = "corrupt-ciphertext"
+        db.commit()
+
+    response = client.post(
+        "/api/v1/finance/quickbooks/disconnect",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["connected"] is False
+    assert "revocation could not be confirmed" in response.json()["last_error"]
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert connection.encrypted_access_token is None
+        assert connection.encrypted_refresh_token is None
+
+
+def test_token_result_accepts_omitted_scope_but_rejects_explicitly_insufficient_scope() -> None:
+    result = quickbooks_service._token_result(
+        {
+            "access_token": "sandbox-access-token",
+            "refresh_token": "sandbox-refresh-token",
+            "expires_in": 3600,
+        }
+    )
+    assert result.scopes == [REQUIRED_SCOPE]
+
+    with pytest.raises(QuickBooksUnavailable, match="accounting permission"):
+        quickbooks_service._token_result(
+            {
+                "access_token": "sandbox-access-token",
+                "refresh_token": "sandbox-refresh-token",
+                "scope": "openid profile",
+            }
+        )
+
+
+def test_revoke_token_uses_intuit_json_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    requests = []
+    monkeypatch.setattr(
+        quickbooks_service,
+        "_read_json_response",
+        lambda request: requests.append(request) or {},
+    )
+
+    quickbooks_service.revoke_token("sandbox-refresh-token")
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/json"
+    assert json.loads((request.data or b"").decode("utf-8")) == {
+        "token": "sandbox-refresh-token"
+    }
 
 
 def test_tokens_are_encrypted_at_rest(monkeypatch: pytest.MonkeyPatch) -> None:
