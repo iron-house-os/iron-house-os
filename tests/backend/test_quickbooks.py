@@ -204,6 +204,42 @@ def test_schema_validation_never_echoes_malformed_client_secret(
     assert "malformed-client-secret-value" not in response.text
 
 
+def test_malformed_configuration_removal_uses_standard_validation_message() -> None:
+    response = client.request(
+        "DELETE",
+        "/api/v1/finance/quickbooks/configuration",
+        json={"confirmed": {"invalid": True}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] != "Enter valid Intuit development credentials."
+
+
+def test_unexpected_configuration_failure_uses_sanitized_client_error_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_secret = "sandbox-client-secret-that-must-not-echo"
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "encrypt_configuration_secret",
+        lambda _value: (_ for _ in ()).throw(RuntimeError(client_secret)),
+    )
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+
+    response = no_raise_client.put(
+        "/api/v1/finance/quickbooks/configuration",
+        json={
+            "client_id": "sandbox-client-id",
+            "client_secret": client_secret,
+            "sandbox_confirmed": True,
+        },
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Unable to save QuickBooks credentials."}
+    assert client_secret not in response.text
+
+
 def test_configuration_removal_requires_confirmation_and_clears_encrypted_values() -> None:
     saved = client.put(
         "/api/v1/finance/quickbooks/configuration",
@@ -290,8 +326,10 @@ def test_force_disable_blocks_oauth_with_saved_database_configuration(
     assert oauth_response.json()["detail"] == "QuickBooks sandbox connection is disabled."
 
 
+@pytest.mark.parametrize("corrupt_ciphertext", ["corrupt-ciphertext", "not-ascii-\N{SNOWMAN}"])
 def test_corrupt_database_configuration_is_unusable_and_oauth_start_is_sanitized(
     monkeypatch: pytest.MonkeyPatch,
+    corrupt_ciphertext: str,
 ) -> None:
     _configure(monkeypatch)
     saved = client.put(
@@ -305,7 +343,7 @@ def test_corrupt_database_configuration_is_unusable_and_oauth_start_is_sanitized
     assert saved.status_code == 200
     with TestingSessionLocal() as db:
         configuration = db.query(QuickBooksConfiguration).one()
-        configuration.encrypted_client_secret = "corrupt-ciphertext"
+        configuration.encrypted_client_secret = corrupt_ciphertext
         db.commit()
 
     status_response = client.get("/api/v1/finance/quickbooks/status")
@@ -608,14 +646,16 @@ def test_disconnect_remains_available_after_feature_is_disabled(
     assert revoked == ["refresh-token"]
 
 
+@pytest.mark.parametrize("corrupt_ciphertext", ["corrupt-ciphertext", "not-ascii-\N{SNOWMAN}"])
 def test_disconnect_clears_local_tokens_when_decryption_fails(
     monkeypatch: pytest.MonkeyPatch,
+    corrupt_ciphertext: str,
 ) -> None:
     _configure(monkeypatch)
     _connected()
     with TestingSessionLocal() as db:
         connection = db.query(QuickBooksConnection).one()
-        connection.encrypted_refresh_token = "corrupt-ciphertext"
+        connection.encrypted_refresh_token = corrupt_ciphertext
         db.commit()
 
     response = client.post(
