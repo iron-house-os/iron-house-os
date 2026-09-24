@@ -74,6 +74,7 @@ def test_live_quickbooks_fails_closed_without_separate_read_only_approval() -> N
         "quickbooks_redirect_uri": (
             "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
         ),
+        "quickbooks_frontend_return_url": "https://os.ironhousecivil.com/finance",
     }
 
     with pytest.raises(RuntimeError, match="QUICKBOOKS_LIVE_READ_ONLY_APPROVED"):
@@ -91,6 +92,43 @@ def test_live_quickbooks_accepts_explicit_read_only_approval_and_secure_settings
         "quickbooks_redirect_uri": (
             "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
         ),
+        "quickbooks_frontend_return_url": "https://os.ironhousecivil.com/finance",
+    }
+
+    validate_production_settings(Settings(**values))
+
+
+def test_database_managed_live_quickbooks_still_requires_secure_redirects_and_token_key() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": False,
+        "quickbooks_environment": "production",
+        "quickbooks_live_read_only_approved": True,
+        "quickbooks_token_encryption_key": "too-short",
+        "quickbooks_redirect_uri": (
+            "http://localhost:8000/api/v1/finance/quickbooks/oauth/callback"
+        ),
+        "quickbooks_frontend_return_url": "http://localhost:5173/finance",
+    }
+
+    with pytest.raises(RuntimeError) as exc_info:
+        validate_production_settings(Settings(**values))
+
+    message = str(exc_info.value)
+    assert "QUICKBOOKS_TOKEN_ENCRYPTION_KEY" in message
+    assert "QUICKBOOKS_REDIRECT_URI" in message
+    assert "QUICKBOOKS_FRONTEND_RETURN_URL" in message
+
+
+def test_database_managed_live_quickbooks_accepts_secure_callback_without_env_credentials() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": False,
+        "quickbooks_environment": "production",
+        "quickbooks_live_read_only_approved": True,
+        "quickbooks_token_encryption_key": "production-token-key-with-enough-length",
+        "quickbooks_redirect_uri": (
+            "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+        ),
+        "quickbooks_frontend_return_url": "https://os.ironhousecivil.com/finance",
     }
 
     validate_production_settings(Settings(**values))

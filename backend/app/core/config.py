@@ -130,10 +130,13 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("QUICKBOOKS_CLIENT_ID must be configured when QuickBooks is enabled")
         if _looks_insecure(settings.quickbooks_client_secret, minimum_length=12):
             errors.append("QUICKBOOKS_CLIENT_SECRET must be a protected non-placeholder value")
+    if settings.quickbooks_enabled or settings.quickbooks_live_read_only_approved:
         if _looks_insecure(settings.quickbooks_token_encryption_key, minimum_length=32):
             errors.append("QUICKBOOKS_TOKEN_ENCRYPTION_KEY must be a protected value of at least 32 characters")
         if not settings.quickbooks_redirect_uri.strip().lower().startswith("https://"):
             errors.append("QUICKBOOKS_REDIRECT_URI must use HTTPS in production")
+        if not settings.quickbooks_frontend_return_url.strip().lower().startswith("https://"):
+            errors.append("QUICKBOOKS_FRONTEND_RETURN_URL must use HTTPS in production")
 
     if errors:
         raise RuntimeError("Insecure production configuration: " + "; ".join(errors))
