@@ -156,12 +156,12 @@ def validate_production_settings(settings: Settings) -> None:
         if not settings.quickbooks_frontend_return_url.strip().lower().startswith("https://"):
             errors.append("QUICKBOOKS_FRONTEND_RETURN_URL must use HTTPS in production")
     if settings.quickbooks_live_read_only_approved:
-        if settings.quickbooks_redirect_uri.strip() != _QUICKBOOKS_PRODUCTION_REDIRECT_URI:
+        if settings.quickbooks_redirect_uri != _QUICKBOOKS_PRODUCTION_REDIRECT_URI:
             errors.append(
                 "QUICKBOOKS_REDIRECT_URI must match the approved production callback"
             )
         if (
-            settings.quickbooks_frontend_return_url.strip()
+            settings.quickbooks_frontend_return_url
             != _QUICKBOOKS_PRODUCTION_FRONTEND_RETURN_URL
         ):
             errors.append(

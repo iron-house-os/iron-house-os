@@ -165,6 +165,26 @@ def test_live_quickbooks_rejects_unapproved_https_origins_and_paths() -> None:
     assert "QUICKBOOKS_FRONTEND_RETURN_URL must match" in message
 
 
+def test_live_quickbooks_rejects_whitespace_around_pinned_urls() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": False,
+        "quickbooks_environment": "production",
+        "quickbooks_live_read_only_approved": True,
+        "quickbooks_token_encryption_key": "production-token-key-with-enough-length",
+        "quickbooks_redirect_uri": (
+            " https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+        ),
+        "quickbooks_frontend_return_url": "https://os.ironhousecivil.com/finance ",
+    }
+
+    with pytest.raises(RuntimeError) as exc_info:
+        validate_production_settings(Settings(**values))
+
+    message = str(exc_info.value)
+    assert "QUICKBOOKS_REDIRECT_URI must match" in message
+    assert "QUICKBOOKS_FRONTEND_RETURN_URL must match" in message
+
+
 def test_live_quickbooks_approval_cannot_be_set_for_sandbox() -> None:
     values = SECURE_PRODUCTION | {
         "quickbooks_environment": "sandbox",
