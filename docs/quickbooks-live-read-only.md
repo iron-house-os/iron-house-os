@@ -31,6 +31,18 @@ The approved production redirect URI is:
 https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback
 ```
 
+The app-details assessment also requires public HTTPS legal pages. IHOS exposes
+the owner-reviewed documents outside the authenticated application shell at:
+
+```text
+https://os.ironhousecivil.com/legal/terms
+https://os.ironhousecivil.com/legal/privacy
+```
+
+Treat changes to either page as a legal/privacy-controlled publication. Review
+the actual text before deployment and keep the published URLs stable after they
+are submitted to Intuit.
+
 Never place the Client Secret, authorization code, access token, refresh token,
 or callback query string in GitHub, chat, screenshots, logs, or browser storage.
 

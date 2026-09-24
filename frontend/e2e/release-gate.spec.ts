@@ -220,6 +220,27 @@ function isMobileProject(projectName: string) {
   return projectName === "mobile-chromium" || projectName === "ipad-webkit";
 }
 
+test("public legal documents are responsive and accessible without signing in", async ({ page }) => {
+  await mockApi(page);
+
+  await page.goto("/legal/privacy");
+  await expect(page.getByRole("heading", { name: "Privacy Policy", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "3. QuickBooks Online connection" })).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveCount(0);
+  await expectNoSeriousAccessibilityViolations(page);
+
+  await page.getByRole("link", { name: "End-User Licence Terms" }).click();
+  await expect(page).toHaveURL(/\/legal\/terms$/);
+  await expect(page.getByRole("heading", { name: "End-User Licence Terms", level: 1 })).toBeVisible();
+  await expect(page.getByText(/retrieves CompanyInfo solely to verify the selected company/i)).toBeVisible();
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("authenticated core shell is responsive and accessible", async ({ page }, testInfo) => {
   await mockApi(page);
   await signIn(page);

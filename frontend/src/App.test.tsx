@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { legacyOperatorTarget } from "./App";
+import { isPublicLegalPath, legacyOperatorTarget } from "./App";
 import { buildHelpPath } from "./components/AppLayout";
 import { workforceEntryRole } from "./contexts/AuthContext";
 import { modules } from "./modules";
@@ -23,5 +23,12 @@ describe("Iron House OS frontend scaffold", () => {
       "/help?from=%2Festimating&projectId=job-1&projectName=Bennett+Civil",
     );
     expect(buildHelpPath("/help", null, null)).toBe("/help");
+  });
+
+  it("keeps the published legal documents outside the authenticated application shell", () => {
+    expect(isPublicLegalPath("/legal/privacy")).toBe(true);
+    expect(isPublicLegalPath("/legal/terms")).toBe(true);
+    expect(isPublicLegalPath("/finance")).toBe(false);
+    expect(isPublicLegalPath("/legal/privacy/extra")).toBe(false);
   });
 });
