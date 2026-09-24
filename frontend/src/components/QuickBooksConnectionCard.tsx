@@ -93,6 +93,7 @@ export function QuickBooksConnectionCard() {
   const environmentName = isLive ? "live company" : "sandbox company";
   const credentialName = isLive ? "Production" : "Development";
   const shortName = isLive ? "live" : "sandbox";
+  const environmentIsApproved = connection?.environment === "sandbox" || connection?.live_read_only_approved;
 
   return <section className="rounded-md border border-iron-100 bg-white p-5">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -106,7 +107,7 @@ export function QuickBooksConnectionCard() {
     {notice ? <div role="status" className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div> : null}
     {error ? <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
     {connection?.last_error ? <div className="mt-3 text-sm text-amber-800">{connection.last_error}</div> : null}
-    {connection && !connection.configured && connection.live_read_only_approved ? <form onSubmit={(event) => void configure(event)} className="mt-4 grid gap-3 border-t border-iron-100 pt-4" autoComplete="off">
+    {connection && !connection.configured && environmentIsApproved ? <form onSubmit={(event) => void configure(event)} className="mt-4 grid gap-3 border-t border-iron-100 pt-4" autoComplete="off">
       <div className={`rounded-md border p-3 text-sm ${isLive ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{isLive ? <>Use only the <strong>Production</strong> Client ID and Client Secret from Intuit. These credentials can authorize a live company. IHOS currently uses them only for company identity verification, while Intuit's accounting permission is broader.</> : <>Use only the <strong>Development</strong> Client ID and Client Secret from Intuit. These credentials enable sandbox company verification only.</>}</div>
       <label className="grid gap-1 text-sm font-semibold text-iron-700">{credentialName} Client ID<input value={clientId} onChange={(event) => setClientId(event.target.value)} spellCheck={false} autoCapitalize="none" autoCorrect="off" autoComplete="off" className="rounded-md border border-iron-100 px-3 py-2 font-normal" /></label>
       <label className="grid gap-1 text-sm font-semibold text-iron-700">{credentialName} Client Secret<input type="password" value={clientSecret} onChange={(event) => setClientSecret(event.target.value)} spellCheck={false} autoCapitalize="none" autoCorrect="off" autoComplete="off" className="rounded-md border border-iron-100 px-3 py-2 font-normal" /></label>

@@ -22,7 +22,7 @@ const connected = {
   connected: true,
   status: "connected",
   environment: "sandbox" as const,
-  live_read_only_approved: true,
+  live_read_only_approved: false,
   required_scope: "com.intuit.quickbooks.accounting",
   realm_id: "9341457990023688",
   company_name: "Sandbox Company US 3969",
@@ -85,6 +85,7 @@ describe("QuickBooksConnectionCard", () => {
       database_configured: false,
       enabled: false,
       environment: "production" as const,
+      live_read_only_approved: true,
       status: "not_connected",
     };
     vi.mocked(quickBooksApi.status).mockResolvedValue(unconfigured);

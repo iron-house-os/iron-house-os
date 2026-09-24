@@ -188,7 +188,10 @@ def _status(db: Session) -> QuickBooksStatus:
         connected=connected,
         status=connection.status if connection else "not_connected",
         environment=environment,
-        live_read_only_approved=live_read_only_is_approved(environment),
+        live_read_only_approved=(
+            environment == "production"
+            and get_settings().quickbooks_live_read_only_approved
+        ),
         required_scope=REQUIRED_SCOPE,
         realm_id=connection.realm_id if connection else None,
         company_name=connection.company_name if connection else None,

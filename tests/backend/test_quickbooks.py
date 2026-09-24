@@ -143,6 +143,7 @@ def test_status_is_admin_only_and_never_exposes_tokens() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["environment"] == "sandbox"
+    assert body["live_read_only_approved"] is False
     assert body["connected"] is False
     assert body["database_configured"] is False
     assert "token" not in json.dumps(body).lower()
