@@ -10,6 +10,8 @@ vi.mock("../api/quickBooks", () => ({
     status: vi.fn(),
     startOAuth: vi.fn(),
     disconnect: vi.fn(),
+    configure: vi.fn(),
+    removeConfiguration: vi.fn(),
   },
 }));
 
@@ -31,6 +33,29 @@ describe("QuickBooksConnectionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.history.replaceState({}, "", "/finance");
+  });
+
+  it("accepts development credentials only after sandbox confirmation and clears the inputs", async () => {
+    const user = userEvent.setup();
+    const unconfigured = { ...connected, connected: false, configured: false, enabled: false, status: "not_connected" };
+    vi.mocked(quickBooksApi.status).mockResolvedValue(unconfigured);
+    vi.mocked(quickBooksApi.configure).mockResolvedValue({ ...unconfigured, configured: true, enabled: true });
+    render(<QuickBooksConnectionCard />);
+
+    const save = await screen.findByRole("button", { name: "Save sandbox credentials" });
+    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText("Development Client ID"), "sandbox-client-id");
+    await user.type(screen.getByLabelText("Development Client Secret"), "sandbox-client-secret-value");
+    await user.click(screen.getByRole("checkbox", { name: /development credentials/i }));
+    await user.click(save);
+
+    await waitFor(() => expect(quickBooksApi.configure).toHaveBeenCalledWith({
+      client_id: "sandbox-client-id",
+      client_secret: "sandbox-client-secret-value",
+      sandbox_confirmed: true,
+    }));
+    expect(screen.queryByDisplayValue("sandbox-client-secret-value")).not.toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("not displayed or stored in this browser");
   });
 
   it("labels the connection as sandbox-only and exposes no accounting write control", async () => {

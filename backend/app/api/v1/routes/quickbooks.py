@@ -4,16 +4,22 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import CurrentUser
 from app.core.config import get_settings
 from app.core.errors import quickbooks_oauth_redirect
 from app.db.session import get_db
-from app.models.quickbooks import QuickBooksConnection, QuickBooksOAuthState
+from app.models.quickbooks import (
+    QuickBooksConfiguration,
+    QuickBooksConnection,
+    QuickBooksOAuthState,
+)
 from app.schemas.quickbooks import (
     QuickBooksAuthorization,
+    QuickBooksConfigurationRemove,
+    QuickBooksConfigurationWrite,
     QuickBooksDisconnect,
     QuickBooksStatus,
 )
@@ -21,9 +27,13 @@ from app.services.document_audit import DocumentAuditEvent, emit_document_audit_
 from app.services.quickbooks import (
     REQUIRED_SCOPE,
     QuickBooksUnavailable,
+    QuickBooksCredentials,
     authorization_url,
+    decrypt_configuration_secret,
     decrypt_token,
     encrypt_token,
+    encrypt_configuration_secret,
+    environment_credentials,
     exchange_authorization_code,
     get_company_info,
     quickbooks_is_configured,
@@ -53,9 +63,9 @@ def _require_sandbox_environment() -> None:
         )
 
 
-def _require_enabled() -> None:
+def _require_enabled(db: Session) -> None:
     _require_sandbox_environment()
-    if not get_settings().quickbooks_enabled:
+    if not _feature_enabled(db):
         raise HTTPException(status_code=503, detail="QuickBooks sandbox connection is disabled.")
 
 
@@ -63,6 +73,32 @@ def _connection(db: Session) -> QuickBooksConnection | None:
     return db.scalar(
         select(QuickBooksConnection).where(QuickBooksConnection.environment == "sandbox")
     )
+
+
+def _configuration(db: Session) -> QuickBooksConfiguration | None:
+    return db.scalar(
+        select(QuickBooksConfiguration).where(
+            QuickBooksConfiguration.environment == "sandbox",
+            QuickBooksConfiguration.enabled.is_(True),
+        )
+    )
+
+
+def _feature_enabled(db: Session) -> bool:
+    return bool(get_settings().quickbooks_enabled or _configuration(db))
+
+
+def _credentials(db: Session) -> QuickBooksCredentials | None:
+    configuration = _configuration(db)
+    if configuration is not None:
+        return QuickBooksCredentials(
+            client_id=configuration.client_id,
+            client_secret=decrypt_configuration_secret(configuration.encrypted_client_secret),
+            token_encryption_key=decrypt_configuration_secret(
+                configuration.encrypted_token_encryption_key
+            ),
+        )
+    return environment_credentials()
 
 
 def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> bool:
@@ -88,7 +124,12 @@ def _consume_oauth_state(db: Session, *, state: str, owner_account_id: UUID) -> 
 
 
 def _status(db: Session) -> QuickBooksStatus:
-    settings = get_settings()
+    configuration_error = None
+    try:
+        credentials = _credentials(db)
+    except QuickBooksUnavailable as exc:
+        credentials = None
+        configuration_error = str(exc)
     connection = _connection(db)
     connected = bool(
         connection
@@ -97,8 +138,8 @@ def _status(db: Session) -> QuickBooksStatus:
         and REQUIRED_SCOPE in connection.scopes_json
     )
     return QuickBooksStatus(
-        enabled=settings.quickbooks_enabled,
-        configured=quickbooks_is_configured(),
+        enabled=_feature_enabled(db),
+        configured=quickbooks_is_configured(credentials),
         connected=connected,
         status=connection.status if connection else "not_connected",
         environment="sandbox",
@@ -107,7 +148,7 @@ def _status(db: Session) -> QuickBooksStatus:
         company_name=connection.company_name if connection else None,
         legal_name=connection.legal_name if connection else None,
         last_verified_at=connection.last_verified_at if connection else None,
-        last_error=connection.last_error if connection else None,
+        last_error=(connection.last_error if connection else None) or configuration_error,
     )
 
 
@@ -137,6 +178,92 @@ def quickbooks_status(user: CurrentUser, db: DBSession) -> QuickBooksStatus:
     return _status(db)
 
 
+@router.put("/configuration", response_model=QuickBooksStatus)
+def configure_quickbooks(
+    payload: QuickBooksConfigurationWrite,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> QuickBooksStatus:
+    _require_admin(user)
+    _require_sandbox_environment()
+    if not payload.sandbox_confirmed:
+        raise HTTPException(status_code=400, detail="Confirm sandbox-only configuration first.")
+    connection = _connection(db)
+    if connection and connection.status == "connected":
+        raise HTTPException(status_code=409, detail="Disconnect QuickBooks before changing credentials.")
+
+    client_id = payload.client_id.strip()
+    client_secret = payload.client_secret.strip()
+    if not (10 <= len(client_id) <= 255) or not (12 <= len(client_secret) <= 1000):
+        raise HTTPException(status_code=422, detail="Enter valid Intuit development credentials.")
+
+    configuration = db.scalar(
+        select(QuickBooksConfiguration).where(
+            QuickBooksConfiguration.environment == "sandbox"
+        )
+    )
+    if configuration is None:
+        configuration = QuickBooksConfiguration(
+            environment="sandbox",
+            configured_by_account_id=user.id,
+            client_id=client_id,
+            encrypted_client_secret=encrypt_configuration_secret(client_secret),
+            encrypted_token_encryption_key=encrypt_configuration_secret(
+                secrets.token_urlsafe(48)
+            ),
+            enabled=True,
+        )
+        db.add(configuration)
+    else:
+        configuration.configured_by_account_id = user.id
+        configuration.client_id = client_id
+        configuration.encrypted_client_secret = encrypt_configuration_secret(client_secret)
+        configuration.encrypted_token_encryption_key = encrypt_configuration_secret(
+            secrets.token_urlsafe(48)
+        )
+        configuration.enabled = True
+    db.commit()
+    _audit(
+        request,
+        action="quickbooks_configuration",
+        outcome="saved",
+        actor=user.email,
+        metadata={"environment": "sandbox"},
+    )
+    return _status(db)
+
+
+@router.delete("/configuration", response_model=QuickBooksStatus)
+def remove_quickbooks_configuration(
+    payload: QuickBooksConfigurationRemove,
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> QuickBooksStatus:
+    _require_admin(user)
+    _require_sandbox_environment()
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Confirm credential removal first.")
+    connection = _connection(db)
+    if connection and connection.status == "connected":
+        raise HTTPException(status_code=409, detail="Disconnect QuickBooks before removing credentials.")
+    db.execute(
+        delete(QuickBooksConfiguration).where(
+            QuickBooksConfiguration.environment == "sandbox"
+        )
+    )
+    db.commit()
+    _audit(
+        request,
+        action="quickbooks_configuration",
+        outcome="removed",
+        actor=user.email,
+        metadata={"environment": "sandbox"},
+    )
+    return _status(db)
+
+
 @router.post("/oauth/start", response_model=QuickBooksAuthorization)
 def start_quickbooks_oauth(
     request: Request,
@@ -144,8 +271,9 @@ def start_quickbooks_oauth(
     db: DBSession,
 ) -> QuickBooksAuthorization:
     _require_admin(user)
-    _require_enabled()
-    if not quickbooks_is_configured():
+    _require_enabled(db)
+    credentials = _credentials(db)
+    if not quickbooks_is_configured(credentials):
         raise HTTPException(status_code=503, detail="QuickBooks sandbox OAuth is not configured.")
     state = secrets.token_urlsafe(48)
     db.add(
@@ -164,7 +292,7 @@ def start_quickbooks_oauth(
         actor=user.email,
         metadata={"environment": "sandbox", "scope": REQUIRED_SCOPE},
     )
-    return QuickBooksAuthorization(authorization_url=authorization_url(state))
+    return QuickBooksAuthorization(authorization_url=authorization_url(state, credentials))
 
 
 @router.get("/oauth/callback", response_model=None)
@@ -178,7 +306,10 @@ def quickbooks_oauth_callback(
     error: Annotated[str | None, Query(max_length=200)] = None,
 ):
     _require_admin(user)
-    _require_enabled()
+    _require_enabled(db)
+    credentials = _credentials(db)
+    if credentials is None:
+        return quickbooks_oauth_redirect("failed")
     if not _consume_oauth_state(db, state=state, owner_account_id=user.id):
         _audit(
             request,
@@ -221,8 +352,11 @@ def quickbooks_oauth_callback(
     try:
         existing_refresh = None
         if connection and connection.encrypted_refresh_token:
-            existing_refresh = decrypt_token(connection.encrypted_refresh_token)
-        result = exchange_authorization_code(code, existing_refresh)
+            existing_refresh = decrypt_token(
+                connection.encrypted_refresh_token,
+                credentials.token_encryption_key,
+            )
+        result = exchange_authorization_code(code, existing_refresh, credentials)
         if not result.refresh_token:
             raise QuickBooksUnavailable("QuickBooks returned no refresh token.")
         company = get_company_info(result.access_token, realm_id)
@@ -251,8 +385,14 @@ def quickbooks_oauth_callback(
     connection.realm_id = realm_id
     connection.company_name = company.company_name
     connection.legal_name = company.legal_name
-    connection.encrypted_access_token = encrypt_token(result.access_token)
-    connection.encrypted_refresh_token = encrypt_token(result.refresh_token)
+    connection.encrypted_access_token = encrypt_token(
+        result.access_token,
+        credentials.token_encryption_key,
+    )
+    connection.encrypted_refresh_token = encrypt_token(
+        result.refresh_token,
+        credentials.token_encryption_key,
+    )
     connection.token_expires_at = result.expires_at
     connection.refresh_token_expires_at = result.refresh_token_expires_at
     connection.scopes_json = result.scopes
@@ -293,16 +433,24 @@ def disconnect_quickbooks(
     revocation = "not_available"
     token = None
     try:
+        credentials = _credentials(db)
         if connection.encrypted_refresh_token:
-            token = decrypt_token(connection.encrypted_refresh_token)
+            token = decrypt_token(
+                connection.encrypted_refresh_token,
+                credentials.token_encryption_key if credentials else None,
+            )
         elif connection.encrypted_access_token:
-            token = decrypt_token(connection.encrypted_access_token)
+            token = decrypt_token(
+                connection.encrypted_access_token,
+                credentials.token_encryption_key if credentials else None,
+            )
     except QuickBooksUnavailable:
+        credentials = None
         revocation = "decryption_failed"
     else:
         if token:
             try:
-                revoke_token(token)
+                revoke_token(token, credentials)
                 revocation = "completed"
             except QuickBooksUnavailable:
                 revocation = "provider_unavailable"
