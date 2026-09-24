@@ -89,7 +89,7 @@ def encrypt_token(token: str, encryption_key: str | None = None) -> str:
 def decrypt_token(encrypted_token: str, encryption_key: str | None = None) -> str:
     try:
         return _token_cipher(encryption_key).decrypt(encrypted_token.encode("ascii")).decode("utf-8")
-    except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
+    except (InvalidToken, UnicodeDecodeError, UnicodeEncodeError, ValueError) as exc:
         raise QuickBooksUnavailable(
             "The stored QuickBooks connection cannot be decrypted. Reconnect QuickBooks."
         ) from exc
@@ -152,7 +152,7 @@ def encrypt_configuration_secret(value: str) -> str:
 def decrypt_configuration_secret(value: str) -> str:
     try:
         return _configuration_cipher().decrypt(value.encode("ascii")).decode("utf-8")
-    except (InvalidToken, UnicodeDecodeError, ValueError) as exc:
+    except (InvalidToken, UnicodeDecodeError, UnicodeEncodeError, ValueError) as exc:
         raise QuickBooksUnavailable(
             "The stored QuickBooks configuration cannot be decrypted. Remove and configure it again."
         ) from exc

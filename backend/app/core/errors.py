@@ -27,9 +27,12 @@ def _is_quickbooks_callback(request: Request) -> bool:
     return request.url.path == f"{prefix}/finance/quickbooks/oauth/callback"
 
 
-def _is_quickbooks_configuration(request: Request) -> bool:
+def _is_quickbooks_configuration_write(request: Request) -> bool:
     prefix = get_settings().api_v1_prefix.rstrip("/")
-    return request.url.path == f"{prefix}/finance/quickbooks/configuration"
+    return (
+        request.method.upper() == "PUT"
+        and request.url.path == f"{prefix}/finance/quickbooks/configuration"
+    )
 
 
 def quickbooks_oauth_redirect(outcome: str) -> RedirectResponse:
@@ -57,7 +60,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def request_validation_error_handler(request: Request, exc: RequestValidationError):
         if _is_quickbooks_callback(request):
             return quickbooks_oauth_redirect("failed")
-        if _is_quickbooks_configuration(request):
+        if _is_quickbooks_configuration_write(request):
             return JSONResponse(
                 status_code=422,
                 content={"detail": "Enter valid Intuit development credentials."},
@@ -83,8 +86,8 @@ def register_exception_handlers(app: FastAPI) -> None:
                 error_type=type(exc).__name__,
             )
             return quickbooks_oauth_redirect("failed")
-        if _is_quickbooks_configuration(request):
-            logger.exception(
+        if _is_quickbooks_configuration_write(request):
+            logger.error(
                 "quickbooks_configuration_unhandled_error",
                 path=request.url.path,
                 request_id=getattr(request.state, "request_id", None),
@@ -92,7 +95,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
             return JSONResponse(
                 status_code=500,
-                content={"error": {"message": "Unable to save QuickBooks credentials."}},
+                content={"detail": "Unable to save QuickBooks credentials."},
             )
         logger.exception(
             "unhandled_error",
