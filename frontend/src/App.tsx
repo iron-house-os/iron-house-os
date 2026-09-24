@@ -24,6 +24,7 @@ import { EstimatingPage } from "./pages/EstimatingPage";
 import { MunicipalityIntelligencePage } from "./pages/MunicipalityIntelligencePage";
 import { MVPWorkflowPage } from "./pages/MVPWorkflowPage";
 import { LoginPage } from "./pages/LoginPage";
+import { LegalPage } from "./pages/LegalPage";
 import { IronHouseChatPage } from "./pages/IronHouseChatPage";
 import { MeetingMinutesPage } from "./pages/MeetingMinutesPage";
 import { GoogleCalendarPage } from "./pages/GoogleCalendarPage";
@@ -70,9 +71,21 @@ function LegacyOperatorRoute() {
   return <Navigate to={legacyOperatorTarget(useParams().section)} replace />;
 }
 
+export function isPublicLegalPath(pathname: string) {
+  return pathname === "/legal/privacy" || pathname === "/legal/terms";
+}
+
 function AuthenticatedApp() {
   const { user, portalRole, isLoading } = useAuth();
   const location = useLocation();
+  if (isPublicLegalPath(location.pathname)) {
+    return (
+      <Routes>
+        <Route path="/legal/privacy" element={<LegalPage document="privacy" />} />
+        <Route path="/legal/terms" element={<LegalPage document="terms" />} />
+      </Routes>
+    );
+  }
   if (/^\/employee-onboarding\/[^/]+$/.test(location.pathname)) {
     return (
       <Routes>
