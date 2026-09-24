@@ -74,6 +74,10 @@ def get_settings() -> Settings:
 
 
 _INSECURE_VALUE_MARKERS = ("change-me", "replace-with", "example", "<", "minimum-", "random-")
+_QUICKBOOKS_PRODUCTION_REDIRECT_URI = (
+    "https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+)
+_QUICKBOOKS_PRODUCTION_FRONTEND_RETURN_URL = "https://os.ironhousecivil.com/finance"
 
 
 def _looks_insecure(value: str | None, *, minimum_length: int = 1) -> bool:
@@ -151,6 +155,18 @@ def validate_production_settings(settings: Settings) -> None:
             errors.append("QUICKBOOKS_REDIRECT_URI must use HTTPS in production")
         if not settings.quickbooks_frontend_return_url.strip().lower().startswith("https://"):
             errors.append("QUICKBOOKS_FRONTEND_RETURN_URL must use HTTPS in production")
+    if settings.quickbooks_live_read_only_approved:
+        if settings.quickbooks_redirect_uri.strip() != _QUICKBOOKS_PRODUCTION_REDIRECT_URI:
+            errors.append(
+                "QUICKBOOKS_REDIRECT_URI must match the approved production callback"
+            )
+        if (
+            settings.quickbooks_frontend_return_url.strip()
+            != _QUICKBOOKS_PRODUCTION_FRONTEND_RETURN_URL
+        ):
+            errors.append(
+                "QUICKBOOKS_FRONTEND_RETURN_URL must match the approved production return URL"
+            )
 
     if errors:
         raise RuntimeError("Insecure production configuration: " + "; ".join(errors))

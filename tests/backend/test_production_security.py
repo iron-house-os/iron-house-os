@@ -145,6 +145,26 @@ def test_database_managed_live_quickbooks_accepts_secure_callback_without_env_cr
     validate_production_settings(Settings(**values))
 
 
+def test_live_quickbooks_rejects_unapproved_https_origins_and_paths() -> None:
+    values = SECURE_PRODUCTION | {
+        "quickbooks_enabled": False,
+        "quickbooks_environment": "production",
+        "quickbooks_live_read_only_approved": True,
+        "quickbooks_token_encryption_key": "production-token-key-with-enough-length",
+        "quickbooks_redirect_uri": (
+            "https://staging.os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback"
+        ),
+        "quickbooks_frontend_return_url": "https://unrelated.example/finance",
+    }
+
+    with pytest.raises(RuntimeError) as exc_info:
+        validate_production_settings(Settings(**values))
+
+    message = str(exc_info.value)
+    assert "QUICKBOOKS_REDIRECT_URI must match" in message
+    assert "QUICKBOOKS_FRONTEND_RETURN_URL must match" in message
+
+
 def test_live_quickbooks_approval_cannot_be_set_for_sandbox() -> None:
     values = SECURE_PRODUCTION | {
         "quickbooks_environment": "sandbox",
