@@ -93,13 +93,16 @@ select the Intuit production host there.
 3. Complete the Intuit app details and assessment without exposing production
    credentials.
 4. Obtain production keys and confirm the production redirect URI in Intuit.
-5. Open a separate activation issue/PR that changes the production target to
-   `production`, records the owner's live-read-only approval, and provisions a
-   protected random `QUICKBOOKS_TOKEN_ENCRYPTION_KEY` of at least 32 characters
-   through the approved production secret path. Never place that key in GitHub,
-   chat, screenshots, or deployment logs.
-6. Pass CI and release readiness, then request the protected production
-   deployment approval. Do not bypass the required reviewer.
+5. Merge the issue-linked activation PR only after CI and release readiness.
+   Deploy that release through the protected production workflow so it installs
+   the least-privilege QuickBooks control wrapper. Do not bypass the required
+   reviewer.
+6. Dispatch **QuickBooks live read-only control** with action `activate` and the
+   exact deployed release SHA. The protected production reviewer must approve
+   the run. The host-only wrapper keeps `QUICKBOOKS_ENABLED=false`, changes the
+   target to `production`, records the live-read-only approval, and generates a
+   protected `QUICKBOOKS_TOKEN_ENCRYPTION_KEY` without returning its value to
+   GitHub, chat, screenshots, browser storage, workflow output, or logs.
 7. An IHOS administrator enters the production keys in Financial Control. The
    browser clears the Client Secret after submission.
 8. Authorize the exact Iron House QuickBooks Online company and verify the
@@ -112,8 +115,10 @@ select the Intuit production host there.
 
 ## Rollback
 
-1. Set `QUICKBOOKS_FORCE_DISABLED=true` for the emergency application kill
-   switch.
+1. Dispatch **QuickBooks live read-only control** with action `force-disable`
+   and the exact deployed release SHA. The protected production reviewer must
+   approve the run. This sets `QUICKBOOKS_FORCE_DISABLED=true`, recreates only
+   the backend, verifies exact-release readiness, and emits secret-free evidence.
 2. Use the administrator disconnect control to attempt Intuit revocation and
    clear local encrypted tokens.
    If the status is `reconnect_required`, the invalid local tokens have already

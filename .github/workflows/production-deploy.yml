@@ -7,6 +7,9 @@ on:
       - ".github/workflows/production-deploy.yml"
       - "ops/digitalocean/install-production-runner.sh"
       - "ops/digitalocean/production-deploy-wrapper.sh"
+      - "ops/digitalocean/cutover.sh"
+      - "ops/digitalocean/quickbooks-live-read-only-wrapper.sh"
+      - "ops/scripts/quickbooks_live_config.py"
       - "docs/operations/production-deploy-agent.md"
   workflow_dispatch:
     inputs:
@@ -37,7 +40,9 @@ jobs:
         run: |
           bash -n \
             ops/digitalocean/install-production-runner.sh \
-            ops/digitalocean/production-deploy-wrapper.sh
+            ops/digitalocean/production-deploy-wrapper.sh \
+            ops/digitalocean/cutover.sh \
+            ops/digitalocean/quickbooks-live-read-only-wrapper.sh
           if bash ops/digitalocean/production-deploy-wrapper.sh \
             --release 0000000000000000000000000000000000000000 \
             --evidence /missing/evidence.json; then
