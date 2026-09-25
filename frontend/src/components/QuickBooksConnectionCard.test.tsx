@@ -8,6 +8,7 @@ import { QuickBooksConnectionCard } from "./QuickBooksConnectionCard";
 vi.mock("../api/quickBooks", () => ({
   quickBooksApi: {
     status: vi.fn(),
+    verify: vi.fn(),
     startOAuth: vi.fn(),
     disconnect: vi.fn(),
     configure: vi.fn(),
@@ -209,5 +210,21 @@ describe("QuickBooksConnectionCard", () => {
 
     await waitFor(() => expect(quickBooksApi.disconnect).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("status")).toHaveTextContent("Local tokens were cleared");
+  });
+
+  it("verifies CompanyInfo and reports automatic token renewal without adding write controls", async () => {
+    const user = userEvent.setup();
+    vi.mocked(quickBooksApi.status).mockResolvedValue(connected);
+    vi.mocked(quickBooksApi.verify).mockResolvedValue({
+      ...connected,
+      last_verified_at: "2026-09-25T02:00:00Z",
+    });
+    render(<QuickBooksConnectionCard />);
+
+    await user.click(await screen.findByRole("button", { name: "Verify company" }));
+
+    await waitFor(() => expect(quickBooksApi.verify).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("status")).toHaveTextContent("renewed automatically if required");
+    expect(screen.queryByRole("button", { name: /export|sync|create invoice/i })).not.toBeInTheDocument();
   });
 });

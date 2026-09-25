@@ -29,6 +29,10 @@ async function read<T>(response: Response): Promise<T> {
 export const quickBooksApi = {
   status: () =>
     apiFetch(`${API_BASE_URL}/finance/quickbooks/status`).then(read<QuickBooksStatus>),
+  verify: () =>
+    apiFetch(`${API_BASE_URL}/finance/quickbooks/verify`, { method: "POST" }).then(
+      read<QuickBooksStatus>,
+    ),
   startOAuth: () =>
     apiFetch(`${API_BASE_URL}/finance/quickbooks/oauth/start`, { method: "POST" }).then(
       read<{ authorization_url: string }>,

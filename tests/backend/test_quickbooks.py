@@ -1,5 +1,8 @@
 from datetime import UTC, datetime, timedelta
+from email.message import Message
+from io import BytesIO
 import json
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request as URLRequest
 from uuid import UUID
@@ -7,6 +10,7 @@ from uuid import UUID
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.api.dependencies.auth import require_authenticated_user
 from app.api.v1.routes import quickbooks as quickbooks_routes
@@ -22,6 +26,8 @@ from app.services import quickbooks as quickbooks_service
 from app.services.quickbooks import (
     REQUIRED_SCOPE,
     QuickBooksCompanyInfo,
+    QuickBooksProviderError,
+    QuickBooksProviderResponse,
     QuickBooksUnavailable,
     QuickBooksTokenResult,
     decrypt_token,
@@ -933,9 +939,12 @@ def test_company_verification_uses_environment_specific_read_endpoint(
     requests: list[str] = []
     monkeypatch.setattr(
         quickbooks_service,
-        "_json_request",
+        "_json_provider_request",
         lambda url, *, access_token: requests.append(url)
-        or {"CompanyInfo": {"CompanyName": "Verified Company"}},
+        or QuickBooksProviderResponse(
+            payload={"CompanyInfo": {"CompanyName": "Verified Company"}},
+            intuit_tid="provider-transaction-id",
+        ),
     )
 
     company = quickbooks_service.get_company_info(
@@ -945,6 +954,7 @@ def test_company_verification_uses_environment_specific_read_endpoint(
     )
 
     assert company.company_name == "Verified Company"
+    assert company.intuit_tid == "provider-transaction-id"
     assert len(requests) == 1
     assert requests[0].startswith(
         f"{expected_host}/v3/company/9341457990023688/companyinfo/"
@@ -957,8 +967,9 @@ def test_company_verification_sends_the_access_token_as_a_bearer_header(
     requests: list[URLRequest] = []
     monkeypatch.setattr(
         quickbooks_service,
-        "_read_json_response",
-        lambda request: requests.append(request) or {},
+        "_read_provider_response",
+        lambda request: requests.append(request)
+        or QuickBooksProviderResponse(payload={}, intuit_tid=None),
     )
 
     quickbooks_service._json_request(
@@ -1003,3 +1014,215 @@ def test_tokens_are_encrypted_at_rest(monkeypatch: pytest.MonkeyPatch) -> None:
     encrypted = encrypt_token("refresh-token-value")
     assert "refresh-token-value" not in encrypted
     assert decrypt_token(encrypted) == "refresh-token-value"
+
+
+def test_verify_rotates_expired_tokens_atomically_and_records_safe_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        connection.token_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+
+    refreshed: list[str] = []
+    audits: list[dict] = []
+
+    def refresh(token: str, credentials=None) -> QuickBooksTokenResult:
+        refreshed.append(token)
+        return QuickBooksTokenResult(
+            access_token="rotated-access-token",
+            refresh_token="rotated-refresh-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            refresh_token_expires_at=datetime.now(UTC) + timedelta(days=100),
+            scopes=[REQUIRED_SCOPE],
+            intuit_tid="token-tid-123",
+        )
+
+    monkeypatch.setattr(quickbooks_routes, "refresh_access_token", refresh)
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "get_company_info",
+        lambda token, realm_id, environment: QuickBooksCompanyInfo(
+            company_name="Verified Sandbox Company",
+            legal_name="Verified Sandbox Company Ltd.",
+            intuit_tid="company-tid-456",
+        )
+        if token == "rotated-access-token"
+        else (_ for _ in ()).throw(AssertionError("stale access token used")),
+    )
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "_audit",
+        lambda _request, **kwargs: audits.append(kwargs),
+    )
+
+    response = client.post("/api/v1/finance/quickbooks/verify")
+
+    assert response.status_code == 200
+    assert response.json()["company_name"] == "Verified Sandbox Company"
+    assert refreshed == ["refresh-token"]
+    assert audits[-1]["metadata"]["token_refreshed"] is True
+    assert audits[-1]["metadata"]["intuit_tid"] == "company-tid-456"
+    assert "rotated-access-token" not in json.dumps(audits)
+    assert "rotated-refresh-token" not in json.dumps(audits)
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert decrypt_token(connection.encrypted_access_token or "") == "rotated-access-token"
+        assert decrypt_token(connection.encrypted_refresh_token or "") == "rotated-refresh-token"
+        assert connection.status == "connected"
+
+
+def test_verify_reuses_unexpired_access_token_without_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "refresh_access_token",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected refresh")),
+    )
+    observed: list[str] = []
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "get_company_info",
+        lambda token, realm_id, environment: observed.append(token)
+        or QuickBooksCompanyInfo(
+            company_name="Sandbox Company US 3969",
+            legal_name="Sandbox Company US 3969",
+        ),
+    )
+
+    response = client.post("/api/v1/finance/quickbooks/verify")
+
+    assert response.status_code == 200
+    assert observed == ["access-token"]
+
+
+def test_terminal_refresh_failure_requires_reconnect_and_clears_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        connection.token_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+    audits: list[dict] = []
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "refresh_access_token",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            QuickBooksProviderError(
+                "QuickBooks authorization must be renewed.",
+                reason="invalid_grant",
+                status_code=400,
+                intuit_tid="safe-tid-789",
+                reconnect_required=True,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "_audit",
+        lambda _request, **kwargs: audits.append(kwargs),
+    )
+
+    response = client.post("/api/v1/finance/quickbooks/verify")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "QuickBooks authorization has expired. Reconnect QuickBooks."
+    }
+    assert audits[-1]["metadata"] == {
+        "environment": "sandbox",
+        "reason": "invalid_grant",
+        "provider_status": 400,
+        "intuit_tid": "safe-tid-789",
+    }
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert connection.status == "reconnect_required"
+        assert connection.encrypted_access_token is None
+        assert connection.encrypted_refresh_token is None
+
+
+def test_transient_refresh_failure_preserves_tokens_for_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch)
+    _connected()
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        connection.token_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+    monkeypatch.setattr(
+        quickbooks_routes,
+        "refresh_access_token",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            QuickBooksProviderError(
+                "QuickBooks is temporarily unreachable.",
+                reason="provider_unreachable",
+            )
+        ),
+    )
+
+    response = client.post("/api/v1/finance/quickbooks/verify")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "QuickBooks is temporarily unavailable. Try again."
+    }
+    with TestingSessionLocal() as db:
+        connection = db.query(QuickBooksConnection).one()
+        assert connection.status == "connected"
+        assert decrypt_token(connection.encrypted_refresh_token or "") == "refresh-token"
+        assert connection.last_error == "QuickBooks is temporarily unavailable. Try again."
+
+
+def test_provider_reason_never_repeats_untrusted_provider_detail() -> None:
+    assert quickbooks_service._provider_reason(
+        json.dumps({"error": "access_token=provider-secret-value"})
+    ) == "provider_error"
+    assert quickbooks_service._provider_reason(
+        json.dumps({"error": "invalid_grant"})
+    ) == "invalid_grant"
+
+
+def test_provider_http_failure_exposes_only_allowlisted_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_secret = "provider-secret-that-must-not-be-logged"
+    headers = Message()
+    headers["intuit_tid"] = "safe-tid-123"
+    failure = HTTPError(
+        "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+        400,
+        "Bad Request",
+        headers,
+        BytesIO(json.dumps({"error": raw_secret}).encode("utf-8")),
+    )
+    monkeypatch.setattr(
+        quickbooks_service,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(failure),
+    )
+
+    with pytest.raises(QuickBooksProviderError) as captured:
+        quickbooks_service._read_provider_response(
+            URLRequest("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer")
+        )
+
+    assert captured.value.reason == "provider_error"
+    assert captured.value.intuit_tid == "safe-tid-123"
+    assert raw_secret not in str(captured.value)
+
+
+def test_token_refresh_locks_the_connection_row_to_prevent_rotation_races() -> None:
+    statement = quickbooks_routes._connection_lock_statement("production")
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" in compiled
+    assert "quickbooks_connections.environment" in compiled

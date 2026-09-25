@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import base64
 import hashlib
 import json
+import re
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -17,10 +18,40 @@ INTUIT_REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
 QUICKBOOKS_SANDBOX_API_URL = "https://sandbox-quickbooks.api.intuit.com"
 QUICKBOOKS_PRODUCTION_API_URL = "https://quickbooks.api.intuit.com"
 REQUIRED_SCOPE = "com.intuit.quickbooks.accounting"
+KNOWN_OAUTH_ERROR_CODES = {
+    "invalid_request",
+    "invalid_client",
+    "invalid_grant",
+    "unauthorized_client",
+    "unsupported_grant_type",
+    "invalid_scope",
+}
+
+
+def provider_error_code(value: str | None) -> str:
+    sanitized = _sanitize_diagnostic_value(value)
+    return sanitized if sanitized in KNOWN_OAUTH_ERROR_CODES else "provider_error"
 
 
 class QuickBooksUnavailable(RuntimeError):
     pass
+
+
+class QuickBooksProviderError(QuickBooksUnavailable):
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str = "provider_error",
+        status_code: int | None = None,
+        intuit_tid: str | None = None,
+        reconnect_required: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.status_code = status_code
+        self.intuit_tid = intuit_tid
+        self.reconnect_required = reconnect_required
 
 
 @dataclass(frozen=True)
@@ -30,12 +61,20 @@ class QuickBooksTokenResult:
     expires_at: datetime
     refresh_token_expires_at: datetime | None
     scopes: list[str]
+    intuit_tid: str | None = None
 
 
 @dataclass(frozen=True)
 class QuickBooksCompanyInfo:
     company_name: str
     legal_name: str | None
+    intuit_tid: str | None = None
+
+
+@dataclass(frozen=True)
+class QuickBooksProviderResponse:
+    payload: dict
+    intuit_tid: str | None
 
 
 @dataclass(frozen=True)
@@ -148,7 +187,7 @@ def exchange_authorization_code(
     credentials: QuickBooksCredentials | None = None,
 ) -> QuickBooksTokenResult:
     settings = get_settings()
-    result = _form_request(
+    response = _form_provider_request(
         INTUIT_TOKEN_URL,
         {
             "code": code,
@@ -157,7 +196,30 @@ def exchange_authorization_code(
         },
         credentials=credentials,
     )
-    return _token_result(result, existing_refresh_token=existing_refresh_token)
+    return _token_result(
+        response.payload,
+        existing_refresh_token=existing_refresh_token,
+        intuit_tid=response.intuit_tid,
+    )
+
+
+def refresh_access_token(
+    refresh_token: str,
+    credentials: QuickBooksCredentials | None = None,
+) -> QuickBooksTokenResult:
+    response = _form_provider_request(
+        INTUIT_TOKEN_URL,
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        credentials=credentials,
+    )
+    return _token_result(
+        response.payload,
+        existing_refresh_token=refresh_token,
+        intuit_tid=response.intuit_tid,
+    )
 
 
 def get_company_info(
@@ -177,10 +239,11 @@ def get_company_info(
     if api_base_url is None:
         raise QuickBooksUnavailable("QuickBooks environment is not supported.")
     safe_realm = quote(realm_id, safe="")
-    payload = _json_request(
+    response = _json_provider_request(
         f"{api_base_url}/v3/company/{safe_realm}/companyinfo/{safe_realm}?minorversion=75",
         access_token=access_token,
     )
+    payload = response.payload
     raw = payload.get("CompanyInfo")
     if not isinstance(raw, dict) or not raw.get("CompanyName"):
         raise QuickBooksUnavailable("QuickBooks returned no company identity.")
@@ -188,6 +251,7 @@ def get_company_info(
     return QuickBooksCompanyInfo(
         company_name=str(raw["CompanyName"])[:255],
         legal_name=str(legal_name)[:255] if legal_name else None,
+        intuit_tid=response.intuit_tid,
     )
 
 
@@ -248,6 +312,15 @@ def _form_request(
     *,
     credentials: QuickBooksCredentials | None = None,
 ) -> dict:
+    return _form_provider_request(url, fields, credentials=credentials).payload
+
+
+def _form_provider_request(
+    url: str,
+    fields: dict[str, str],
+    *,
+    credentials: QuickBooksCredentials | None = None,
+) -> QuickBooksProviderResponse:
     request = Request(
         url,
         data=urlencode(fields).encode("utf-8"),
@@ -258,10 +331,14 @@ def _form_request(
         },
         method="POST",
     )
-    return _read_json_response(request)
+    return _read_provider_response(request)
 
 
 def _json_request(url: str, *, access_token: str) -> dict:
+    return _json_provider_request(url, access_token=access_token).payload
+
+
+def _json_provider_request(url: str, *, access_token: str) -> QuickBooksProviderResponse:
     request = Request(
         url,
         headers={
@@ -270,23 +347,51 @@ def _json_request(url: str, *, access_token: str) -> dict:
         },
         method="GET",
     )
-    return _read_json_response(request)
+    return _read_provider_response(request)
 
 
 def _read_json_response(request: Request) -> dict:
+    return _read_provider_response(request).payload
+
+
+def _read_provider_response(request: Request) -> QuickBooksProviderResponse:
     try:
         with urlopen(request, timeout=45) as response:
             body = response.read()
-            return json.loads(body.decode("utf-8")) if body else {}
+            payload = json.loads(body.decode("utf-8")) if body else {}
+            if not isinstance(payload, dict):
+                raise QuickBooksUnavailable("QuickBooks returned an invalid response.")
+            return QuickBooksProviderResponse(
+                payload=payload,
+                intuit_tid=_sanitize_diagnostic_value(_header_value(response.headers, "intuit_tid")),
+            )
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:1000]
-        raise QuickBooksUnavailable(
-            f"QuickBooks rejected the request ({exc.code}): {_provider_reason(detail)}"
+        reason = _provider_reason(detail)
+        reconnect_required = reason in {
+            "invalid_grant",
+            "invalid_client",
+            "unauthorized_client",
+        }
+        raise QuickBooksProviderError(
+            "QuickBooks authorization must be renewed."
+            if reconnect_required
+            else "QuickBooks rejected the request.",
+            reason=reason,
+            status_code=exc.code,
+            intuit_tid=_sanitize_diagnostic_value(_header_value(exc.headers, "intuit_tid")),
+            reconnect_required=reconnect_required,
         ) from exc
     except (URLError, TimeoutError) as exc:
-        raise QuickBooksUnavailable("QuickBooks is temporarily unreachable.") from exc
+        raise QuickBooksProviderError(
+            "QuickBooks is temporarily unreachable.",
+            reason="provider_unreachable",
+        ) from exc
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise QuickBooksUnavailable("QuickBooks returned an invalid response.") from exc
+        raise QuickBooksProviderError(
+            "QuickBooks returned an invalid response.",
+            reason="invalid_provider_response",
+        ) from exc
 
 
 def _provider_reason(detail: str) -> str:
@@ -297,19 +402,36 @@ def _provider_reason(detail: str) -> str:
     if isinstance(parsed, dict):
         error = parsed.get("error")
         if isinstance(error, str):
-            return error[:120]
+            return provider_error_code(error)
         fault = parsed.get("Fault")
         if isinstance(fault, dict):
             errors = fault.get("Error")
             if isinstance(errors, list) and errors and isinstance(errors[0], dict):
-                return str(errors[0].get("code") or "provider_error")[:120]
+                sanitized = _sanitize_diagnostic_value(
+                    str(errors[0].get("code") or "provider_error")
+                )
+                return sanitized if sanitized and sanitized.isdigit() else "provider_error"
     return "provider_error"
+
+
+def _sanitize_diagnostic_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    sanitized = re.sub(r"[^A-Za-z0-9._:-]", "_", str(value))[:120]
+    return sanitized or None
+
+
+def _header_value(headers: object, name: str) -> str | None:
+    getter = getattr(headers, "get", None)
+    value = getter(name) if callable(getter) else None
+    return str(value) if value is not None else None
 
 
 def _token_result(
     result: dict,
     *,
     existing_refresh_token: str | None = None,
+    intuit_tid: str | None = None,
 ) -> QuickBooksTokenResult:
     access_token = result.get("access_token")
     if not isinstance(access_token, str) or not access_token:
@@ -346,4 +468,5 @@ def _token_result(
         expires_at=now + timedelta(seconds=access_seconds),
         refresh_token_expires_at=refresh_expires_at,
         scopes=scopes,
+        intuit_tid=_sanitize_diagnostic_value(intuit_tid),
     )

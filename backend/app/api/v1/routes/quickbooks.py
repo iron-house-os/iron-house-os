@@ -26,6 +26,7 @@ from app.schemas.quickbooks import (
 from app.services.document_audit import DocumentAuditEvent, emit_document_audit_event
 from app.services.quickbooks import (
     REQUIRED_SCOPE,
+    QuickBooksProviderError,
     QuickBooksUnavailable,
     QuickBooksCredentials,
     authorization_url,
@@ -38,8 +39,10 @@ from app.services.quickbooks import (
     exchange_authorization_code,
     get_company_info,
     live_read_only_is_approved,
+    provider_error_code,
     quickbooks_environment,
     quickbooks_is_configured,
+    refresh_access_token,
     revoke_token,
     state_digest,
 )
@@ -47,6 +50,7 @@ from app.services.request_context import get_request_audit_context
 
 router = APIRouter()
 DBSession = Annotated[Session, Depends(get_db)]
+TOKEN_REFRESH_SKEW = timedelta(minutes=5)
 
 
 def _require_admin(user: CurrentUser) -> None:
@@ -92,6 +96,18 @@ def _connection(db: Session) -> QuickBooksConnection | None:
         select(QuickBooksConnection).where(
             QuickBooksConnection.environment == _environment()
         )
+    )
+
+
+def _locked_connection(db: Session) -> QuickBooksConnection | None:
+    return db.scalar(_connection_lock_statement(_environment()))
+
+
+def _connection_lock_statement(environment: str):
+    return (
+        select(QuickBooksConnection)
+        .where(QuickBooksConnection.environment == environment)
+        .with_for_update()
     )
 
 
@@ -221,9 +237,181 @@ def _audit(
     )
 
 
+def _provider_diagnostics(exc: QuickBooksProviderError) -> dict:
+    diagnostics: dict[str, str | int] = {"reason": exc.reason}
+    if exc.status_code is not None:
+        diagnostics["provider_status"] = exc.status_code
+    if exc.intuit_tid:
+        diagnostics["intuit_tid"] = exc.intuit_tid
+    return diagnostics
+
+
+def _normalise_provider_time(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _clear_tokens_for_reconnect(connection: QuickBooksConnection) -> None:
+    connection.encrypted_access_token = None
+    connection.encrypted_refresh_token = None
+    connection.token_expires_at = None
+    connection.refresh_token_expires_at = None
+    connection.status = "reconnect_required"
+    connection.last_error = "QuickBooks authorization expired. Reconnect QuickBooks."
+
+
+def _access_token_for_company_verification(
+    db: Session,
+    credentials: QuickBooksCredentials,
+    *,
+    force_refresh: bool = False,
+) -> tuple[QuickBooksConnection, str, bool, str | None]:
+    """Return a usable token, rotating both tokens while holding the connection row lock."""
+    connection = _locked_connection(db)
+    if connection is None or connection.status not in {"connected", "refreshing"}:
+        raise QuickBooksUnavailable("Reconnect QuickBooks before verifying the company.")
+
+    expires_at = _normalise_provider_time(connection.token_expires_at)
+    if (
+        not force_refresh
+        and connection.encrypted_access_token
+        and expires_at
+        and expires_at > datetime.now(UTC) + TOKEN_REFRESH_SKEW
+    ):
+        return (
+            connection,
+            decrypt_token(
+                connection.encrypted_access_token,
+                credentials.token_encryption_key,
+            ),
+            False,
+            None,
+        )
+
+    if not connection.encrypted_refresh_token:
+        _clear_tokens_for_reconnect(connection)
+        db.commit()
+        raise QuickBooksUnavailable("Reconnect QuickBooks before verifying the company.")
+
+    try:
+        refresh_token = decrypt_token(
+            connection.encrypted_refresh_token,
+            credentials.token_encryption_key,
+        )
+        result = refresh_access_token(refresh_token, credentials)
+        if not result.refresh_token:
+            raise QuickBooksUnavailable("QuickBooks returned no refresh token.")
+    except QuickBooksProviderError as exc:
+        if exc.reconnect_required:
+            _clear_tokens_for_reconnect(connection)
+        else:
+            connection.status = "connected"
+            connection.last_error = "QuickBooks is temporarily unavailable. Try again."
+        db.commit()
+        raise
+    except QuickBooksUnavailable:
+        _clear_tokens_for_reconnect(connection)
+        db.commit()
+        raise
+
+    connection.encrypted_access_token = encrypt_token(
+        result.access_token,
+        credentials.token_encryption_key,
+    )
+    connection.encrypted_refresh_token = encrypt_token(
+        result.refresh_token,
+        credentials.token_encryption_key,
+    )
+    connection.token_expires_at = result.expires_at
+    connection.refresh_token_expires_at = result.refresh_token_expires_at
+    connection.scopes_json = result.scopes
+    connection.status = "connected"
+    connection.last_error = None
+    db.commit()
+    return connection, result.access_token, True, result.intuit_tid
+
+
 @router.get("/status", response_model=QuickBooksStatus)
 def quickbooks_status(user: CurrentUser, db: DBSession) -> QuickBooksStatus:
     _require_admin(user)
+    return _status(db)
+
+
+@router.post("/verify", response_model=QuickBooksStatus)
+def verify_quickbooks_company(
+    request: Request,
+    user: CurrentUser,
+    db: DBSession,
+) -> QuickBooksStatus:
+    _require_admin(user)
+    _require_enabled(db)
+    environment = _environment()
+    credentials = _credentials(db)
+    if credentials is None:
+        raise HTTPException(status_code=503, detail="QuickBooks OAuth is not configured.")
+
+    token_refreshed = False
+    token_intuit_tid = None
+    try:
+        connection, access_token, token_refreshed, token_intuit_tid = (
+            _access_token_for_company_verification(db, credentials)
+        )
+        try:
+            company = get_company_info(access_token, connection.realm_id, environment)
+        except QuickBooksProviderError as exc:
+            if exc.status_code != 401 or token_refreshed:
+                raise
+            connection, access_token, token_refreshed, token_intuit_tid = (
+                _access_token_for_company_verification(
+                    db,
+                    credentials,
+                    force_refresh=True,
+                )
+            )
+            company = get_company_info(access_token, connection.realm_id, environment)
+    except QuickBooksProviderError as exc:
+        connection = _connection(db)
+        if connection and exc.status_code == 401:
+            _clear_tokens_for_reconnect(connection)
+            db.commit()
+        _audit(
+            request,
+            action="quickbooks_company_verification",
+            outcome="reconnect_required" if exc.reconnect_required or exc.status_code == 401 else "failed",
+            actor=user.email,
+            metadata={"environment": environment, **_provider_diagnostics(exc)},
+        )
+        raise HTTPException(
+            status_code=409 if exc.reconnect_required or exc.status_code == 401 else 503,
+            detail=(
+                "QuickBooks authorization has expired. Reconnect QuickBooks."
+                if exc.reconnect_required or exc.status_code == 401
+                else "QuickBooks is temporarily unavailable. Try again."
+            ),
+        ) from exc
+    except QuickBooksUnavailable as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    connection.company_name = company.company_name
+    connection.legal_name = company.legal_name
+    connection.status = "connected"
+    connection.last_verified_at = datetime.now(UTC)
+    connection.last_error = None
+    db.commit()
+    _audit(
+        request,
+        action="quickbooks_company_verification",
+        outcome="verified",
+        actor=user.email,
+        metadata={
+            "environment": environment,
+            "realm_id": connection.realm_id,
+            "company_name": company.company_name,
+            "token_refreshed": token_refreshed,
+            "intuit_tid": company.intuit_tid or token_intuit_tid,
+        },
+    )
     return _status(db)
 
 
@@ -389,7 +577,7 @@ def quickbooks_oauth_callback(
             action="quickbooks_oauth_callback",
             outcome="denied",
             actor=user.email,
-            metadata={"environment": environment, "provider_error": error[:100]},
+            metadata={"environment": environment, "provider_error": provider_error_code(error)},
         )
         return quickbooks_oauth_redirect("denied")
     if not code or not realm_id:
@@ -403,7 +591,11 @@ def quickbooks_oauth_callback(
         return quickbooks_oauth_redirect("failed")
 
     connection = _connection(db)
-    if connection and connection.status == "connected" and connection.realm_id != realm_id:
+    if (
+        connection
+        and connection.status != "disconnected"
+        and connection.realm_id != realm_id
+    ):
         _audit(
             request,
             action="quickbooks_oauth_callback",
@@ -423,6 +615,18 @@ def quickbooks_oauth_callback(
         if not result.refresh_token:
             raise QuickBooksUnavailable("QuickBooks returned no refresh token.")
         company = get_company_info(result.access_token, realm_id, environment)
+    except QuickBooksProviderError as exc:
+        if connection:
+            connection.last_error = str(exc)[:500]
+            db.commit()
+        _audit(
+            request,
+            action="quickbooks_oauth_callback",
+            outcome="failed",
+            actor=user.email,
+            metadata={"environment": environment, **_provider_diagnostics(exc)},
+        )
+        return quickbooks_oauth_redirect("failed")
     except QuickBooksUnavailable as exc:
         if connection:
             connection.last_error = str(exc)[:500]
@@ -473,6 +677,7 @@ def quickbooks_oauth_callback(
             "scope": REQUIRED_SCOPE,
             "realm_id": realm_id,
             "company_name": company.company_name,
+            "intuit_tid": company.intuit_tid or result.intuit_tid,
         },
     )
     return quickbooks_oauth_redirect("connected")
