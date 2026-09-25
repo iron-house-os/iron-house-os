@@ -27,6 +27,9 @@ def test_live_control_is_manual_protected_and_exact_release_only() -> None:
     assert 'git merge-base --is-ancestor "$RELEASE_SHA" origin/main' in workflow
     assert "/etc/iron-house-os/production.env" not in workflow
     assert "secrets." not in workflow
+    assert workflow.count("issues: write") == 1
+    configure_job = workflow.split("  configure-production:", 1)[1]
+    assert "    permissions:\n      contents: read\n      issues: write" in configure_job
 
 
 def test_live_wrapper_keeps_credentials_database_managed_and_generates_key_on_host() -> None:
@@ -53,6 +56,10 @@ def test_live_wrapper_has_force_disable_rollback_and_bounded_readiness() -> None
     assert 'flock --wait 30 9' in wrapper
     assert "/opt/iron-house-os-actions-runner/_work/_temp" in wrapper
     assert "export COMPOSE_PROJECT_NAME=${production_candidates[0]}" in wrapper
+    assert 'export IHOS_RELEASE_ID="$release_sha"' in wrapper
+    assert '[[ ! -f "$environment_file" || -L "$environment_file" ]]' in wrapper
+    assert '"root:root:600"' in wrapper
+    assert '"root:root:400"' in wrapper
     assert "Exactly one production Compose project is required" in wrapper
     assert 'install -o root -g root -m 0600 "$previous_file" "$environment_file"' in wrapper
     assert 'install -o ihos-runner -g ihos-runner -m 0640 "$evidence_candidate"' in wrapper

@@ -26,7 +26,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: iron-house-os-quickbooks-live-read-only
@@ -66,6 +65,9 @@ jobs:
     name: Apply owner-approved QuickBooks control
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: validate
+    permissions:
+      contents: read
+      issues: write
     runs-on: [self-hosted, linux, ihos-production]
     environment: production
     timeout-minutes: 10
