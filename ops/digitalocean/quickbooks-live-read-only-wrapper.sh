@@ -55,13 +55,14 @@ if [[ "$(hostname)" != "iron-house-os-prod-1" ]]; then
   echo "Refusing QuickBooks production configuration on an unexpected host." >&2
   exit 1
 fi
-if [[ ! -f "$environment_file" ]]; then
+if [[ ! -f "$environment_file" || -L "$environment_file" ]]; then
   echo "Missing protected production environment: $environment_file" >&2
   exit 1
 fi
-environment_mode=$(stat -c '%a' "$environment_file")
-if [[ "$environment_mode" != "600" && "$environment_mode" != "400" ]]; then
-  echo "Production environment permissions must be 0600 or 0400." >&2
+environment_identity=$(stat -c '%U:%G:%a' "$environment_file" 2>/dev/null || true)
+if [[ "$environment_identity" != "root:root:600" &&
+      "$environment_identity" != "root:root:400" ]]; then
+  echo "Protected production environment ownership or permissions are invalid." >&2
   exit 1
 fi
 
@@ -107,6 +108,7 @@ if (("${#production_candidates[@]}" != 1)); then
   exit 1
 fi
 export COMPOSE_PROJECT_NAME=${production_candidates[0]}
+export IHOS_RELEASE_ID="$release_sha"
 
 production_port=$(ENVIRONMENT_FILE="$environment_file" python3 - <<'PY'
 import os
