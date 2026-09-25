@@ -4,6 +4,8 @@ Issue: #401. This slice prepares IHOS for a separately approved live-company
 OAuth connection. It does not enable or deploy the live connection and it does
 not add any accounting write.
 
+Token-lifecycle hardening: #405.
+
 ## Exact boundary
 
 The only QuickBooks Accounting API operation implemented by this integration is
@@ -46,6 +48,25 @@ recommended, and the published URLs must remain stable after submission to Intui
 Never place the Client Secret, authorization code, access token, refresh token,
 or callback query string in GitHub, chat, screenshots, logs, or browser storage.
 
+## Token lifecycle and provider diagnostics
+
+IHOS refreshes an access token server-side only when a CompanyInfo verification
+needs a token that is expired or within five minutes of expiry. The refresh is
+performed while holding a database row lock so concurrent verification requests
+cannot overwrite a rotated refresh token. Both returned tokens and their expiry
+times are committed together in one database transaction.
+
+If Intuit reports a terminal OAuth error such as `invalid_grant`, IHOS clears the
+unusable local tokens, changes the status to `reconnect_required`, and asks an
+administrator to reconnect. A transient provider outage preserves the encrypted
+tokens for a later retry. No scheduled accounting-data sync is implied.
+
+For support, IHOS audit events may contain only bounded metadata: environment,
+realm, result, HTTP status, an allow-listed provider error code, and Intuit's
+`intuit_tid` transaction identifier. Raw provider bodies, callback query strings,
+authorization codes, Client Secrets, access tokens, and refresh tokens are never
+written to audit metadata or application errors.
+
 ## Fail-closed settings
 
 | Setting | Staging | Live activation |
@@ -83,7 +104,10 @@ select the Intuit production host there.
    browser clears the Client Secret after submission.
 8. Authorize the exact Iron House QuickBooks Online company and verify the
    returned company name and realm. Do not proceed if the company is wrong.
-9. Confirm there are still no invoice, customer, bill, payment, payroll, tax,
+9. Select **Verify company** and confirm that CompanyInfo verification succeeds,
+   token renewal is automatic when required, and the audit event contains no
+   credential material.
+10. Confirm there are still no invoice, customer, bill, payment, payroll, tax,
    journal-entry, attachment, email, or sync actions.
 
 ## Rollback
@@ -92,6 +116,8 @@ select the Intuit production host there.
    switch.
 2. Use the administrator disconnect control to attempt Intuit revocation and
    clear local encrypted tokens.
+   If the status is `reconnect_required`, the invalid local tokens have already
+   been cleared; revoke the app connection in Intuit if required.
 3. Remove the saved production credentials from IHOS after disconnection.
 4. Revoke the app connection in Intuit if IHOS reports that revocation could not
    be confirmed.

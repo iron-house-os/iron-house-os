@@ -4,6 +4,8 @@ Issue: #391
 
 Security hardening follow-up: #393
 
+Token-lifecycle hardening: #405
+
 Parent objective: #389
 Status: sandbox-only connection foundation
 
@@ -63,6 +65,12 @@ The deployed frontend proxy, host proxy, and backend runtime suppress access log
 5. IHOS atomically validates and consumes the state once, exchanges the code server-side, encrypts both tokens, and calls read-only `CompanyInfo`.
 6. IHOS stores the sandbox realm and verified company name. A different realm is refused until the current connection is explicitly disconnected.
 7. Disconnect requires a separate confirmation, attempts Intuit token revocation, and clears the local encrypted tokens even if Intuit is temporarily unavailable.
+8. **Verify company** repeats only the CompanyInfo read. Before that call, IHOS
+   reuses an unexpired access token or atomically rotates the access and refresh
+   tokens when the access token is near expiry. Terminal refresh failure changes
+   the connection to `reconnect_required`; transient failure preserves tokens for
+   retry. Audit diagnostics are limited to sanitized status/error codes and
+   `intuit_tid`, never provider bodies or credentials.
 
 ## Verification
 

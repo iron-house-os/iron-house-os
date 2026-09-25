@@ -1,4 +1,4 @@
-import { Link2, Link2Off, ShieldCheck } from "lucide-react";
+import { Link2, Link2Off, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { QuickBooksStatus, quickBooksApi } from "../api/quickBooks";
@@ -46,6 +46,24 @@ export function QuickBooksConnectionCard() {
       setNotice("QuickBooks disconnected. Local tokens were cleared.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to disconnect QuickBooks.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verify() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setConnection(await quickBooksApi.verify());
+      setNotice("QuickBooks company identity verified. Access credentials were renewed automatically if required.");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Unable to verify the QuickBooks company.";
+      setError(message);
+      if (message.toLowerCase().includes("reconnect")) {
+        setConnection(await quickBooksApi.status().catch(() => connection));
+      }
     } finally {
       setBusy(false);
     }
@@ -100,7 +118,7 @@ export function QuickBooksConnectionCard() {
       <div>
         <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /><h2 className="font-semibold text-iron-950">QuickBooks Online connection</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${isLive ? "bg-red-100 text-red-900" : "bg-amber-100 text-amber-900"}`}>{isLive ? "Live · IHOS read-only" : "Sandbox only"}</span></div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-iron-500">{isLive ? "Administrator-controlled live OAuth connection. IHOS only calls CompanyInfo to verify the selected company; no accounting write controls are implemented. Intuit's accounting permission is broader, so owner approval remains required." : "Administrator-controlled OAuth connection. This stage verifies the selected sandbox company only; it cannot create or change accounting records."}</p>
-        {connection?.connected ? <div className="mt-3 text-sm"><div className="font-semibold text-emerald-700">Connected: {connection.company_name}</div><div className="mt-1 text-iron-500">Realm {connection.realm_id} · IHOS company verification only</div></div> : <div className="mt-3 text-sm font-semibold text-iron-700">{isLive && connection && !connection.live_read_only_approved ? "Live connection is awaiting owner-approved production activation." : connection?.configured ? (connection.enabled ? `Ready to connect a ${environmentName}.` : `QuickBooks ${shortName} connection is administratively disabled.`) : "Server credentials are not configured yet."}</div>}
+        {connection?.connected ? <div className="mt-3 text-sm"><div className="font-semibold text-emerald-700">Connected: {connection.company_name}</div><div className="mt-1 text-iron-500">Realm {connection.realm_id} · IHOS company verification only</div></div> : <div className="mt-3 text-sm font-semibold text-iron-700">{connection?.status === "reconnect_required" ? "QuickBooks authorization must be renewed." : isLive && connection && !connection.live_read_only_approved ? "Live connection is awaiting owner-approved production activation." : connection?.configured ? (connection.enabled ? `Ready to connect a ${environmentName}.` : `QuickBooks ${shortName} connection is administratively disabled.`) : "Server credentials are not configured yet."}</div>}
       </div>
       {!connection?.connected ? <button type="button" onClick={() => void connect()} disabled={busy || !connection?.enabled || !connection.configured} className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50"><Link2 className="h-4 w-4" />{busy ? "Opening Intuit…" : `Connect ${environmentName}`}</button> : null}
     </div>
@@ -114,7 +132,8 @@ export function QuickBooksConnectionCard() {
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={environmentConfirmed} onChange={(event) => setEnvironmentConfirmed(event.target.checked)} className="mt-1" /><span>{isLive ? "I confirm these are Intuit production credentials and authorize IHOS only for live company identity verification." : "I confirm these are Intuit development credentials for the sandbox company, not live QuickBooks credentials."}</span></label>
       <button type="submit" disabled={busy || !environmentConfirmed || !clientId.trim() || !clientSecret.trim()} className="w-fit rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{busy ? "Saving securely…" : `Save ${shortName} credentials`}</button>
     </form> : null}
-    {connection?.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={disconnectConfirmed} onChange={(event) => setDisconnectConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to disconnect the QuickBooks {environmentName} and clear the stored IHOS tokens.</span></label><button type="button" onClick={() => void disconnect()} disabled={!disconnectConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Disconnecting…" : `Disconnect ${shortName}`}</button></div> : null}
+    {connection?.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><button type="button" onClick={() => void verify()} disabled={busy} className="inline-flex items-center gap-2 rounded-md border border-iron-100 px-4 py-2 text-sm font-semibold text-iron-800 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />{busy ? "Verifying…" : "Verify company"}</button><p className="mt-2 text-xs text-iron-500">Read-only CompanyInfo check. IHOS renews the access token only when required.</p><label className="mt-4 flex items-start gap-2 text-sm"><input type="checkbox" checked={disconnectConfirmed} onChange={(event) => setDisconnectConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to disconnect the QuickBooks {environmentName} and clear the stored IHOS tokens.</span></label><button type="button" onClick={() => void disconnect()} disabled={!disconnectConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Disconnecting…" : `Disconnect ${shortName}`}</button></div> : null}
+    {connection?.status === "reconnect_required" ? <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">QuickBooks authorization has expired. Use Connect {environmentName} to authorize IHOS again.</div> : null}
     {connection?.database_configured && !connection.connected ? <div className="mt-4 border-t border-iron-100 pt-4"><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} className="mt-1" /><span>I confirm that I want to remove the saved QuickBooks {shortName} credentials from IHOS.</span></label><button type="button" onClick={() => void removeConfiguration()} disabled={!removeConfirmed || busy} className="mt-3 inline-flex items-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"><Link2Off className="h-4 w-4" />{busy ? "Removing…" : `Remove ${shortName} credentials`}</button></div> : null}
   </section>;
 }
