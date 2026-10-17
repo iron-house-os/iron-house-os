@@ -1,5 +1,5 @@
 import { ClipboardList, Database, FileStack, FolderKanban, RefreshCw, ShoppingCart } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Project, projectsApi } from "../api/projects";
@@ -23,24 +23,40 @@ export function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshVersion = useRef(0);
+
   async function refresh() {
+    const version = ++refreshVersion.current;
     setIsLoading(true);
     setError(null);
-    try {
-      const [projectList, supplierList, rfqList] = await Promise.all([
-        projectsApi.list(),
-        suppliersApi.list({}),
-        rfqPackagesApi.list(),
-      ]);
-      setState({ projects: projectList.items, suppliers: supplierList.items, rfqs: rfqList.items });
-    } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "Unable to load dashboard");
-    } finally {
-      setIsLoading(false);
+    const errors: string[] = [];
+    async function loadSection<K extends keyof DashboardState>(
+      key: K, label: string, request: () => Promise<{ items: DashboardState[K] }>,
+    ) {
+      try {
+        const result = await request();
+        if (refreshVersion.current === version) {
+          setState((previous) => ({ ...previous, [key]: result.items }));
+        }
+      } catch {
+        if (refreshVersion.current === version) {
+          errors.push(label);
+          setError(`Unable to refresh ${errors.join(", ")}. Other sections remain available; retry Refresh.`);
+        }
+      }
     }
+    await Promise.all([
+      loadSection("projects", "projects", () => projectsApi.list()),
+      loadSection("suppliers", "suppliers", () => suppliersApi.list({})),
+      loadSection("rfqs", "RFQs", () => rfqPackagesApi.list()),
+    ]);
+    if (refreshVersion.current === version) setIsLoading(false);
   }
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshVersion.current += 1; };
+  }, []);
 
   const activeProjects = state.projects.filter((project) => !["completed", "archived"].includes(project.status));
   const tenderingProjects = state.projects.filter((project) => project.status === "tendering");
@@ -63,14 +79,14 @@ export function DashboardPage() {
             <Link to="/request-po" className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-gold px-4 py-2 text-sm font-semibold text-brand-black transition hover:brightness-105">
               <ShoppingCart className="h-4 w-4" /> Request PO
             </Link>
-            <button type="button" onClick={() => void refresh()} className="inline-flex items-center justify-center gap-2 rounded-md border border-brand-gold/40 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-black">
+            <button type="button" onClick={() => void refresh()} disabled={isLoading} className="inline-flex items-center justify-center gap-2 rounded-md border border-brand-gold/40 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-gold hover:text-brand-black">
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} /> Refresh
             </button>
           </div>
         </div>
       </div>
 
-      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+      {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardCard icon={FolderKanban} label="Active Projects" value={activeProjects.length} href="/projects" />
