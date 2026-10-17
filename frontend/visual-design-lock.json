@@ -11,7 +11,7 @@
     "frontend/public/icon-512.png": "410c16b7f12ce56ff98c4bce34dbe234c53bde79726c1498abceac68ac06fc82",
     "frontend/public/os-logo-256.png": "ee3d1cc318206fcce1e038fc97631f1bf09f56d7162c47ea8bbb7917cf8a74e3",
     "frontend/public/site.webmanifest": "1de7d6a57ba4976412f4f3923862c9d7e8037a10b0d3bba9a636395ef06bdce3",
-    "frontend/src/pages/DashboardPage.tsx": "1c8ea0e53bb5df0e433b94f5597a8399ce64e7366a5a3965f58d8c41d9938356",
+    "frontend/src/pages/DashboardPage.tsx": "6c8810bb6e7e2a8c2f32fa71f73b07d7038069dfcc09d761f02843d5a2c75c4c",
     "frontend/src/pages/LoginPage.tsx": "8cc96693579ea7e18e3fa34b456f259ad47b8479230df8c04bf7de50e3b510fe",
     "frontend/src/styles.css": "d0ed7ee59b1690db07d4d70193cfbf1f3f80d6a5084edfedad786817de4ce58d",
     "frontend/tailwind.config.ts": "3c9eae349df550797ad4590c8cfc905e031639f3eadf883844d4386d037be7e2",
