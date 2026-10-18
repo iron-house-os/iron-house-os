@@ -14,7 +14,7 @@ from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_production_settings
 from app.db.session import SessionLocal
 from app.models.user import UserAccount
 from app.services.chat_projects import (
@@ -93,6 +93,7 @@ class IntrospectionVerifier:
 def create_connector(settings: ConnectorSettings) -> FastMCP:
     if not settings.enabled:
         raise RuntimeError("IHOS chat connector is disabled")
+    validate_production_settings(get_settings())
     origin = urlsplit(str(settings.resource_url))
     server = FastMCP("Iron House OS", host="127.0.0.1", port=settings.port,
         stateless_http=True, json_response=True, max_request_body_size=65536,
