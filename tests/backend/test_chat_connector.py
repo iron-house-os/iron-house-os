@@ -165,6 +165,26 @@ def test_source_content_changes_do_not_overwrite_existing_projects(database):
     assert preview_intake(db, manager, changed)["action"] == "conflict"
 
 
+def test_exact_reviewed_link_preserves_existing_job_controls(database):
+    db, manager = database
+    project = Project(name="Example tender", status="construction", project_number="IH2026012",
+                      metadata_json={"existing_control": "preserve"})
+    db.add(project)
+    db.commit()
+    preview = preview_intake(db, manager, intake(existing_project_id=project.id))
+    assert preview["action"] == "link"
+    result = apply_intake(db, manager, preview["preview_token"])
+    assert result["operation"] == "linked" and result["id"] == str(project.id)
+    assert result["status"] == "construction" and result["project_number"] == "IH2026012"
+    assert project.metadata_json["existing_control"] == "preserve"
+    assert db.scalar(select(func.count(Project.id))) == 1
+
+
+def test_nonmatching_existing_id_is_rejected(database):
+    db, manager = database
+    assert preview_intake(db, manager, intake(existing_project_id=uuid4()))["action"] == "conflict"
+
+
 def test_intake_cannot_inject_award_finance_or_safety_controls():
     for extra in ({"status": "awarded"}, {"project_number": "IH2026001"},
                   {"metadata": {"safety_launch": {"ready": True}}}, {"contract_value": 100}):
