@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 import json
-from uuid import uuid5, NAMESPACE_URL
+from uuid import UUID, uuid5, NAMESPACE_URL
 
 from jose import JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -25,6 +25,7 @@ class TenderIntake(BaseModel):
     client_owner: str | None = Field(default=None, max_length=255)
     project_address: str | None = Field(default=None, max_length=500)
     aliases: list[str] = Field(default_factory=list, max_length=10)
+    existing_project_id: UUID | None = None
 
     @field_validator("name")
     @classmethod
@@ -71,15 +72,21 @@ def plan_intake(db: Session, item: TenderIntake) -> dict:
         return {"action": "conflict", "matches": [summary(project) for project in matches]}
     if matches:
         project = matches[0]
+        if item.existing_project_id is not None and project.id != item.existing_project_id:
+            return {"action": "conflict", "reason": "Selected ID does not match the source candidates"}
         previous_key = (project.metadata_json or {}).get("source_import_key")
         # Name/number matches are candidates, never silently treated as proof of identity.
         if previous_key != key:
+            if previous_key is None and item.existing_project_id == project.id:
+                return {"action": "link", "project": summary(project)}
             return {"action": "conflict", "matches": [summary(project)],
                     "reason": "Existing project requires exact source-folder reconciliation in IHOS"}
         evidence = (project.metadata_json or {}).get("chat_tender_intake", {})
         if evidence.get("payload") != item.model_dump(mode="json"):
             return {"action": "conflict", "matches": [summary(project)], "reason": "Source content changed"}
         return {"action": "reuse", "project": summary(project)}
+    if item.existing_project_id is not None:
+        return {"action": "conflict", "reason": "Selected existing project is not a matching active candidate"}
     return {"action": "create", "name": item.name, "status": "opportunity", "project_number": None}
 
 
@@ -117,19 +124,24 @@ def apply_intake(db: Session, account: UserAccount, preview_token: str) -> dict:
     current = plan_intake(db, item)
     if current["action"] == "reuse":
         return {"operation": "verified_existing", **current["project"]}
-    if current != claims["plan"] or current["action"] != "create":
+    if current != claims["plan"] or current["action"] not in {"create", "link"}:
         raise ValueError("Project inventory changed; review a fresh preview")
     payload = item.model_dump(mode="json")
     digest = sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-    project = Project(id=uuid5(NAMESPACE_URL, source_key(item)), name=item.name,
+    metadata = {"source_import_key": source_key(item),
+                "source_folder": f"https://drive.google.com/drive/folders/{item.source_folder_id}",
+                "chat_tender_intake": {"payload": payload, "digest": digest,
+                                       "actor_id": str(account.id),
+                                       "created_at": datetime.now(UTC).isoformat()}}
+    if current["action"] == "link":
+        project = db.get(Project, item.existing_project_id)
+        project.metadata_json = {**(project.metadata_json or {}), **metadata}
+    else:
+        project = Project(id=uuid5(NAMESPACE_URL, source_key(item)), name=item.name,
                       client_owner=item.client_owner, municipality_name=item.municipality,
                       project_address=item.project_address, tender_number=item.tender_number,
                       status="opportunity", project_number=None,
-                      metadata_json={"source_import_key": source_key(item),
-                                     "source_folder": f"https://drive.google.com/drive/folders/{item.source_folder_id}",
-                                     "chat_tender_intake": {"payload": payload, "digest": digest,
-                                                            "actor_id": str(account.id),
-                                                            "created_at": datetime.now(UTC).isoformat()}})
+                      metadata_json=metadata)
     db.add(project)
     db.flush()
     # Fail the transaction if the audit store rejects the event.
@@ -137,7 +149,7 @@ def apply_intake(db: Session, account: UserAccount, preview_token: str) -> dict:
                                                actor=account.email, metadata={"source_key": source_key(item)}))
     db.commit()
     db.refresh(project)
-    return {"operation": "created", **summary(project)}
+    return {"operation": "linked" if current["action"] == "link" else "created", **summary(project)}
 
 
 def project_inventory(db: Session, account: UserAccount, offset: int = 0, limit: int = 50) -> dict:
