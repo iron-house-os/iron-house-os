@@ -281,7 +281,7 @@ def get_bootstrap(db: Session, user: AuthenticatedUser) -> FieldOperationsBootst
         vehicles=[vehicle_schema(item) for item in vehicles],
         vehicle_logs=[VehicleLogRead.model_validate(item) for item in vehicle_logs],
         time_entries=[TimeEntryRead.model_validate(item) for item in time_entries],
-        records=[FieldRecordRead.model_validate(item) for item in records],
+        records=_field_record_reads(db, records, user),
         certifications=[certification_schema(item) for item in certifications],
         alerts=alerts,
         toolbox_talk=current_toolbox_talk(),
@@ -849,7 +849,7 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
         existing = _find_completed_work_record(db, payload)
         if existing is not None:
             _verify_completed_work_record(existing, payload)
-            return FieldRecordRead.model_validate(existing)
+            return _field_record_read(db, existing, user)
     if user.role == "viewer":
         if profile is None:
             raise AppError("Your employee profile is not linked to this account.", status_code=400)
@@ -1004,11 +1004,11 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
             if concurrent is None:
                 raise AppError("Unable to save the completed-work record.", status_code=409) from exc
             _verify_completed_work_record(concurrent, payload)
-            return FieldRecordRead.model_validate(concurrent)
+            return _field_record_read(db, concurrent, user)
     else:
         commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def list_completed_work(
@@ -1033,7 +1033,7 @@ def list_completed_work(
         for item in records
         if str((item.details or {}).get("source_import_key") or "") == source_import_key
     ]
-    return [FieldRecordRead.model_validate(item) for item in matches]
+    return _field_record_reads(db, matches, user)
 
 
 def _find_completed_work_record(db: Session, payload: FieldRecordCreate) -> FieldRecord | None:
@@ -1079,6 +1079,104 @@ def _verify_completed_work_record(item: FieldRecord, payload: FieldRecordCreate)
         )
 
 
+def _po_number(item: FieldRecord) -> str:
+    return str((item.details or {}).get("po_number") or item.title)
+
+
+def _invoice_key(invoice: dict) -> tuple[str, str]:
+    return (
+        str(invoice.get("vendor_name") or "").strip().casefold(),
+        str(invoice.get("invoice_number") or "").strip().casefold(),
+    )
+
+
+def _redact_duplicate_numbers(value: object, visible_numbers: set[str]) -> object:
+    # Legacy audit snapshots may also contain duplicate warnings. Never mutate
+    # persisted JSON while preparing a reader-specific response.
+    if isinstance(value, dict):
+        return {
+            key: (
+                [number for number in entry if isinstance(number, str) and number in visible_numbers]
+                if isinstance(entry, list) else []
+            )
+            if key == "duplicate_po_numbers"
+            else _redact_duplicate_numbers(entry, visible_numbers)
+            for key, entry in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_duplicate_numbers(entry, visible_numbers) for entry in value]
+    return value
+
+
+def _field_record_reads(
+    db: Session, items: list[FieldRecord], user: AuthenticatedUser
+) -> list[FieldRecordRead]:
+    result = [FieldRecordRead.model_validate(item) for item in items]
+    purchase_orders = [item for item in result if item.record_type == "purchase_order_request"]
+    if not purchase_orders:
+        return result
+
+    # Load once per response, including bootstrap. Persisted warnings are only
+    # upload-time evidence, not an authorization decision or the current index.
+    candidates = list(db.scalars(select(FieldRecord).where(
+        FieldRecord.record_type == "purchase_order_request"
+    ).order_by(FieldRecord.created_at, FieldRecord.id)))
+    if user.role == "viewer":
+        profile = _flha_profile(db, user)
+        projects = {item.id: item for item in db.scalars(select(Project))}
+        candidates = [
+            candidate for candidate in candidates
+            if profile is not None
+            and (
+                candidate.project_id is None
+                or (
+                    candidate.project_id in projects
+                    and project_safety_launch.portal_access_allowed(
+                        projects[candidate.project_id], profile.id
+                    )
+                )
+            )
+            and (
+                profile.portal_role not in {"employee", "operator"}
+                or candidate.employee_id == profile.id
+            )
+        ]
+
+    visible_numbers = {_po_number(candidate) for candidate in candidates}
+    by_invoice: dict[tuple[str, str], list[FieldRecord]] = {}
+    for candidate in candidates:
+        invoice = (candidate.details or {}).get("invoice")
+        if isinstance(invoice, dict):
+            key = _invoice_key(invoice)
+            if all(key):
+                by_invoice.setdefault(key, []).append(candidate)
+
+    for item in purchase_orders:
+        details = dict(item.details or {})
+        if user.role == "viewer":
+            details = _redact_duplicate_numbers(details, visible_numbers)
+        invoice = details.get("invoice")
+        if isinstance(invoice, dict):
+            # Recompute for this reader, so legacy incomplete upload-time lists,
+            # subsequent matching uploads and changed access cannot stale/leak.
+            details["invoice"] = {
+                **invoice,
+                "duplicate_po_numbers": [
+                    _po_number(candidate)
+                    for candidate in by_invoice.get(_invoice_key(invoice), [])
+                    if candidate.id != item.id
+                ],
+            }
+        item.details = details
+    return result
+
+
+def _field_record_read(
+    db: Session, item: FieldRecord, user: AuthenticatedUser
+) -> FieldRecordRead:
+    return _field_record_reads(db, [item], user)[0]
+
+
 def attach_purchase_order_invoice(
     db: Session,
     record_id: UUID,
@@ -1107,11 +1205,6 @@ def attach_purchase_order_invoice(
     normalized_number = payload.invoice_number.strip().casefold()
     duplicate_po_numbers = []
     for candidate in db.scalars(select(FieldRecord).where(FieldRecord.record_type == "purchase_order_request")):
-        # Do not disclose another project's PO number through duplicate warnings.
-        if profile is not None and candidate.project_id is not None:
-            candidate_project = db.get(Project, candidate.project_id)
-            if candidate_project is None or not project_safety_launch.portal_access_allowed(candidate_project, profile.id):
-                continue
         invoice = (candidate.details or {}).get("invoice") or {}
         if candidate.id != item.id and str(invoice.get("vendor_name") or "").strip().casefold() == normalized_vendor and str(invoice.get("invoice_number") or "").strip().casefold() == normalized_number:
             duplicate_po_numbers.append(str((candidate.details or {}).get("po_number") or candidate.title))
@@ -1133,7 +1226,7 @@ def attach_purchase_order_invoice(
     item.document_ids = document_ids
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def decide_purchase_order_invoice(
@@ -1157,7 +1250,7 @@ def decide_purchase_order_invoice(
     item.details = next_details
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def update_safety_record_status(
@@ -1210,7 +1303,7 @@ def update_safety_record_status(
         )
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def prepare_flha_values(
@@ -1355,7 +1448,7 @@ def update_flha(db: Session, record_id: UUID, payload: FLHAUpdate, user: Authent
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user: AuthenticatedUser) -> FieldRecordRead:
@@ -1397,7 +1490,7 @@ def reassess_flha(db: Session, record_id: UUID, payload: FLHAReassessment, user:
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def release_flha(db: Session, record_id: UUID, payload: FLHARelease, user: AuthenticatedUser) -> FieldRecordRead:
@@ -1429,7 +1522,7 @@ def release_flha(db: Session, record_id: UUID, payload: FLHARelease, user: Authe
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def get_flha_for_user(db: Session, record_id: UUID, user: AuthenticatedUser) -> FieldRecord:
@@ -1468,7 +1561,7 @@ def decide_time_off(
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def decide_milestone(
@@ -1500,7 +1593,7 @@ def decide_milestone(
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def sign_field_record(
@@ -1564,7 +1657,7 @@ def sign_field_record(
     db.add(item)
     commit(db)
     db.refresh(item)
-    return FieldRecordRead.model_validate(item)
+    return _field_record_read(db, item, user)
 
 
 def build_alerts(
