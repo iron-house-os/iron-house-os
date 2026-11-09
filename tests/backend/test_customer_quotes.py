@@ -582,3 +582,68 @@ def test_quote_revision_rejects_stale_or_nonclosed_source() -> None:
     ).json()
     assert closed["record_revision"] == 2
     assert client.post(url, json={**_payload(), "expected_revision": 1}).status_code == 409
+
+
+def test_replacement_notes_reject_overflow_without_truncating_or_creating_a_quote() -> None:
+    original = _create_quote()
+    closed = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": 1, "status": "declined"},
+    ).json()
+    before = client.get("/api/v1/customer-quotes").json()
+    response = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/revisions",
+        json={**_payload(), "expected_revision": closed["record_revision"], "notes": "N" * 10_000},
+    )
+    assert response.status_code == 422, response.text
+    assert "No notes have been saved or truncated" in response.json()["error"]["message"]
+    assert client.get("/api/v1/customer-quotes").json() == before
+    assert client.get(f"/api/v1/customer-quotes/{original['id']}").json() == closed
+
+
+def test_replacement_notes_at_combined_limit_preserve_the_final_customer_term() -> None:
+    original = _create_quote()
+    closed = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": 1, "status": "expired"},
+    ).json()
+    predecessor = (
+        f"Revision of {original['quote_number']} "
+        f"(record {original['id']}, revision {closed['record_revision']}).\n"
+    )
+    notes = "N" * (10_000 - len(predecessor) - len("FINAL TERM")) + "FINAL TERM"
+    response = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/revisions",
+        json={**_payload(), "expected_revision": closed["record_revision"], "notes": notes},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["notes"] == predecessor + notes
+    assert len(response.json()["notes"]) == 10_000
+    assert response.json()["notes"].endswith("FINAL TERM")
+
+
+@pytest.mark.parametrize("project_status", ["opportunity", "tendering", "awarded", "construction", "completed"])
+def test_replacement_rejects_changed_project_name_without_side_effects(project_status: str) -> None:
+    original = _create_quote()
+    closed = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": 1, "status": "declined"},
+    ).json()
+    with TestingSessionLocal() as db:
+        from app.models.project import Project
+        project = db.get(Project, UUID(original["project_id"]))
+        project.status = project_status
+        db.commit()
+    project_before = client.get(f"/api/v1/projects/{original['project_id']}").json()
+    quotes_before = client.get("/api/v1/customer-quotes").json()
+    response = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/revisions",
+        json={
+            **_payload(), "expected_revision": closed["record_revision"],
+            "project_name": "A different project name",
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "Keep the current project name" in response.json()["error"]["message"]
+    assert client.get("/api/v1/customer-quotes").json() == quotes_before
+    assert client.get(f"/api/v1/projects/{original['project_id']}").json() == project_before

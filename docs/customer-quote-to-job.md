@@ -30,3 +30,9 @@ Customer Quotes closes the gap between verbal customer information and the award
 - The replacement must pass review and approval again before issuance. The revision action does not issue or accept the replacement.
 - Editing any unaccepted quote cannot synchronize project identity or contract value after award (including construction, completion, archival, or a retained job number/award baseline). An explicit authorized acceptance or amendment remains necessary.
 - No database migration is required. Rollback is a code revert; preserve both original and replacement quote records.
+
+### Replacement intake validation
+
+Replacement drafts stay linked to the existing project and display its current name. The project-name field is read-only during replacement intake, and the API rejects a different name instead of silently dropping it. Rename through the Project Workspace first if appropriate; quote revision does not rename an awarded job.
+
+The predecessor reference counts toward the 10,000-character notes limit. Over-limit combined notes are rejected with an explicit maximum and no quote created, rather than truncating any customer terms. Shorten the notes deliberately before resubmitting.
