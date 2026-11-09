@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WorkflowType, workflowDraftsApi } from "../api/workflowDrafts";
 
-export type DraftSaveStatus = "idle" | "loading" | "saving" | "saved" | "recovery" | "conflict" | "offline";
+export type DraftSaveStatus = "idle" | "fresh" | "loading" | "saving" | "saved" | "recovery" | "conflict" | "offline";
 
 type RecoveryEnvelope<T> = {
   payload: T;
@@ -70,12 +70,22 @@ export function useWorkflowDraft<T extends Record<string, unknown>>({
         setStatus("loading");
         try {
           const draft = await workflowDraftsApi.get(requestedDraftId);
-          if (!active || draft.workflow_type !== workflowType || draft.status !== "active") return;
-          draftIdRef.current = draft.id;
-          revisionRef.current = draft.revision;
-          onRestoreRef.current(draft.payload as T);
-          setLastSavedAt(draft.last_saved_at);
-          setStatus("saved");
+          if (!active) return;
+          if (draft.workflow_type !== workflowType || draft.status !== "active") {
+            // A stale link must not strand new input without autosave or restore
+            // another workflow's payload. Start a fresh draft after initialization.
+            draftIdRef.current = null;
+            revisionRef.current = 0;
+            replaceDraftId(null);
+            setLastSavedAt(null);
+            setStatus("fresh");
+          } else {
+            draftIdRef.current = draft.id;
+            revisionRef.current = draft.revision;
+            onRestoreRef.current(draft.payload as T);
+            setLastSavedAt(draft.last_saved_at);
+            setStatus("saved");
+          }
         } catch {
           if (!active) return;
           replaceDraftId(null);

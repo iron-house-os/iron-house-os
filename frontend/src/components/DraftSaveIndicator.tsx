@@ -2,6 +2,7 @@ import { DraftSaveStatus } from "../hooks/useWorkflowDraft";
 
 const labels: Record<DraftSaveStatus, string> = {
   idle: "Draft starts saving after you enter information",
+  fresh: "This draft link cannot be resumed. New work will save as a new draft.",
   loading: "Loading saved draft…",
   saving: "Saving draft…",
   saved: "Draft saved",
