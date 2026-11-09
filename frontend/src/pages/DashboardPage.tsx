@@ -18,6 +18,9 @@ const emptyState: DashboardState = {
   rfqs: [],
 };
 
+// A stalled section must not prevent the user from retrying the dashboard.
+const SECTION_TIMEOUT_MS = 15_000;
+
 export function DashboardPage() {
   const [state, setState] = useState<DashboardState>(emptyState);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,8 +36,14 @@ export function DashboardPage() {
     async function loadSection<K extends keyof DashboardState>(
       key: K, label: string, request: () => Promise<{ items: DashboardState[K] }>,
     ) {
+      let timeout: number | undefined;
       try {
-        const result = await request();
+        const result = await Promise.race([
+          request(),
+          new Promise<never>((_, reject) => {
+            timeout = window.setTimeout(() => reject(new Error("Dashboard request timed out")), SECTION_TIMEOUT_MS);
+          }),
+        ]);
         if (refreshVersion.current === version) {
           setState((previous) => ({ ...previous, [key]: result.items }));
         }
@@ -43,6 +52,8 @@ export function DashboardPage() {
           errors.push(label);
           setError(`Unable to refresh ${errors.join(", ")}. Other sections remain available; retry Refresh.`);
         }
+      } finally {
+        if (timeout !== undefined) window.clearTimeout(timeout);
       }
     }
     await Promise.all([

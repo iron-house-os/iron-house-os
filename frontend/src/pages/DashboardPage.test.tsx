@@ -26,7 +26,10 @@ beforeEach(() => {
   vi.mocked(rfqPackagesApi.list).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(suppliersApi.list).mockResolvedValue({ items: [], total: 0 });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("dashboard loading", () => {
   it("shows projects while suppliers are still loading and prevents overlapping refresh", async () => {
@@ -45,6 +48,41 @@ describe("dashboard loading", () => {
     expect(await screen.findByText("Real project")).toBeTruthy();
     expect((await screen.findByRole("alert")).textContent).toContain("suppliers");
     await waitFor(() => expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("unlocks Refresh after a stalled section and ignores its late response", async () => {
+    vi.useFakeTimers();
+    const stalledProjects = deferred<Awaited<ReturnType<typeof projectsApi.list>>>();
+    vi.mocked(projectsApi.list).mockReturnValueOnce(stalledProjects.promise).mockResolvedValue(projectList("Retried project"));
+    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+    await act(async () => { await Promise.resolve(); });
+    const refresh = screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement;
+    expect(refresh.disabled).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(screen.getByRole("alert").textContent).toContain("projects");
+    expect(refresh.disabled).toBe(false);
+    await act(async () => { refresh.click(); });
+    expect(screen.getByText("Retried project")).toBeTruthy();
+    expect(refresh.disabled).toBe(false);
+
+    await act(async () => { stalledProjects.resolve(projectList("Late project")); });
+    expect(screen.queryByText("Late project")).toBeNull();
+    expect(screen.getByText("Retried project")).toBeTruthy();
+  });
+
+  it("unlocks retry when a failed section and a never-resolving section occur together", async () => {
+    vi.useFakeTimers();
+    vi.mocked(suppliersApi.list).mockReturnValue(new Promise(() => {}));
+    vi.mocked(rfqPackagesApi.list).mockRejectedValue(new Error("unavailable"));
+    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText("Real project")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("RFQs");
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(screen.getByRole("alert").textContent).toContain("suppliers");
+    expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("Real project")).toBeTruthy();
   });
 
   it("ignores an older response after StrictMode restarts the effect", async () => {
