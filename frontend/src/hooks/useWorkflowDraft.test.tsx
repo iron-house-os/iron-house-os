@@ -59,6 +59,50 @@ describe("useWorkflowDraft", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    ["completed", "purchase_order_request"],
+    ["cancelled", "purchase_order_request"],
+    ["active", "estimate"],
+  ])("starts a fresh autosaved draft for a %s %s link", async (status, workflowType) => {
+    window.history.replaceState({}, "", "/?projectId=project-1&draftId=old-draft#details");
+    vi.mocked(fetch).mockImplementationOnce(async () => jsonResponse({
+      id: "old-draft", workflow_type: workflowType, status, revision: 8,
+      payload: { value: "Do not restore old work" }, last_saved_at: "2026-08-21T06:25:00Z",
+    }));
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(await screen.findByText(/This draft link cannot be resumed/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Purpose")).toHaveValue("");
+    expect(window.location.search).toBe("?projectId=project-1");
+    expect(window.location.hash).toBe("#details");
+
+    await user.type(screen.getByLabelText("Purpose"), "New pipe work");
+    expect(window.localStorage.getItem("ihos:draft-recovery:purchase_order_request")).toContain("New pipe work");
+    expect(await screen.findByText(/Draft saved/)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, request] = vi.mocked(fetch).mock.calls[1];
+    expect(request?.method).toBe("POST");
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      workflow_type: "purchase_order_request", payload: { value: "New pipe work" },
+    });
+    expect(window.location.search).toContain("draftId=draft-1");
+  });
+
+  it("still restores and updates an active matching draft", async () => {
+    window.history.replaceState({}, "", "/?draftId=active-draft");
+    vi.mocked(fetch).mockImplementationOnce(async () => jsonResponse({
+      id: "active-draft", workflow_type: "purchase_order_request", status: "active", revision: 8,
+      payload: { value: "Saved pipe work" }, last_saved_at: "2026-08-21T06:25:00Z",
+    }));
+    render(<Harness />);
+    expect(await screen.findByDisplayValue("Saved pipe work")).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const [url, request] = vi.mocked(fetch).mock.calls[1];
+    expect(String(url)).toContain("/workflow-drafts/active-draft");
+    expect(request?.method).toBe("PATCH");
+    expect(JSON.parse(String(request?.body)).expected_revision).toBe(8);
+  });
+
   it("keeps an immediate local recovery copy and then saves the draft to IHOS", async () => {
     const user = userEvent.setup();
     render(<Harness />);
