@@ -116,7 +116,7 @@ describe("EmployeeOnboardingPortalPage", () => {
     await user.type(screen.getByRole("textbox", { name: /Electronic signature/i }), "Alex Operator");
     expect(screen.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
     expect(employeeOnboardingApi.submitPortal).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Home address Unsaved changes" }));
+    await user.click(screen.getByRole("button", { name: "Home address: Unsaved changes" }));
     expect(screen.getByRole("textbox", { name: "Street address" })).toHaveValue("200 New Street");
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
     await screen.findByRole("heading", { name: "Emergency contact" });
@@ -138,7 +138,7 @@ describe("EmployeeOnboardingPortalPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
     await user.click(screen.getByRole("button", { name: /Review and submit/ }));
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Home address Unsaved changes" }));
+    await user.click(screen.getByRole("button", { name: "Home address: Unsaved changes" }));
     await user.click(screen.getByRole("button", { name: "Discard unsaved changes" }));
     expect(screen.getByRole("textbox", { name: "Street address" })).toHaveValue("100 Main Street");
     await user.click(screen.getByRole("button", { name: /Review and submit/ }));
@@ -160,7 +160,7 @@ describe("EmployeeOnboardingPortalPage", () => {
     await user.click(screen.getByRole("button", { name: "Save and continue" }));
     await screen.findByRole("heading", { name: "Home address" });
     await user.click(screen.getByRole("button", { name: /Review and submit/ }));
-    expect(screen.getByRole("button", { name: "Home address Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Home address: Unsaved changes" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
   });
 

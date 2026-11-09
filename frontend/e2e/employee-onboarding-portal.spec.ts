@@ -75,13 +75,13 @@ test("edited saved onboarding forms remain unsaved until explicitly saved or dis
   await page.getByRole("button", { name: /Home address/ }).click();
   await page.getByRole("textbox", { name: "Street address" }).fill("200 New Street");
   await page.getByRole("button", { name: /Review and submit/ }).click();
-  await expect(page.getByRole("button", { name: "Home address Unsaved changes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home address: Unsaved changes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
   await testInfo.attach("onboarding-unsaved-review", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
-  await page.getByRole("button", { name: "Home address Unsaved changes" }).click();
+  await page.getByRole("button", { name: "Home address: Unsaved changes" }).click();
   await expect(page.getByRole("textbox", { name: "Street address" })).toHaveValue("200 New Street");
   await page.getByRole("button", { name: "Discard unsaved changes" }).click();
   await expect(page.getByRole("textbox", { name: "Street address" })).toHaveValue("100 Main Street");
   await page.getByRole("button", { name: /Review and submit/ }).click();
-  await expect(page.getByRole("button", { name: "Home address Saved" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Home address: Saved" })).toBeVisible();
 });
