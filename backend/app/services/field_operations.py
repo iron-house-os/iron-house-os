@@ -1121,6 +1121,7 @@ def _field_record_reads(
     candidates = list(db.scalars(select(FieldRecord).where(
         FieldRecord.record_type == "purchase_order_request"
     ).order_by(FieldRecord.created_at, FieldRecord.id)))
+    all_candidates = candidates
     if user.role == "viewer":
         profile = _flha_profile(db, user)
         projects = {item.id: item for item in db.scalars(select(Project))}
@@ -1142,7 +1143,14 @@ def _field_record_reads(
             )
         ]
 
-    visible_numbers = {_po_number(candidate) for candidate in candidates}
+    readable_ids = {candidate.id for candidate in candidates}
+    # Legacy snapshots identify POs by mutable, non-unique display numbers.
+    # A readable collision cannot authorize a reference to an unreadable record.
+    unreadable_numbers = {
+        _po_number(candidate) for candidate in all_candidates
+        if candidate.id not in readable_ids
+    }
+    visible_numbers = {_po_number(candidate) for candidate in candidates} - unreadable_numbers
     by_invoice: dict[tuple[str, str], list[FieldRecord]] = {}
     for candidate in candidates:
         invoice = (candidate.details or {}).get("invoice")

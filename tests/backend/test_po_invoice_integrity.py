@@ -293,3 +293,50 @@ def test_duplicate_warnings_follow_current_project_access_and_include_later_uplo
     assert _bootstrap_po(own_po["id"])["details"]["invoice"]["duplicate_po_numbers"] == []
     _authenticate_as("admin")
     assert _bootstrap_po(own_po["id"])["details"]["invoice"]["duplicate_po_numbers"] == ["LATER-OWN"]
+
+
+def test_legacy_warning_collision_does_not_authorize_a_restricted_reference() -> None:
+    employee = _employee()
+    restricted = client.post(
+        "/api/v1/projects", json={"name": "Restricted collision job", "status": "awarded"}
+    ).json()
+    assert client.post(f"/api/v1/projects/{restricted['id']}/safety-launch").status_code == 201
+    hidden_po = _po(restricted["id"], po_number="COLLIDING-PO")
+    assert client.post(
+        f"/api/v1/field-operations/records/{hidden_po['id']}/invoice",
+        json=_invoice(_invoice_document(restricted["id"])),
+    ).status_code == 200
+
+    project = _project()
+    # A caller can supply the same PO number on a readable record, without
+    # actually holding the historical invoice association that number denotes.
+    visible_collision = _po(project["id"], employee["id"], po_number="COLLIDING-PO")
+    own_po = _po(project["id"], employee["id"], po_number="OWN-WITH-SNAPSHOT")
+    assert client.post(
+        f"/api/v1/field-operations/records/{own_po['id']}/invoice",
+        json=_invoice(_invoice_document(project["id"])),
+    ).status_code == 200
+    snapshot = [{"action": "snapshot", "invoice": {"duplicate_po_numbers": ["COLLIDING-PO"]}}]
+    with TestingSessionLocal() as db:
+        stored = db.get(FieldRecord, UUID(own_po["id"]))
+        stored.details = {**stored.details, "invoice_audit_history": snapshot}
+        db.commit()
+
+    _authenticate_as("viewer", employee["email"])
+    assert "invoice" not in _bootstrap_po(visible_collision["id"])["details"]
+    serialized = _bootstrap_po(own_po["id"])
+    assert serialized["details"]["invoice"]["duplicate_po_numbers"] == []
+    assert serialized["details"]["invoice_audit_history"][0]["invoice"]["duplicate_po_numbers"] == []
+    signed = client.post(
+        f"/api/v1/field-operations/records/{own_po['id']}/sign",
+        json={"employee_id": employee["id"], "employee_name": "Crew Member"},
+    )
+    assert signed.status_code == 200, signed.text
+    assert signed.json()["details"]["invoice_audit_history"][0]["invoice"]["duplicate_po_numbers"] == []
+    with TestingSessionLocal() as db:
+        stored = db.get(FieldRecord, UUID(own_po["id"]))
+        assert stored.details["invoice_audit_history"] == snapshot
+    _authenticate_as("admin")
+    serialized = _bootstrap_po(own_po["id"])
+    assert serialized["details"]["invoice"]["duplicate_po_numbers"] == ["COLLIDING-PO"]
+    assert serialized["details"]["invoice_audit_history"] == snapshot
