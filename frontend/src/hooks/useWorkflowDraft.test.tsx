@@ -1,0 +1,142 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
+import { useWorkflowDraft } from "./useWorkflowDraft";
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function Harness({ recoverLocal = true }: { recoverLocal?: boolean }) {
+  const [value, setValue] = useState("");
+  const draft = useWorkflowDraft({
+    workflowType: "purchase_order_request",
+    title: "Test PO",
+    payload: { value },
+    ready: true,
+    enabled: Boolean(value),
+    recoverLocal,
+    onRestore: (saved) => setValue(typeof saved.value === "string" ? saved.value : ""),
+  });
+  return (
+    <>
+      <label>Purpose<input aria-label="Purpose" value={value} onChange={(event) => setValue(event.target.value)} /></label>
+      <DraftSaveIndicator status={draft.status} lastSavedAt={draft.lastSavedAt} />
+    </>
+  );
+}
+
+describe("useWorkflowDraft", () => {
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      return jsonResponse({
+        id: "draft-1",
+        owner_account_id: "owner-1",
+        project_id: null,
+        workflow_type: body.workflow_type,
+        title: body.title,
+        payload: body.payload,
+        schema_version: 1,
+        revision: 1,
+        status: "active",
+        last_saved_at: "2026-08-21T06:30:00Z",
+        created_at: "2026-08-21T06:30:00Z",
+        updated_at: "2026-08-21T06:30:00Z",
+      }, 201);
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["completed", "purchase_order_request"],
+    ["cancelled", "purchase_order_request"],
+    ["active", "estimate"],
+  ])("starts a fresh autosaved draft for a %s %s link", async (status, workflowType) => {
+    window.history.replaceState({}, "", "/?projectId=project-1&draftId=old-draft#details");
+    vi.mocked(fetch).mockImplementationOnce(async () => jsonResponse({
+      id: "old-draft", workflow_type: workflowType, status, revision: 8,
+      payload: { value: "Do not restore old work" }, last_saved_at: "2026-08-21T06:25:00Z",
+    }));
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(await screen.findByText(/This draft link cannot be resumed/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Purpose")).toHaveValue("");
+    expect(window.location.search).toBe("?projectId=project-1");
+    expect(window.location.hash).toBe("#details");
+
+    await user.type(screen.getByLabelText("Purpose"), "New pipe work");
+    expect(window.localStorage.getItem("ihos:draft-recovery:purchase_order_request")).toContain("New pipe work");
+    expect(await screen.findByText(/Draft saved/)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, request] = vi.mocked(fetch).mock.calls[1];
+    expect(request?.method).toBe("POST");
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      workflow_type: "purchase_order_request", payload: { value: "New pipe work" },
+    });
+    expect(window.location.search).toContain("draftId=draft-1");
+  });
+
+  it("still restores and updates an active matching draft", async () => {
+    window.history.replaceState({}, "", "/?draftId=active-draft");
+    vi.mocked(fetch).mockImplementationOnce(async () => jsonResponse({
+      id: "active-draft", workflow_type: "purchase_order_request", status: "active", revision: 8,
+      payload: { value: "Saved pipe work" }, last_saved_at: "2026-08-21T06:25:00Z",
+    }));
+    render(<Harness />);
+    expect(await screen.findByDisplayValue("Saved pipe work")).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    const [url, request] = vi.mocked(fetch).mock.calls[1];
+    expect(String(url)).toContain("/workflow-drafts/active-draft");
+    expect(request?.method).toBe("PATCH");
+    expect(JSON.parse(String(request?.body)).expected_revision).toBe(8);
+  });
+
+  it("keeps an immediate local recovery copy and then saves the draft to IHOS", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.type(screen.getByLabelText("Purpose"), "Pipe and fittings");
+
+    expect(window.localStorage.getItem("ihos:draft-recovery:purchase_order_request")).toContain("Pipe and fittings");
+    expect(await screen.findByText(/Draft saved/)).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem("ihos:draft-recovery:purchase_order_request")).toBeNull();
+    expect(window.location.search).toContain("draftId=draft-1");
+  });
+
+  it("recovers the latest device copy before a server save is available", async () => {
+    window.localStorage.setItem(
+      "ihos:draft-recovery:purchase_order_request",
+      JSON.stringify({ payload: { value: "Recovered valves" }, savedAt: "2026-08-21T06:25:00Z" }),
+    );
+
+    render(<Harness />);
+
+    expect(await screen.findByDisplayValue("Recovered valves")).toBeInTheDocument();
+    expect(screen.getByText("Recovered unsaved work from this device")).toBeInTheDocument();
+  });
+
+  it("can preserve an explicitly targeted record instead of restoring a device buffer", async () => {
+    window.localStorage.setItem(
+      "ihos:draft-recovery:purchase_order_request",
+      JSON.stringify({ payload: { value: "Unrelated recovered valves" }, savedAt: "2026-08-21T06:25:00Z" }),
+    );
+
+    render(<Harness recoverLocal={false} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Purpose")).toHaveValue(""));
+    expect(screen.queryByText("Recovered unsaved work from this device")).not.toBeInTheDocument();
+  });
+});

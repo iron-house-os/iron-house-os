@@ -1,0 +1,46 @@
+{
+  "issue": 365,
+  "parent_issue": 268,
+  "source_issue": 314,
+  "environment": "staging",
+  "source": "bennett_strata_issue_314",
+  "source_revision": "2026-08-27-final",
+  "initial_authorization": "human merge of Build 225 at ce57e72c4073f25decec2ca659a20585796de1d5",
+  "initial_workflow_result": "GitHub rejected run 33110981733 before any job or data action because runner.temp is unsupported in job-level env",
+  "workflow_repair_authorization": "human merge of Build 226 at 6207ee68c3a1acb9939f4ff09ae427317fdf5bd9",
+  "workflow_repair_result": "run 33112675388 created the opportunity and immutable estimate workspaces, then blocked before quote creation because a Secure session cookie cannot be used over the HTTP loopback origin",
+  "trigger": "human merge of the exact Build 227 Secure-session repair pull request followed by a successful exact-release staging deployment",
+  "approval_scope": "authenticated shared-staging estimate-to-draft-quote proof only",
+  "permitted_actions": [
+    "repair the exact legacy STAGE-BENNETT-2026 opportunity marker",
+    "create or reuse immutable final-revision estimate workspaces",
+    "create or reuse one source-linked concrete customer quote draft",
+    "verify exact totals, provenance, draft state, and idempotent retry",
+    "upload staging evidence"
+  ],
+  "prohibited_actions": [
+    "approve quote",
+    "issue quote",
+    "accept quote",
+    "award project",
+    "allocate job number",
+    "send externally",
+    "mutate production"
+  ],
+  "expected_concrete_quote": {
+    "subtotal": "36266.67",
+    "gst": "1813.33",
+    "total": "38080.00"
+  },
+  "expected_asphalt_quote": {
+    "subtotal": "19260.65",
+    "gst": "963.03",
+    "total": "20223.68"
+  },
+  "options": {
+    "mutually_exclusive": true,
+    "selected_option_id": null,
+    "draft_selected_options_total": "0.00",
+    "totals": ["3990.00", "8561.54", "8960.00"]
+  }
+}

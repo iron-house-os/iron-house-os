@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+"""Smoke-test a deployed Iron House OS release using only the standard library."""
+
+from argparse import ArgumentParser
+from datetime import UTC, datetime
+from http.cookiejar import CookieJar, DefaultCookiePolicy
+import json
+import os
+from urllib.error import HTTPError
+from urllib.parse import urlparse
+from urllib.request import HTTPCookieProcessor, OpenerDirector, Request, build_opener
+from uuid import uuid4
+
+
+def build_smoke_opener(base_url: str) -> OpenerDirector:
+    """Build a cookie opener; allow Secure cookies over HTTP only for explicit loopback CI."""
+    allow_loopback = os.getenv("IHOS_ALLOW_SECURE_COOKIE_OVER_LOOPBACK", "").lower() == "true"
+    if allow_loopback:
+        hostname = urlparse(base_url).hostname
+        if hostname not in {"127.0.0.1", "localhost", "::1"}:
+            raise RuntimeError(
+                "IHOS_ALLOW_SECURE_COOKIE_OVER_LOOPBACK is restricted to loopback test URLs."
+            )
+        policy = DefaultCookiePolicy(secure_protocols=("https", "http"))
+        return build_opener(HTTPCookieProcessor(CookieJar(policy=policy)))
+    return build_opener(HTTPCookieProcessor(CookieJar()))
+
+
+def _request(
+    base_url: str,
+    path: str,
+    *,
+    opener: OpenerDirector,
+    method: str = "GET",
+    payload: dict | None = None,
+    body: bytes | None = None,
+    content_type: str | None = None,
+    expected: tuple[int, ...] = (200,),
+) -> tuple[int, bytes]:
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        body = json.dumps(payload).encode()
+        content_type = "application/json"
+    if content_type:
+        headers["Content-Type"] = content_type
+    request = Request(
+        f"{base_url.rstrip('/')}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with opener.open(request, timeout=30) as response:
+            status_code = response.status
+            response_body = response.read()
+    except HTTPError as exc:
+        response_body = exc.read()
+        raise RuntimeError(
+            f"{method} {path} returned {exc.code}: {response_body.decode(errors='replace')}"
+        ) from exc
+    if status_code not in expected:
+        raise RuntimeError(f"{method} {path} returned {status_code}; expected {expected}")
+    return status_code, response_body
+
+
+def _json_request(*args, **kwargs) -> dict:
+    _, body = _request(*args, **kwargs)
+    return json.loads(body)
+
+
+def _list_request(base_url: str, path: str, *, opener: OpenerDirector) -> dict:
+    payload = _json_request(base_url, path, opener=opener)
+    if not isinstance(payload.get("items"), list) or payload.get("total") != len(payload["items"]):
+        raise RuntimeError(f"{path} returned an invalid list payload: {payload}")
+    return payload
+
+
+def _minimal_pdf(text: str) -> bytes:
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, value in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n".encode())
+        output.extend(value)
+        output.extend(b"\nendobj\n")
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode())
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode())
+    output.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    return bytes(output)
+
+
+def _multipart(fields: dict[str, str], filename: str, file_bytes: bytes) -> tuple[bytes, str]:
+    boundary = f"ihos-{uuid4().hex}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(),
+                value.encode(),
+                b"\r\n",
+            ]
+        )
+    chunks.extend(
+        [
+            f"--{boundary}\r\n".encode(),
+            (f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n').encode(),
+            b"Content-Type: application/pdf\r\n\r\n",
+            file_bytes,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode(),
+        ]
+    )
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def run(base_url: str, opener: OpenerDirector, email: str, password: str, full: bool) -> dict:
+    _, homepage = _request(base_url, "/", opener=opener)
+    if b"Iron House" not in homepage:
+        raise RuntimeError(
+            "The frontend response did not contain the Iron House application shell."
+        )
+    readiness = _json_request(base_url, "/readiness", opener=opener)
+    if readiness.get("status") != "ready":
+        raise RuntimeError(f"Release is not ready: {readiness}")
+    session = _json_request(
+        base_url,
+        "/api/v1/auth/login",
+        opener=opener,
+        method="POST",
+        payload={"email": email, "password": password},
+    )
+    if session.get("authentication") != "authenticated":
+        raise RuntimeError(f"Release login failed: {session}")
+    current_user = _json_request(base_url, "/api/v1/auth/me", opener=opener)
+    if current_user.get("user", {}).get("email") != email.lower():
+        raise RuntimeError(f"Release session identity mismatch: {current_user}")
+    list_paths = {
+        "projects": "/api/v1/projects",
+        "suppliers": "/api/v1/suppliers",
+        "rfq_packages": "/api/v1/rfqs",
+        "tenders": "/api/v1/tenders",
+        "documents": "/api/v1/documents",
+        "equipment": "/api/v1/equipment",
+        "users": "/api/v1/users",
+    }
+    records = {
+        name: _list_request(base_url, path, opener=opener) for name, path in list_paths.items()
+    }
+    _json_request(base_url, "/api/v1/auth/me/permissions", opener=opener)
+    _json_request(base_url, "/api/v1/estimates/rate-library", opener=opener)
+    meeting_minutes_status = _json_request(
+        base_url,
+        "/api/v1/meeting-minutes/status",
+        opener=opener,
+    )
+    if meeting_minutes_status.get("audio_retained") is not False:
+        raise RuntimeError(
+            f"Meeting Minutes returned an invalid audio-retention policy: {meeting_minutes_status}"
+        )
+    meeting_minutes = _json_request(base_url, "/api/v1/meeting-minutes", opener=opener)
+    if not isinstance(meeting_minutes, list):
+        raise RuntimeError(f"Meeting Minutes returned an invalid list payload: {meeting_minutes}")
+    google_calendar_status = _json_request(
+        base_url,
+        "/api/v1/google-calendar/status",
+        opener=opener,
+    )
+    forbidden_calendar_fields = {
+        "access_token",
+        "refresh_token",
+        "encrypted_access_token",
+        "encrypted_refresh_token",
+    }
+    exposed_calendar_fields = forbidden_calendar_fields.intersection(google_calendar_status)
+    if exposed_calendar_fields:
+        raise RuntimeError(
+            "Google Calendar status exposed protected token fields: "
+            f"{sorted(exposed_calendar_fields)}"
+        )
+    if google_calendar_status.get("required_scope") != (
+        "https://www.googleapis.com/auth/calendar.events.owned"
+    ):
+        raise RuntimeError(
+            f"Google Calendar returned an invalid OAuth scope: {google_calendar_status}"
+        )
+
+    for project in records["projects"]["items"]:
+        project_id = project["id"]
+        _json_request(base_url, f"/api/v1/projects/{project_id}", opener=opener)
+        _json_request(base_url, f"/api/v1/projects/{project_id}/dashboard", opener=opener)
+        _json_request(base_url, f"/api/v1/projects/{project_id}/readiness", opener=opener)
+        _list_request(base_url, f"/api/v1/estimates/workspace/project/{project_id}", opener=opener)
+        _list_request(base_url, f"/api/v1/takeoff/project/{project_id}", opener=opener)
+        _list_request(
+            base_url,
+            f"/api/v1/drawing-intelligence/projects/{project_id}",
+            opener=opener,
+        )
+
+    for rfq_package in records["rfq_packages"]["items"]:
+        rfq_id = rfq_package["id"]
+        _json_request(base_url, f"/api/v1/rfqs/{rfq_id}", opener=opener)
+        _json_request(base_url, f"/api/v1/rfqs/{rfq_id}/readiness", opener=opener)
+
+    for resource in ("tenders", "documents", "suppliers"):
+        resource_path = list_paths[resource]
+        for item in records[resource]["items"]:
+            _json_request(base_url, f"{resource_path}/{item['id']}", opener=opener)
+
+    record_counts = {name: payload["total"] for name, payload in records.items()}
+    if not full:
+        return {
+            "mode": "read-only",
+            "status": "passed",
+            "authenticated_user": current_user["user"]["email"],
+            "tab_paths_checked": 18,
+            "record_counts": record_counts,
+        }
+
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    project = _json_request(
+        base_url,
+        "/api/v1/projects",
+        method="POST",
+        payload={
+            "name": f"Release smoke {stamp}",
+            "municipality": "Surrey",
+            "project_number": f"SMOKE-{stamp}",
+        },
+        opener=opener,
+        expected=(201,),
+    )
+    estimate = _json_request(
+        base_url,
+        "/api/v1/estimates/summary",
+        method="POST",
+        payload={
+            "project_name": project["name"],
+            "project_code": project["project_number"],
+            "line_items": [
+                {
+                    "code": "SMOKE-001",
+                    "description": "Release validation item",
+                    "item_type": "material",
+                    "quantity": 1,
+                    "unit": "EA",
+                    "labour": [],
+                    "equipment": [],
+                    "materials": [],
+                    "disposal": [],
+                    "vendor_quotes": [],
+                    "direct_unit_cost": 1,
+                }
+            ],
+            "indirects": [],
+            "risks": [],
+            "markup": {
+                "overhead_percent": 0,
+                "profit_percent": 0,
+                "contingency_percent": 0,
+                "bonding_percent": 0,
+                "insurance_percent": 0,
+            },
+            "assumptions": ["Automated release validation only."],
+            "exclusions": [],
+        },
+        opener=opener,
+    )
+    if estimate.get("final_price") != 1:
+        raise RuntimeError(f"Unexpected estimate result: {estimate}")
+
+    rfq = _json_request(
+        base_url,
+        "/api/v1/rfqs",
+        method="POST",
+        payload={
+            "title": f"Release smoke RFQ {stamp}",
+            "project_id": project["id"],
+            "project_name": project["name"],
+            "scope_summary": "Automated release validation only.",
+            "supplier_category_targets": [],
+        },
+        opener=opener,
+        expected=(201,),
+    )
+
+    pdf = _minimal_pdf("Quantity Schedule: 12 m storm pipe. Field verify utility crossing.")
+    multipart, content_type = _multipart(
+        {
+            "project_id": project["id"],
+            "title": "Release smoke drawing",
+            "municipality": "Surrey",
+        },
+        "release-smoke.pdf",
+        pdf,
+    )
+    drawing = _json_request(
+        base_url,
+        "/api/v1/drawing-intelligence/ingest",
+        method="POST",
+        body=multipart,
+        content_type=content_type,
+        opener=opener,
+        expected=(201,),
+    )
+    if drawing["source"]["project_id"] != project["id"]:
+        raise RuntimeError("Drawing upload was not linked to the release-smoke project.")
+
+    return {
+        "mode": "full",
+        "status": "passed",
+        "project_id": project["id"],
+        "rfq_package_id": rfq["id"],
+        "drawing_document_id": drawing["source"]["document_id"],
+        "tab_paths_checked": 18,
+        "record_counts": record_counts,
+    }
+
+
+def main() -> None:
+    parser = ArgumentParser()
+    parser.add_argument("--base-url", default=os.getenv("IHOS_BASE_URL", "http://127.0.0.1:8080"))
+    parser.add_argument("--email", default=os.getenv("BOOTSTRAP_ADMIN_EMAIL"))
+    parser.add_argument("--password", default=os.getenv("BOOTSTRAP_ADMIN_PASSWORD"))
+    parser.add_argument(
+        "--full", action="store_true", help="Create release-smoke records and upload a PDF."
+    )
+    args = parser.parse_args()
+    if not args.email or not args.password:
+        raise SystemExit("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required.")
+    opener = build_smoke_opener(args.base_url)
+    print(json.dumps(run(args.base_url, opener, args.email, args.password, args.full), indent=2))
+
+
+if __name__ == "__main__":
+    main()

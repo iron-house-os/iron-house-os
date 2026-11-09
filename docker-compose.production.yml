@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      RELEASE_ID: ${IHOS_RELEASE_ID:-unknown}
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Iron House Administrator}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      LOGIN_MAX_FAILED_ATTEMPTS: ${LOGIN_MAX_FAILED_ATTEMPTS:-5}
+      LOGIN_IP_MAX_FAILED_ATTEMPTS: ${LOGIN_IP_MAX_FAILED_ATTEMPTS:-20}
+      LOGIN_LOCKOUT_MINUTES: ${LOGIN_LOCKOUT_MINUTES:-15}
+      BACKEND_CORS_ORIGINS: '[]'
+      IHOS_STORAGE_BACKEND: ${IHOS_STORAGE_BACKEND:-local}
+      IHOS_STORAGE_ROOT: ${IHOS_STORAGE_ROOT:-/app/data/uploads}
+      IHOS_STORAGE_S3_BUCKET: ${IHOS_STORAGE_S3_BUCKET:-}
+      IHOS_STORAGE_S3_PREFIX: ${IHOS_STORAGE_S3_PREFIX:-iron-house-os}
+      IHOS_STORAGE_S3_ENDPOINT_URL: ${IHOS_STORAGE_S3_ENDPOINT_URL:-}
+      IHOS_STORAGE_CACHE_ROOT: ${IHOS_STORAGE_CACHE_ROOT:-/app/data/object-cache}
+      AWS_REGION: ${AWS_REGION:-ca-central-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      DOCUMENT_AUDIT_STORE: jsonl
+      DOCUMENT_AUDIT_JSONL_PATH: /app/data/audit/document-events.jsonl
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-5.6-sol}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
+      IRON_HOUSE_CHAT_ENABLED: ${IRON_HOUSE_CHAT_ENABLED:-true}
+      MEETING_MINUTES_ENABLED: ${MEETING_MINUTES_ENABLED:-true}
+      GOOGLE_CALENDAR_ENABLED: ${GOOGLE_CALENDAR_ENABLED:-false}
+      GOOGLE_CALENDAR_CLIENT_ID: ${GOOGLE_CALENDAR_CLIENT_ID:-}
+      GOOGLE_CALENDAR_CLIENT_SECRET: ${GOOGLE_CALENDAR_CLIENT_SECRET:-}
+      GOOGLE_CALENDAR_REDIRECT_URI: ${GOOGLE_CALENDAR_REDIRECT_URI:-https://os.ironhousecivil.com/api/v1/google-calendar/oauth/callback}
+      GOOGLE_CALENDAR_FRONTEND_RETURN_URL: ${GOOGLE_CALENDAR_FRONTEND_RETURN_URL:-https://os.ironhousecivil.com/google-calendar}
+      GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY: ${GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY:-}
+      QUICKBOOKS_ENABLED: ${QUICKBOOKS_ENABLED:-false}
+      QUICKBOOKS_FORCE_DISABLED: ${QUICKBOOKS_FORCE_DISABLED:-false}
+      QUICKBOOKS_ENVIRONMENT: ${QUICKBOOKS_ENVIRONMENT:-sandbox}
+      QUICKBOOKS_LIVE_READ_ONLY_APPROVED: ${QUICKBOOKS_LIVE_READ_ONLY_APPROVED:-false}
+      QUICKBOOKS_CLIENT_ID: ${QUICKBOOKS_CLIENT_ID:-}
+      QUICKBOOKS_CLIENT_SECRET: ${QUICKBOOKS_CLIENT_SECRET:-}
+      QUICKBOOKS_REDIRECT_URI: ${QUICKBOOKS_REDIRECT_URI:-https://os.ironhousecivil.com/api/v1/finance/quickbooks/oauth/callback}
+      QUICKBOOKS_FRONTEND_RETURN_URL: ${QUICKBOOKS_FRONTEND_RETURN_URL:-https://os.ironhousecivil.com/finance}
+      QUICKBOOKS_TOKEN_ENCRYPTION_KEY: ${QUICKBOOKS_TOKEN_ENCRYPTION_KEY:-}
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        python -m app.db.bootstrap_admin &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --proxy-headers --forwarded-allow-ips="*" --no-access-log
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/readiness', timeout=4)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${IHOS_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  postgres_data:
+  backend_data:

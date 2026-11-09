@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "max_files_changed": 8,
+  "max_file_bytes": 120000,
+  "allowed_write_prefixes": [
+    "backend/app/",
+    "frontend/src/",
+    "tests/backend/",
+    "docs/",
+    "automation/"
+  ],
+  "blocked_write_prefixes": [
+    ".github/workflows/",
+    ".git/",
+    "node_modules/",
+    "backend/.venv/",
+    "frontend/dist/"
+  ],
+  "context_files": [
+    "automation/build-queue.json",
+    "docs/mvp-build-strategy.md",
+    "docs/mvp-status.md",
+    "frontend/src/App.tsx",
+    "frontend/src/modules.ts",
+    "backend/app/api/v1/router.py"
+  ],
+  "check_command": "python automation/run_mvp_checks.py"
+}

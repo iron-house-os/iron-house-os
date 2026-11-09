@@ -1,0 +1,64 @@
+{
+  "issue": 379,
+  "parent_issues": [268, 377],
+  "environment": "staging",
+  "trigger": "human merge of the exact Build 232 pull request followed by a successful exact-release staging deployment",
+  "approval_scope": "verify only that Bennett field-production posting is blocked and contains no Day 1 or Day 2 records",
+  "exact_records": {
+    "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+    "job_number": "IH2026002",
+    "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+    "quote_id": "8f854940-e710-45c2-aae4-7d5706c3a9e2",
+    "quote_number": "Q-2026-002"
+  },
+  "required_state": {
+    "safety_release_status": "blocked",
+    "portal_access_status": "not_started",
+    "portal_assignment_count": 0,
+    "mobilization_status": "not_ready",
+    "completed_start_controls": 0,
+    "production_posting_status": "blocked",
+    "production_blockers": [
+      "safety_release",
+      "safety_records",
+      "portal_access",
+      "mobilization"
+    ],
+    "daily_sheet_count": 0,
+    "production_post_count": 0,
+    "generated_daily_report_count": 0,
+    "time_entry_count": 0,
+    "field_photo_count": 0,
+    "ticket_evidence_count": 0,
+    "field_production_folder_status": "not_initialized"
+  },
+  "future_human_record_requirements": [
+    "actual work date and shift",
+    "assigned foreman and crew",
+    "verified labour hours by approved cost code",
+    "verified equipment and material quantities",
+    "verified installed or completed production quantities",
+    "field narrative, conditions, safety and quality notes",
+    "multiple field photos from the actual work",
+    "multiple delivery, disposal, or other field tickets where applicable"
+  ],
+  "permitted_actions": [
+    "authenticate through the live HTTPS staging origin",
+    "read the exact awarded project, quote, estimate workspace, budget, procurement plan, safety launch, project workspace, launch dashboard, and daily-timesheet bootstrap",
+    "read exact database counts before and after verification",
+    "verify the fail-closed posting blockers and zero field-production state",
+    "upload immutable evidence retained for 90 days"
+  ],
+  "prohibited_actions": [
+    "fabricate Day 1 or Day 2 field facts",
+    "create, submit, approve, export, post, reopen, revise, or void a daily sheet",
+    "upload or create a field photo, ticket, generated daily report, time entry, safety record, or actual cost",
+    "prepare the Field_Production folder hierarchy before an approved production post",
+    "release safety, assign portal access, or complete a mobilization control",
+    "select a vendor, create a commitment, purchase order, invoice, or accounting export",
+    "create or claim an external Google Drive folder",
+    "issue or externally send any record",
+    "mutate production",
+    "change DNS, certificates, secrets, backups, authentication, or infrastructure"
+  ]
+}

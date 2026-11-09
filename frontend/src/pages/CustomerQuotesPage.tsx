@@ -1,0 +1,466 @@
+import { ArrowRight, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import {
+  CustomerQuote,
+  CustomerQuoteInput,
+  CustomerQuoteLineItem,
+  customerQuotesApi,
+} from "../api/customerQuotes";
+import { DraftSaveIndicator } from "../components/DraftSaveIndicator";
+import { useAuth } from "../contexts/AuthContext";
+import { useWorkflowDraft } from "../hooks/useWorkflowDraft";
+
+const money = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
+const today = () => new Date().toISOString().slice(0, 10);
+const blankLine = (): CustomerQuoteLineItem => ({ description: "", quantity: "1", unit: "LS", unit_price: "" });
+const intakeStages = ["Customer and job", "Scope", "Pricing", "Terms and review"] as const;
+const issuanceMethods = ["Email", "Text message", "Customer portal", "Hand delivered", "Other"] as const;
+
+function suggestedIssuance(quote: CustomerQuote) {
+  const email = quote.customer_email?.trim() ?? "";
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { method: "Email", reference: email };
+  const phone = quote.customer_phone?.trim() ?? "";
+  if (phone.replace(/\D/g, "").length >= 7) return { method: "Text message", reference: phone };
+  return { method: "", reference: "" };
+}
+
+function suggestedReference(quote: CustomerQuote, method: string) {
+  if (method === "Email") return quote.customer_email?.trim() ?? "";
+  if (method === "Text message") return quote.customer_phone?.trim() ?? "";
+  if (method === "Customer portal") return `${quote.quote_number} — customer portal`;
+  if (method === "Hand delivered") return `${quote.quote_number} — hand delivered`;
+  return "";
+}
+
+export function CustomerQuotesPage() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const openedTarget = useRef<string | null>(null);
+  const [quotes, setQuotes] = useState<CustomerQuote[]>([]);
+  const [registerReady, setRegisterReady] = useState(false);
+  const [editing, setEditing] = useState<CustomerQuote | null>(null);
+  const [projectName, setProjectName] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [siteAddress, setSiteAddress] = useState("");
+  const [scopeSummary, setScopeSummary] = useState("");
+  const [lineItems, setLineItems] = useState<CustomerQuoteLineItem[]>([blankLine()]);
+  const [assumptions, setAssumptions] = useState("");
+  const [exclusions, setExclusions] = useState("");
+  const [gstRate, setGstRate] = useState("5.00");
+  const [quoteDate, setQuoteDate] = useState(today());
+  const [validUntil, setValidUntil] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedQuote, setSavedQuote] = useState<CustomerQuote | null>(null);
+  const [accepting, setAccepting] = useState<CustomerQuote | null>(null);
+  const [acceptanceReference, setAcceptanceReference] = useState("");
+  const [acceptanceNote, setAcceptanceNote] = useState("");
+  const [issuing, setIssuing] = useState<CustomerQuote | null>(null);
+  const [issuanceMethod, setIssuanceMethod] = useState("");
+  const [issuanceReference, setIssuanceReference] = useState("");
+  const [intakeStage, setIntakeStage] = useState(0);
+
+  async function refresh() {
+    try {
+      const result = await customerQuotesApi.list();
+      setQuotes(result.items);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to load customer quotes.");
+    } finally {
+      setRegisterReady(true);
+    }
+  }
+
+  useEffect(() => { void refresh(); }, []);
+
+  useEffect(() => {
+    if (!registerReady) return;
+    const params = new URLSearchParams(location.search);
+    const quoteId = params.get("quoteId");
+    if (!quoteId || openedTarget.current === `${quoteId}:${params.get("action")}`) return;
+    const quote = quotes.find((item) => item.id === quoteId);
+    if (!quote) return;
+    openedTarget.current = `${quoteId}:${params.get("action")}`;
+    if (params.get("action") === "edit" && quote.status !== "accepted") edit(quote);
+    else document.getElementById(`quote-${quoteId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [location.search, quotes, registerReady]);
+
+  const draftPayload = useMemo(() => ({
+    projectName,
+    customerName,
+    customerEmail,
+    customerPhone,
+    siteAddress,
+    scopeSummary,
+    lineItems,
+    assumptions,
+    exclusions,
+    gstRate,
+    quoteDate,
+    validUntil,
+    notes,
+    intakeStage,
+  }), [assumptions, customerEmail, customerName, customerPhone, exclusions, gstRate, intakeStage, lineItems, notes, projectName, quoteDate, scopeSummary, siteAddress, validUntil]);
+  const draftEnabled = Boolean(
+    projectName.trim() || customerName.trim() || customerEmail.trim() || customerPhone.trim() ||
+    siteAddress.trim() || scopeSummary.trim() || notes.trim() || assumptions.trim() || exclusions.trim() ||
+    lineItems.some((line) => line.description.trim() || Number(line.unit_price) > 0),
+  );
+  const targetParams = new URLSearchParams(location.search);
+  const targetedQuoteEdit = Boolean(targetParams.get("quoteId") && targetParams.get("action") === "edit");
+  const draft = useWorkflowDraft({
+    workflowType: "customer_quote",
+    title: customerName.trim() ? `Customer quote — ${customerName.trim()}` : "Customer quote",
+    payload: draftPayload,
+    ready: registerReady,
+    enabled: draftEnabled && !editing,
+    recoverLocal: !targetedQuoteEdit,
+    onRestore: (saved) => {
+      setProjectName(text(saved.projectName));
+      setCustomerName(text(saved.customerName));
+      setCustomerEmail(text(saved.customerEmail));
+      setCustomerPhone(text(saved.customerPhone));
+      setSiteAddress(text(saved.siteAddress));
+      setScopeSummary(text(saved.scopeSummary));
+      if (Array.isArray(saved.lineItems) && saved.lineItems.length) setLineItems(saved.lineItems as CustomerQuoteLineItem[]);
+      setAssumptions(text(saved.assumptions));
+      setExclusions(text(saved.exclusions));
+      setGstRate(text(saved.gstRate) || "5.00");
+      setQuoteDate(text(saved.quoteDate) || today());
+      setValidUntil(text(saved.validUntil));
+      setNotes(text(saved.notes));
+      setIntakeStage(stage(saved.intakeStage));
+    },
+  });
+
+  const totals = useMemo(() => {
+    const subtotal = lineItems.reduce(
+      (sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unit_price) || 0),
+      0,
+    );
+    const gst = subtotal * (Number(gstRate) || 0) / 100;
+    return { subtotal, gst, total: subtotal + gst };
+  }, [gstRate, lineItems]);
+
+  function input(): CustomerQuoteInput {
+    return {
+      project_name: projectName.trim(),
+      customer_name: customerName.trim(),
+      customer_email: customerEmail.trim() || null,
+      customer_phone: customerPhone.trim() || null,
+      site_address: siteAddress.trim() || null,
+      scope_summary: scopeSummary.trim(),
+      line_items: lineItems.map((line) => ({
+        description: line.description.trim(),
+        quantity: String(Number(line.quantity) || 0),
+        unit: line.unit.trim() || "LS",
+        unit_price: String(Number(line.unit_price) || 0),
+      })),
+      assumptions: lines(assumptions),
+      exclusions: lines(exclusions),
+      gst_rate: String(Number(gstRate) || 0),
+      quote_date: quoteDate,
+      valid_until: validUntil || null,
+      notes: notes.trim() || null,
+    };
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const result = editing
+        ? editing.status === "declined" || editing.status === "expired"
+          ? await customerQuotesApi.revise(editing.id, editing.record_revision, input())
+          : await customerQuotesApi.update(editing.id, editing.record_revision, input())
+        : await customerQuotesApi.create(input());
+      if (!editing) await draft.completeDraft();
+      setSavedQuote(result);
+      setQuotes((current) => [result, ...current.filter((quote) => quote.id !== result.id)]);
+      reset();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save the customer quote.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function edit(quote: CustomerQuote) {
+    setEditing(quote);
+    setProjectName(quote.project_name);
+    setCustomerName(quote.customer_name);
+    setCustomerEmail(quote.customer_email ?? "");
+    setCustomerPhone(quote.customer_phone ?? "");
+    setSiteAddress(quote.site_address ?? "");
+    setScopeSummary(quote.scope_summary);
+    setLineItems(quote.line_items.map((line) => ({ ...line, amount: undefined })));
+    setAssumptions(quote.assumptions.join("\n"));
+    setExclusions(quote.exclusions.join("\n"));
+    setGstRate(quote.gst_rate);
+    setQuoteDate(quote.quote_date);
+    setValidUntil(quote.valid_until ?? "");
+    setNotes(quote.notes ?? "");
+    setIntakeStage(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function reset() {
+    setEditing(null);
+    setProjectName("");
+    setCustomerName("");
+    setCustomerEmail("");
+    setCustomerPhone("");
+    setSiteAddress("");
+    setScopeSummary("");
+    setLineItems([blankLine()]);
+    setAssumptions("");
+    setExclusions("");
+    setGstRate("5.00");
+    setQuoteDate(today());
+    setValidUntil("");
+    setNotes("");
+    setIntakeStage(0);
+  }
+
+  function continueIntake() {
+    if (!stageComplete(intakeStage)) return;
+    setIntakeStage((current) => Math.min(current + 1, intakeStages.length - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function stageComplete(current: number) {
+    if (current === 0) return Boolean(projectName.trim() && customerName.trim());
+    if (current === 1) return Boolean(scopeSummary.trim());
+    if (current === 2) return lineItems.every((line) => line.description.trim() && Number(line.quantity) > 0);
+    return true;
+  }
+
+  async function moveIssueStatus(quote: CustomerQuote, status: "ready_for_review" | "approved_for_issue") {
+    setError(null);
+    try {
+      const result = await customerQuotesApi.issueStatus(quote.id, quote.record_revision, status);
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update quote issue status.");
+    }
+  }
+
+  async function recordIssued() {
+    if (!issuing || !issuanceMethod.trim() || !issuanceReference.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await customerQuotesApi.issueStatus(
+        issuing.id,
+        issuing.record_revision,
+        "issued",
+        issuanceMethod.trim(),
+        issuanceReference.trim(),
+      );
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+      setIssuing(null);
+      setIssuanceMethod("");
+      setIssuanceReference("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to record quote issuance.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startIssuance(quote: CustomerQuote) {
+    const suggestion = suggestedIssuance(quote);
+    setIssuing(quote);
+    setIssuanceMethod(suggestion.method);
+    setIssuanceReference(suggestion.reference);
+  }
+
+  function changeIssuanceMethod(method: string) {
+    setIssuanceMethod(method);
+    setIssuanceReference(issuing ? suggestedReference(issuing, method) : "");
+  }
+
+  async function closeQuote(quote: CustomerQuote, status: "declined" | "expired") {
+    const confirmed = window.confirm(
+      status === "declined"
+        ? `Record ${quote.quote_number} as declined? A new revision is required to reopen it.`
+        : `Record ${quote.quote_number} as expired? A new revision is required to reopen it.`,
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      const result = await customerQuotesApi.status(quote.id, quote.record_revision, status);
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to close the quote.");
+    }
+  }
+
+  async function accept() {
+    if (!accepting || !acceptanceReference.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await customerQuotesApi.accept(
+        accepting.id,
+        accepting.record_revision,
+        acceptanceReference.trim(),
+        acceptanceNote.trim(),
+      );
+      setQuotes((current) => current.map((item) => item.id === result.id ? result : item));
+      setSavedQuote(result);
+      setAccepting(null);
+      setAcceptanceReference("");
+      setAcceptanceNote("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to accept and award the quote.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-6">
+      <div className="rounded-xl border border-brand-gold/30 bg-iron-950 p-6 text-white shadow-brand">
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-gold">Quote to job</div>
+        <h1 className="mt-2 text-3xl font-semibold">Customer Quotes</h1>
+        <p className="mt-2 max-w-3xl text-sm text-iron-200">Capture verbal information once. Drafts stay non-binding; management acceptance creates the awarded IHOS job and permanent job number.</p>
+      </div>
+
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+      {savedQuote ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <span>{savedQuote.status === "accepted" ? `${savedQuote.quote_number} accepted — job ${savedQuote.job_number} created.` : `${savedQuote.quote_number} saved in IHOS as ${savedQuote.status}.`}</span>
+          <Link to={`/projects/${savedQuote.project_id}`} className="inline-flex items-center gap-2 font-semibold">Open Project Workspace <ArrowRight className="h-4 w-4" /></Link>
+        </div>
+      ) : null}
+
+      {!editing ? <DraftSaveIndicator status={draft.status} lastSavedAt={draft.lastSavedAt} /> : null}
+
+      <form onSubmit={submit} className="space-y-5 rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `${editing.status === "declined" || editing.status === "expired" ? "New revision" : "Edit"} ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form. Closed quotes create a separately numbered draft and preserve the original.</p></div>
+          {editing ? <button type="button" onClick={reset} className="rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold">Cancel edit</button> : null}
+        </div>
+        <ol aria-label="Quote intake stages" className="grid gap-2 sm:grid-cols-4">
+          {intakeStages.map((label, index) => (
+            <li key={label} aria-current={index === intakeStage ? "step" : undefined} className={["rounded-md border p-3 text-sm font-semibold", index === intakeStage ? "border-brand-gold bg-brand-gold/10 text-iron-950" : index < intakeStage ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-iron-100 bg-iron-50 text-iron-500"].join(" ")}>
+              <span className="mr-2">{index + 1}</span>{label}
+            </li>
+          ))}
+        </ol>
+
+        {intakeStage === 0 ? <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Project / work name" value={projectName} onChange={setProjectName} required />
+          <Field label="Customer / company" value={customerName} onChange={setCustomerName} required />
+          <Field label="Customer email" type="email" value={customerEmail} onChange={setCustomerEmail} />
+          <Field label="Customer phone" value={customerPhone} onChange={setCustomerPhone} />
+          <div className="md:col-span-2"><Field label="Site address" value={siteAddress} onChange={setSiteAddress} /></div>
+        </div> : null}
+
+        {intakeStage === 1 ? <label className="grid gap-1 text-sm font-medium text-iron-700">Scope summary<textarea required value={scopeSummary} onChange={(event) => setScopeSummary(event.target.value)} className="min-h-40 rounded-md border border-iron-200 px-3 py-2" placeholder="Describe what the customer asked Iron House to complete, including known limits and site conditions." /></label> : null}
+
+        {intakeStage === 2 ? <div className="space-y-3">
+          <div className="flex items-center justify-between"><h3 className="font-semibold text-iron-950">Quote line items</h3><button type="button" onClick={() => setLineItems((current) => [...current, blankLine()])} className="inline-flex items-center gap-2 rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold"><Plus className="h-4 w-4" /> Add line</button></div>
+          {lineItems.map((line, index) => (
+            <div key={index} className="grid gap-3 rounded-md border border-iron-100 p-3 md:grid-cols-[1fr_100px_100px_140px_44px]">
+              <Field label={`Item ${index + 1}`} value={line.description} onChange={(value) => setLine(index, { description: value })} required />
+              <Field label={`Quantity ${index + 1}`} type="number" value={line.quantity} onChange={(value) => setLine(index, { quantity: value })} required />
+              <Field label={`Unit ${index + 1}`} value={line.unit} onChange={(value) => setLine(index, { unit: value })} required />
+              <Field label={`Unit price ${index + 1}`} type="number" value={line.unit_price} onChange={(value) => setLine(index, { unit_price: value })} required />
+              <button type="button" aria-label={`Remove item ${index + 1}`} disabled={lineItems.length === 1} onClick={() => setLineItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="mt-6 grid h-10 place-items-center rounded-md border border-iron-200 text-red-700 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+            </div>
+          ))}
+        </div> : null}
+
+        {intakeStage === 3 ? <><div className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-1 text-sm font-medium text-iron-700">Assumptions, one per line<textarea value={assumptions} onChange={(event) => setAssumptions(event.target.value)} className="min-h-24 rounded-md border border-iron-200 px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm font-medium text-iron-700">Exclusions, one per line<textarea value={exclusions} onChange={(event) => setExclusions(event.target.value)} className="min-h-24 rounded-md border border-iron-200 px-3 py-2" /></label>
+          <Field label="GST rate %" type="number" value={gstRate} onChange={setGstRate} required />
+          <Field label="Quote date" type="date" value={quoteDate} onChange={setQuoteDate} required />
+          <Field label="Valid until" type="date" value={validUntil} onChange={setValidUntil} />
+          <Field label="Internal / customer notes" value={notes} onChange={setNotes} />
+        </div>
+        <section className="rounded-md border border-iron-100 bg-iron-50 p-4" aria-labelledby="quote-review-title"><h3 id="quote-review-title" className="font-semibold text-iron-950">Review before saving</h3><dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-iron-500">Customer / project</dt><dd className="font-semibold text-iron-900">{customerName} — {projectName}</dd></div><div><dt className="text-iron-500">Site</dt><dd className="font-semibold text-iron-900">{siteAddress || "Not provided"}</dd></div><div className="sm:col-span-2"><dt className="text-iron-500">Scope</dt><dd className="text-iron-900">{scopeSummary}</dd></div></dl></section>
+        <div className="grid gap-3 rounded-md bg-iron-50 p-4 text-sm sm:grid-cols-3"><Total label="Subtotal" value={totals.subtotal} /><Total label="GST" value={totals.gst} /><Total label="Quote total" value={totals.total} strong /></div></> : null}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          {intakeStage > 0 ? <button type="button" onClick={() => setIntakeStage((current) => Math.max(0, current - 1))} className="min-h-12 rounded-md border border-iron-200 px-4 py-3 font-semibold text-iron-700">Back</button> : <span />}
+          {intakeStage < intakeStages.length - 1 ? <button type="button" onClick={continueIntake} disabled={!stageComplete(intakeStage)} className="min-h-12 rounded-md bg-iron-950 px-4 py-3 font-semibold text-white disabled:opacity-50">Continue to {intakeStages[intakeStage + 1]}</button> : <button disabled={saving || !projectName.trim() || !customerName.trim() || !scopeSummary.trim() || lineItems.some((line) => !line.description.trim() || Number(line.quantity) <= 0)} className="min-h-12 rounded-md bg-brand-gold px-4 py-3 font-semibold text-brand-black disabled:opacity-50">{saving ? "Saving…" : editing ? "Save quote revision" : "Save draft quote in IHOS"}</button>}
+        </div>
+      </form>
+
+      {accepting ? (
+        <section className="rounded-xl border-2 border-brand-gold bg-white p-5 shadow-brand" aria-labelledby="accept-quote-title">
+          <h2 id="accept-quote-title" className="text-xl font-semibold text-iron-950">Accept {accepting.quote_number} and create the awarded job</h2>
+          <p className="mt-2 text-sm text-iron-600">This is the controlled commitment step. IHOS will award {accepting.project_name}, allocate its permanent job number, and create its Project Workspace.</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2"><Field label="Acceptance reference" value={acceptanceReference} onChange={setAcceptanceReference} required /><Field label="Acceptance note" value={acceptanceNote} onChange={setAcceptanceNote} /></div>
+          <div className="mt-4 flex gap-2"><button type="button" disabled={saving || !acceptanceReference.trim()} onClick={() => void accept()} className="inline-flex items-center gap-2 rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> Confirm acceptance and create job</button><button type="button" onClick={() => setAccepting(null)} className="rounded-md border border-iron-200 px-4 py-2 font-semibold">Cancel</button></div>
+        </section>
+      ) : null}
+
+      {issuing ? (
+        <section className="rounded-xl border-2 border-brand-gold bg-white p-5 shadow-brand" aria-labelledby="issue-quote-title">
+          <h2 id="issue-quote-title" className="text-xl font-semibold text-iron-950">Record issuance of {issuing.quote_number}</h2>
+          <p className="mt-2 text-sm text-iron-600">IHOS records how the approved revision was issued. This action does not send email or text.</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="grid gap-1 text-sm font-medium text-iron-700">Issuance method
+              <select required value={issuanceMethod} onChange={(event) => changeIssuanceMethod(event.target.value)} className="rounded-md border border-iron-200 bg-white px-3 py-2">
+                <option value="">Select how the quote was issued</option>
+                {issuanceMethods.map((method) => <option key={method} value={method}>{method}</option>)}
+              </select>
+            </label>
+            <Field label="Issuance reference" value={issuanceReference} onChange={setIssuanceReference} required />
+          </div>
+          <p className="mt-2 text-xs text-iron-500">IHOS suggests the customer contact when available. Confirm or edit the reference so it matches the actual delivery evidence.</p>
+          <div className="mt-4 flex gap-2"><button type="button" disabled={saving || !issuanceMethod.trim() || !issuanceReference.trim()} onClick={() => void recordIssued()} className="rounded-md bg-brand-gold px-4 py-2 font-semibold text-brand-black disabled:opacity-50">Record issued</button><button type="button" onClick={() => setIssuing(null)} className="rounded-md border border-iron-200 px-4 py-2 font-semibold">Cancel</button></div>
+        </section>
+      ) : null}
+
+      <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
+        <h2 className="text-xl font-semibold text-iron-950">Customer quote register</h2>
+        <p className="mt-1 text-sm text-iron-500">Review, approval, issuance, customer acceptance, and project award are separate controlled actions.</p>
+        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-iron-50 text-xs uppercase tracking-wide text-iron-500"><tr><th className="px-3 py-2">Quote</th><th className="px-3 py-2">Customer / project</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>
+          {quotes.map((quote) => {
+            const targeted = new URLSearchParams(location.search).get("quoteId") === quote.id;
+            const closed = quote.status === "declined" || quote.status === "expired";
+            const management = user?.role === "admin" || user?.role === "operations_manager";
+            const immutableIssue = quote.issue_status === "approved_for_issue" || quote.issue_status === "issued";
+            return <tr id={`quote-${quote.id}`} key={quote.id} className={["border-t border-iron-100", targeted ? "bg-brand-gold/10" : ""].join(" ")}><td className="px-3 py-3 font-semibold text-iron-950">{quote.quote_number}<div className="text-xs font-normal capitalize text-iron-500">{quote.issue_status.replaceAll("_", " ")}</div></td><td className="px-3 py-3"><div>{quote.customer_name}</div><div className="text-xs text-iron-500">{quote.project_name}</div></td><td className="px-3 py-3">{money.format(Number(quote.total))}</td><td className="px-3 py-3 capitalize">{quote.status}</td><td className="px-3 py-3">{quote.job_number ?? "Not awarded"}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{quote.status !== "accepted" ? <>{closed || !immutableIssue ? <button type="button" onClick={() => edit(quote)} className="font-semibold text-iron-700">{closed ? "Start new revision" : "Edit"}</button> : null}{!closed && quote.issue_status === "draft" ? <button type="button" onClick={() => void moveIssueStatus(quote, "ready_for_review")} className="font-semibold text-iron-700">Ready for review</button> : null}{!closed && quote.issue_status === "ready_for_review" && management ? <button type="button" onClick={() => void moveIssueStatus(quote, "approved_for_issue")} className="font-semibold text-emerald-700">Approve for issue</button> : null}{!closed && quote.issue_status === "approved_for_issue" && management ? <button type="button" onClick={() => startIssuance(quote)} className="font-semibold text-emerald-700">Record issued</button> : null}{!closed && management ? <button type="button" onClick={() => { setAccepting(quote); setAcceptanceReference(""); setAcceptanceNote(""); }} className="font-semibold text-emerald-700">Accept / award</button> : null}{!closed ? <><button type="button" onClick={() => void closeQuote(quote, "declined")} className="font-semibold text-red-700">Mark declined</button><button type="button" onClick={() => void closeQuote(quote, "expired")} className="font-semibold text-iron-500">Mark expired</button></> : null}</> : null}<a href={customerQuotesApi.pdfUrl(quote.id)} target="_blank" rel="noopener noreferrer" className="font-semibold text-iron-700">Preview PDF</a><Link to={`/projects/${quote.project_id}`} className="font-semibold text-iron-700">Project</Link></div></td></tr>;
+          })}
+          {!quotes.length ? <tr><td colSpan={6} className="px-3 py-8 text-center text-iron-500">No customer quotes yet.</td></tr> : null}
+        </tbody></table></div>
+      </section>
+    </section>
+  );
+
+  function setLine(index: number, patch: Partial<CustomerQuoteLineItem>) {
+    setLineItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line));
+  }
+}
+
+function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
+  return <label className="grid gap-1 text-sm font-medium text-iron-700">{label}<input required={required} type={type} step={type === "number" ? "0.01" : undefined} min={type === "number" ? "0" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>;
+}
+
+function Total({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {
+  return <div><div className="text-iron-500">{label}</div><div className={strong ? "text-lg font-semibold text-iron-950" : "font-semibold text-iron-800"}>{money.format(value)}</div></div>;
+}
+
+function lines(value: string) {
+  return value.split("\n").map((item) => item.trim()).filter(Boolean);
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function stage(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < intakeStages.length ? value : 0;
+}

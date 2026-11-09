@@ -1,0 +1,68 @@
+name: Approved staging tender imports
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/staging-approved-imports.yml
+  workflow_run:
+    workflows: ["Staging deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: iron-house-os-approved-staging-imports
+  cancel-in-progress: true
+
+jobs:
+  cancel-stale:
+    name: Release stale staging-runner reservation
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Superseded import run cancelled; waiting for the uniquely named staging deployment."
+
+  apply:
+    name: Dry-run, apply, and verify approved staging imports
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.display_title == 'Fix estimate document category and retry staging imports (#210)'
+    runs-on: [self-hosted, linux, ihos-staging]
+    timeout-minutes: 45
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out exact approved release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify main ancestry and approval marker
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          test -f ops/staging-imports/2026-08-19-issues-129-132-134.json
+          python3 -m json.tool ops/staging-imports/2026-08-19-issues-129-132-134.json >/dev/null
+
+      - name: Execute owner-approved staging-only imports
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/approved-staging-import-evidence
+          IHOS_IMPORT_OPERATOR: Iron House OS GitHub staging automation (owner-approved 2026-08-19)
+        run: bash ops/staging-imports/run-approved-tender-imports.sh
+
+      - name: Upload immutable staging import evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: approved-staging-imports-${{ github.run_id }}
+          path: ${{ runner.temp }}/approved-staging-import-evidence
+          if-no-files-found: error
+          retention-days: 90

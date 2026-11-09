@@ -1,0 +1,124 @@
+name: Staging deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character commit SHA from main
+        required: true
+        type: string
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iron-house-os-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy and verify staging
+    runs-on: [self-hosted, linux, ihos-staging]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact release checkout
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          test -f backend/app/services/local_receipt_ocr.py
+
+      - name: Select exact current main for staging
+        id: current_main
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          git fetch --no-tags origin main
+          current_main="$(git rev-parse origin/main)"
+          if [[ "$RELEASE_SHA" != "$current_main" ]]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping stale staging release $RELEASE_SHA; current main is $current_main."
+            exit 0
+          fi
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build and deploy exact checkout
+        if: steps.current_main.outputs.deploy == 'true'
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          git fetch --no-tags origin main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose \
+            --env-file /etc/iron-house-os/staging.env \
+            -f "$GITHUB_WORKSPACE/docker-compose.staging.yml" \
+            -p iron-house-os-staging \
+            up -d --build --force-recreate --remove-orphans
+
+      - name: Verify live backend contains OCR fallback
+        if: steps.current_main.outputs.deploy == 'true'
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose \
+            --env-file /etc/iron-house-os/staging.env \
+            -f "$GITHUB_WORKSPACE/docker-compose.staging.yml" \
+            -p iron-house-os-staging \
+            exec -T backend python -c 'import app.services.local_receipt_ocr; print("LOCAL_OCR_READY")'
+
+      - name: Verify exact staging migration
+        if: steps.current_main.outputs.deploy == 'true'
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          expected_migration="$(
+            sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose \
+              --env-file /etc/iron-house-os/staging.env \
+              -f "$GITHUB_WORKSPACE/docker-compose.staging.yml" \
+              -p iron-house-os-staging \
+              exec -T backend alembic heads | awk '{print $1}'
+          )"
+          migration="$(
+            sudo env IHOS_STAGING_RELEASE_ID="$RELEASE_SHA" docker compose \
+              --env-file /etc/iron-house-os/staging.env \
+              -f "$GITHUB_WORKSPACE/docker-compose.staging.yml" \
+              -p iron-house-os-staging \
+              exec -T postgres sh -ceu \
+              'psql -v ON_ERROR_STOP=1 -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version_num FROM alembic_version"'
+          )"
+          test "$migration" = "$expected_migration"
+          printf 'Verified staging Alembic revision %s\n' "$migration"
+
+      - name: Verify public staging endpoints
+        if: steps.current_main.outputs.deploy == 'true'
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent https://staging.os.ironhousecivil.com/health >/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          curl --fail --silent --show-error https://staging.os.ironhousecivil.com/health
+          readiness="$(curl --fail --silent --show-error https://staging.os.ironhousecivil.com/readiness)"
+          printf '%s\n' "$readiness"
+          READINESS_JSON="$readiness" python3 - <<'PY'
+          import json
+          import os
+
+          readiness = json.loads(os.environ["READINESS_JSON"])
+          actual = readiness.get("checks", {}).get("release_id")
+          expected = os.environ["RELEASE_SHA"]
+          if actual != expected:
+              raise SystemExit(f"Live staging release mismatch: expected {expected}, got {actual}")
+          PY

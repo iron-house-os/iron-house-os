@@ -1,0 +1,5 @@
+vehicle,item,amount_cad,frequency,accounting_treatment,status,notes
+Truck 002,Down payment,2500.00,one-time,Capital asset basis / owner-funded,verified,"CIBC Visa charge to Murray GM Abbotsford"
+Truck 002,Tidy tank / fuel caddy,750.00,one-time,Equipment asset / owner-funded,approved,"Receipt pending"
+Truck 002,Insurance,277.00,monthly,Vehicle insurance operating expense,scheduled,"User-provided monthly premium; first effective date/policy document pending"
+Truck 002,Financing payment,2300.00,monthly,Cash-flow obligation - split principal and interest,scheduled,"Do not expense full payment; financing statement required for principal/interest split"

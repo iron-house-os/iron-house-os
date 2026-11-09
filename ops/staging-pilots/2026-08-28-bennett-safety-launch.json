@@ -1,0 +1,52 @@
+{
+  "issue": 377,
+  "parent_issues": [268, 314, 375],
+  "environment": "staging",
+  "trigger": "human merge of the exact Build 231 pull request followed by a successful exact-release staging deployment",
+  "approval_scope": "initialize only the blocked Bennett safety launch, internal Safety folder entry, and empty portal assignment control",
+  "exact_records": {
+    "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+    "job_number": "IH2026002",
+    "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+    "quote_id": "8f854940-e710-45c2-aae4-7d5706c3a9e2",
+    "quote_number": "Q-2026-002"
+  },
+  "internal_folder_suffix": "13_Award_Handoff/Safety",
+  "safety_record_requirements": [
+    "project_safety_plan",
+    "emergency_action_card",
+    "field_hazard_assessment",
+    "toolbox_talk",
+    "safety_permit",
+    "orientation_verification"
+  ],
+  "initial_state": {
+    "safety_release_status": "blocked",
+    "requirement_applicability": "unconfirmed",
+    "requirement_status": "not_started",
+    "actual_safety_record_count": 0,
+    "portal_access_status": "not_started",
+    "portal_assignment_count": 0,
+    "automatic_portal_provisioning": false,
+    "mobilization_status": "not_ready",
+    "completed_start_controls": 0
+  },
+  "permitted_actions": [
+    "authenticate through the live HTTPS staging origin",
+    "prepare one internal Safety path in the existing awarded workspace manifest",
+    "initialize a blocked six-requirement safety launch shell with unconfirmed applicability",
+    "initialize an empty portal assignment control with automatic provisioning disabled",
+    "repeat initialization to prove stable content and identity",
+    "upload immutable evidence retained for 90 days"
+  ],
+  "prohibited_actions": [
+    "create or claim an external Google Drive folder",
+    "create safety evidence, infer hazards, confirm applicability, or release a safety record",
+    "assign, invite, activate, or create a portal user or employee",
+    "mark mobilization ready or complete a project-start checklist item",
+    "select a vendor, create a commitment, purchase order, actual cost, invoice, or accounting export",
+    "issue or externally send any record",
+    "mutate production",
+    "change DNS, certificates, secrets, backups, authentication, or infrastructure"
+  ]
+}

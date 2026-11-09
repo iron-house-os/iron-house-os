@@ -1,0 +1,41 @@
+{
+  "issue": 371,
+  "parent_issues": [365, 367, 369],
+  "environment": "staging",
+  "source": "bennett_strata_issue_314",
+  "source_revision": "2026-08-27-final",
+  "approval_evidence": "Jeremie Peters replied Accepted on 2026-08-28 immediately after the Build 227 handoff identified explicit management acceptance or award as the next gate",
+  "approval_scope": "accept the exact verified Bennett concrete quote and initialize its awarded staging job",
+  "trigger": "human merge of the exact Build 228 pull request followed by a successful exact-release staging deployment",
+  "exact_records": {
+    "project_id": "9ece69c0-cd6b-4d7b-b208-df77ed849e23",
+    "workspace_id": "6f3a07a7-6c9b-48bc-9711-0ae8230bc7b2",
+    "quote_id": "8f854940-e710-45c2-aae4-7d5706c3a9e2",
+    "quote_number": "Q-2026-002"
+  },
+  "expected_quote": {
+    "subtotal": "36266.67",
+    "gst": "1813.33",
+    "total": "38080.00"
+  },
+  "acceptance": {
+    "reference": "Jeremie Peters management acceptance in ChatGPT on 2026-08-28",
+    "note": "Accepted after Build 227 verified Bennett concrete quote Q-2026-002 in staging; staging award only."
+  },
+  "permitted_actions": [
+    "authenticate through the live HTTPS staging origin",
+    "accept the exact quote once through the existing management endpoint",
+    "allocate one permanent IHYYYYNNN job number with no hyphens",
+    "initialize the award pricing baseline, draft procurement plan, project workspace, start checklist, and launch dashboard",
+    "repeat the acceptance request to prove idempotency",
+    "upload immutable evidence retained for 90 days"
+  ],
+  "prohibited_actions": [
+    "issue or externally send the quote",
+    "change quote scope or value",
+    "create a second quote, opportunity, or job number",
+    "approve procurement commitments or purchase orders",
+    "mutate production",
+    "change DNS, certificates, secrets, backups, authentication, or infrastructure"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "roles": [
+    {
+      "name": "ceo_agent",
+      "purpose": "Own product direction and roadmap priority.",
+      "can_do": ["prioritize backlog", "propose milestones", "summarize product status"],
+      "cannot_do": ["merge pull requests", "spend money", "submit bids", "send external communications"]
+    },
+    {
+      "name": "foreman_agent",
+      "purpose": "Select the next task and produce an implementation plan.",
+      "can_do": ["read roadmap", "read backlog", "select next open task", "write build plan", "run configured coder command"],
+      "cannot_do": ["approve contracts", "merge to main", "change secrets", "send RFQs"]
+    },
+    {
+      "name": "architect_agent",
+      "purpose": "Protect architecture and avoid duplicate systems.",
+      "can_do": ["identify touched files", "recommend services and routes", "flag architectural risk"],
+      "cannot_do": ["override tests", "remove safety checks"]
+    },
+    {
+      "name": "backend_agent",
+      "purpose": "Implement backend routes, schemas, services, and tests.",
+      "can_do": ["create FastAPI routes", "create schemas", "create services", "create backend tests"],
+      "cannot_do": ["change production secrets", "disable auth globally"]
+    },
+    {
+      "name": "frontend_agent",
+      "purpose": "Implement React pages, API clients, and components.",
+      "can_do": ["create pages", "create components", "wire safe routes", "create API clients"],
+      "cannot_do": ["remove existing modules without plan"]
+    },
+    {
+      "name": "qa_agent",
+      "purpose": "Run checks and summarize quality status.",
+      "can_do": ["run pytest", "run frontend tests", "run build checks", "summarize failures"],
+      "cannot_do": ["hide failed tests", "mark failed work complete"]
+    }
+  ]
+}
