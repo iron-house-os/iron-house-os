@@ -894,6 +894,15 @@ def create_field_record(db: Session, payload: FieldRecordCreate, user: Authentic
                     resource_type=resource_type,
                     resource_id=resource_id,
                 )
+    if payload.record_type == "purchase_order_request":
+        # Approval evidence is written only by the dedicated invoice workflow.
+        values["status"] = "pending_approval"
+        values["signatures"] = []
+        values["details"] = {
+            key: value
+            for key, value in payload.details.items()
+            if key not in {"invoice", "invoice_status", "invoice_decision", "invoice_audit_history"}
+        }
     if payload.record_type == "crew_shift":
         values["status"] = "scheduled"
         values["details"] = {**payload.details, "scheduled_by": user.display_name, "scheduled_at": datetime.now(UTC).isoformat()}
@@ -1079,6 +1088,16 @@ def attach_purchase_order_invoice(
     item = require_exists(db, FieldRecord, record_id, "Purchase order")
     if item.record_type != "purchase_order_request":
         raise AppError("That record is not a purchase order.", status_code=400)
+    _require_field_project_access(db, user, item.project_id)
+    profile = _flha_profile(db, user) if user.role == "viewer" else None
+    if user.role == "viewer":
+        if profile is None:
+            raise AppError("Your employee profile is not linked to this account.", status_code=400)
+        if profile.portal_role not in {"foreman", "management"} and (
+            item.employee_id != profile.id
+            and (item.submitted_by or "").casefold() != user.email.casefold()
+        ):
+            raise AppError("You can only attach invoices to your own purchase orders.", status_code=403)
     document = require_exists(db, Document, payload.document_id, "Invoice document")
     if document.project_id != item.project_id:
         raise AppError("The invoice document must belong to the same project as the PO.", status_code=400)
@@ -1088,6 +1107,11 @@ def attach_purchase_order_invoice(
     normalized_number = payload.invoice_number.strip().casefold()
     duplicate_po_numbers = []
     for candidate in db.scalars(select(FieldRecord).where(FieldRecord.record_type == "purchase_order_request")):
+        # Do not disclose another project's PO number through duplicate warnings.
+        if profile is not None and candidate.project_id is not None:
+            candidate_project = db.get(Project, candidate.project_id)
+            if candidate_project is None or not project_safety_launch.portal_access_allowed(candidate_project, profile.id):
+                continue
         invoice = (candidate.details or {}).get("invoice") or {}
         if candidate.id != item.id and str(invoice.get("vendor_name") or "").strip().casefold() == normalized_vendor and str(invoice.get("invoice_number") or "").strip().casefold() == normalized_number:
             duplicate_po_numbers.append(str((candidate.details or {}).get("po_number") or candidate.title))
@@ -1103,6 +1127,7 @@ def attach_purchase_order_invoice(
         "attached_at": now,
     }
     next_details = {**(item.details or {}), "invoice": invoice, "invoice_status": "pending_approval", "invoice_audit_history": history}
+    next_details.pop("invoice_decision", None)
     document_ids = list(dict.fromkeys([*(item.document_ids or []), str(payload.document_id)]))
     item.details = next_details
     item.document_ids = document_ids
