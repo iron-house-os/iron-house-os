@@ -1,5 +1,7 @@
 from uuid import UUID
 
+import pytest
+
 from fastapi import Request
 from fastapi.testclient import TestClient
 
@@ -464,3 +466,119 @@ def test_viewer_cannot_read_customer_quote_register() -> None:
     _authenticate_as("viewer")
     response = client.get("/api/v1/customer-quotes")
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize("project_status", ["awarded", "construction", "completed", "archived"])
+def test_draft_edits_do_not_overwrite_awarded_project(project_status: str) -> None:
+    original = _create_quote()
+    accepted = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/accept",
+        json={"expected_revision": 1, "acceptance_reference": "Signed contract"},
+    )
+    assert accepted.status_code == 200
+    payload = {**_payload(), "project_id": original["project_id"]}
+    draft = client.post("/api/v1/customer-quotes", json=payload).json()
+    with TestingSessionLocal() as db:
+        from app.models.project import Project
+        project = db.get(Project, UUID(original["project_id"]))
+        project.status = project_status
+        db.commit()
+    before = client.get(f"/api/v1/projects/{original['project_id']}").json()
+
+    updated = client.patch(
+        f"/api/v1/customer-quotes/{draft['id']}",
+        json={
+            "expected_revision": 1,
+            "project_name": "Unapproved rename",
+            "customer_name": "Different customer",
+            "site_address": "Different address",
+            "scope_summary": "Unaccepted extra scope",
+            "line_items": [{"description": "Extra work", "quantity": "1", "unit": "LS", "unit_price": "999.00"}],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["total"] == "1048.95"
+    assert client.get(f"/api/v1/projects/{original['project_id']}").json() == before
+    with TestingSessionLocal() as db:
+        from app.models.project import Project
+        project = db.get(Project, UUID(original["project_id"]))
+        assert project.description == _payload()["scope_summary"]
+
+
+@pytest.mark.parametrize("closed_status", ["declined", "expired"])
+@pytest.mark.parametrize("issue_status", ["approved_for_issue", "issued"])
+def test_closed_approved_quote_creates_separate_draft_preserving_evidence(
+    closed_status: str, issue_status: str,
+) -> None:
+    original = _create_quote()
+    ready = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/issue-status",
+        json={"expected_revision": 1, "status": "ready_for_review"},
+    ).json()
+    approved = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/issue-status",
+        json={"expected_revision": ready["record_revision"], "status": "approved_for_issue"},
+    ).json()
+    current = approved
+    if issue_status == "issued":
+        current = client.post(
+            f"/api/v1/customer-quotes/{original['id']}/issue-status",
+            json={
+                "expected_revision": approved["record_revision"], "status": "issued",
+                "issuance_method": "Email", "issuance_reference": "Original delivery",
+            },
+        ).json()
+    closed = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": current["record_revision"], "status": closed_status},
+    ).json()
+    with TestingSessionLocal() as db:
+        snapshot = db.get(CustomerQuote, UUID(original["id"])).approved_snapshot_json
+
+    replacement = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/revisions",
+        json={
+            **_payload(), "expected_revision": closed["record_revision"],
+            "scope_summary": "Replacement scope", "project_id": None,
+        },
+    )
+    assert replacement.status_code == 201, replacement.text
+    draft = replacement.json()
+    assert draft["id"] != original["id"]
+    assert draft["quote_number"] != original["quote_number"]
+    assert draft["project_id"] == original["project_id"]
+    assert draft["scope_summary"] == "Replacement scope"
+    assert draft["status"] == draft["issue_status"] == "draft"
+    assert draft["approved_at"] is None
+    assert draft["issued_at"] is None
+    assert original["quote_number"] in draft["notes"]
+    assert client.get(f"/api/v1/customer-quotes/{original['id']}").json() == closed
+    with TestingSessionLocal() as db:
+        assert db.get(CustomerQuote, UUID(original["id"])).approved_snapshot_json == snapshot
+    edited = client.patch(
+        f"/api/v1/customer-quotes/{draft['id']}",
+        json={"expected_revision": 1, "scope_summary": "Editable replacement"},
+    )
+    assert edited.status_code == 200
+    direct_edit = client.patch(
+        f"/api/v1/customer-quotes/{original['id']}",
+        json={"expected_revision": closed["record_revision"], "scope_summary": "Overwrite original"},
+    )
+    assert direct_edit.status_code == 409
+    issue_without_review = client.post(
+        f"/api/v1/customer-quotes/{draft['id']}/issue-status",
+        json={"expected_revision": 2, "status": "issued", "issuance_method": "Email", "issuance_reference": "No"},
+    )
+    assert issue_without_review.status_code == 409
+
+
+def test_quote_revision_rejects_stale_or_nonclosed_source() -> None:
+    original = _create_quote()
+    url = f"/api/v1/customer-quotes/{original['id']}/revisions"
+    assert client.post(url, json={**_payload(), "expected_revision": 1}).status_code == 409
+    closed = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": 1, "status": "declined"},
+    ).json()
+    assert closed["record_revision"] == 2
+    assert client.post(url, json={**_payload(), "expected_revision": 1}).status_code == 409

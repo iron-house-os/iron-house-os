@@ -105,6 +105,11 @@ export const customerQuotesApi = {
       method: "PATCH",
       body: JSON.stringify({ ...payload, expected_revision: revision }),
     }),
+  revise: (quoteId: string, revision: number, payload: CustomerQuoteInput) =>
+    request<CustomerQuote>(`/customer-quotes/${quoteId}/revisions`, {
+      method: "POST",
+      body: JSON.stringify({ ...payload, expected_revision: revision }),
+    }),
   status: (quoteId: string, revision: number, status: "sent" | "declined" | "expired", note?: string) =>
     request<CustomerQuote>(`/customer-quotes/${quoteId}/status`, {
       method: "POST",

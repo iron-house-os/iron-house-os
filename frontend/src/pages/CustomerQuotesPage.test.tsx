@@ -87,6 +87,11 @@ describe("CustomerQuotesPage", () => {
         savedQuote = { ...quote("draft", 2), ...body, record_revision: 2 };
         return json(savedQuote);
       }
+      if (url.endsWith("/revisions") && init?.method === "POST") {
+        quoteBodies.push(JSON.parse(String(init.body)));
+        savedQuote = { ...quote("draft", 1), id: "quote-2", quote_number: "Q-2026-002" };
+        return json(savedQuote, 201);
+      }
       if (url.endsWith("/accept") && init?.method === "POST") {
         quoteBodies.push(JSON.parse(String(init.body)));
         savedQuote = quote("accepted", 2);
@@ -219,7 +224,7 @@ describe("CustomerQuotesPage", () => {
 
   it.each(["declined", "expired"] as const)("starts a controlled revision from a %s quote", async (status) => {
     vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-    savedQuote = quote(status, 1);
+    savedQuote = { ...quote(status, 1), issue_status: "issued" };
     const user = userEvent.setup();
 
     render(<MemoryRouter><CustomerQuotesPage /></MemoryRouter>);
@@ -236,7 +241,8 @@ describe("CustomerQuotesPage", () => {
     await user.click(screen.getByRole("button", { name: "Continue to Terms and review" }));
     await user.click(screen.getByRole("button", { name: "Save quote revision" }));
 
-    expect(await screen.findByText("Q-2026-001 saved in IHOS as draft.")).toBeInTheDocument();
+    expect(await screen.findByText("Q-2026-002 saved in IHOS as draft.")).toBeInTheDocument();
+    expect(screen.getByText(status)).toBeInTheDocument();
     expect(quoteBodies.at(-1)).toEqual(expect.objectContaining({ expected_revision: 1 }));
   });
 
