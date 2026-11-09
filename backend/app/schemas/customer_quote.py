@@ -45,6 +45,10 @@ class CustomerQuoteCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=10_000)
 
 
+class CustomerQuoteRevision(CustomerQuoteCreate):
+    expected_revision: int = Field(ge=1)
+
+
 class CustomerQuoteUpdate(BaseModel):
     expected_revision: int = Field(ge=1)
     project_name: str | None = Field(default=None, min_length=1, max_length=255)

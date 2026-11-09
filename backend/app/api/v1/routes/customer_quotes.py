@@ -13,6 +13,7 @@ from app.schemas.customer_quote import (
     CustomerQuoteIssueUpdate,
     CustomerQuoteList,
     CustomerQuoteRead,
+    CustomerQuoteRevision,
     CustomerQuoteStatus,
     CustomerQuoteStatusUpdate,
     CustomerQuoteUpdate,
@@ -77,6 +78,16 @@ def update_customer_quote(
     db: DBSession,
 ) -> CustomerQuoteRead:
     return customer_quotes.update_customer_quote(db, quote_id, payload)
+
+
+@router.post("/{quote_id}/revisions", response_model=CustomerQuoteRead, status_code=status.HTTP_201_CREATED)
+def revise_customer_quote(
+    quote_id: UUID,
+    payload: CustomerQuoteRevision,
+    user: CurrentUser,
+    db: DBSession,
+) -> CustomerQuoteRead:
+    return customer_quotes.revise_customer_quote(db, quote_id, payload, user.email)
 
 
 @router.post("/{quote_id}/status", response_model=CustomerQuoteRead)

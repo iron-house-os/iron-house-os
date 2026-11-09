@@ -23,3 +23,10 @@ Customer Quotes closes the gap between verbal customer information and the award
 - A draft, PDF, or sent status is not an award, contract acceptance, purchase order, or authorization to start work.
 - This workflow does not send email, alter production, or perform external submissions.
 - Preserved legacy IHOS job numbers and external source identifiers may retain their original punctuation; new IHOS job numbers do not.
+
+## Closed quotes and awarded project protection
+
+- Starting a revision from a closed quote creates a separately numbered draft linked to the same project, with the predecessor quote number, record ID and revision in its notes. The original closed quote, approved PDF snapshot and issue evidence stay intact.
+- The replacement must pass review and approval again before issuance. The revision action does not issue or accept the replacement.
+- Editing any unaccepted quote cannot synchronize project identity or contract value after award (including construction, completion, archival, or a retained job number/award baseline). An explicit authorized acceptance or amendment remains necessary.
+- No database migration is required. Rollback is a code revert; preserve both original and replacement quote records.

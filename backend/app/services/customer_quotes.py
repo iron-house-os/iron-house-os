@@ -23,6 +23,7 @@ from app.schemas.customer_quote import (
     CustomerQuoteLineItem,
     CustomerQuoteList,
     CustomerQuoteRead,
+    CustomerQuoteRevision,
     CustomerQuoteStatus,
     CustomerQuoteStatusUpdate,
     CustomerQuoteUpdate,
@@ -507,16 +508,46 @@ def update_customer_quote(
     quote.issue_status = CustomerQuoteIssueStatus.draft.value
 
     project = _load_project(db, quote.project_id, for_update=True)
-    if payload.project_name is not None:
-        project.name = payload.project_name.strip()
-    project.client_owner = quote.customer_name
-    project.project_address = quote.site_address
-    project.description = quote.scope_summary
-    project.contract_value = quote.total
+    # A draft is not an approved amendment to an awarded job. Keep all award
+    # identity and pricing intact, including jobs subsequently completed/archived.
+    if (
+        project.status in {ProjectStatus.opportunity.value, ProjectStatus.tendering.value}
+        and not project.project_number
+        and not (project.metadata_json or {}).get("award_pricing_baseline")
+    ):
+        if payload.project_name is not None:
+            project.name = payload.project_name.strip()
+        project.client_owner = quote.customer_name
+        project.project_address = quote.site_address
+        project.description = quote.scope_summary
+        project.contract_value = quote.total
     db.commit()
     db.refresh(quote)
     db.refresh(project)
     return _read(quote, project)
+
+
+def revise_customer_quote(
+    db: Session,
+    quote_id: UUID,
+    payload: CustomerQuoteRevision,
+    actor_email: str,
+) -> CustomerQuoteRead:
+    """Create a separately numbered draft; never rewrite the old approved PDF."""
+    source = _load_quote(db, quote_id, for_update=True)
+    if source.record_revision != payload.expected_revision:
+        raise AppError("This quote changed in another session. Reload before revising.", status_code=409)
+    if source.status not in {CustomerQuoteStatus.declined.value, CustomerQuoteStatus.expired.value}:
+        raise AppError("Only declined or expired quotes can start a replacement draft.", status_code=409)
+    values = payload.model_dump(exclude={"expected_revision"})
+    values["project_id"] = source.project_id
+    values["notes"] = (
+        f"Revision of {source.quote_number} (record {source.id}, revision {source.record_revision}).\n"
+        + (payload.notes or "")
+    )[:10_000]
+    # The original row, its approval snapshot, generated document URL and issue
+    # evidence remain unchanged. The new row must pass review/approval afresh.
+    return create_customer_quote(db, CustomerQuoteCreate(**values), actor_email)
 
 
 def update_customer_quote_status(
