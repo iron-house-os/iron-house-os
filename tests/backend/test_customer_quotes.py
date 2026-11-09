@@ -647,3 +647,45 @@ def test_replacement_rejects_changed_project_name_without_side_effects(project_s
     assert "Keep the current project name" in response.json()["error"]["message"]
     assert client.get("/api/v1/customer-quotes").json() == quotes_before
     assert client.get(f"/api/v1/projects/{original['project_id']}").json() == project_before
+
+
+@pytest.mark.parametrize("closed_status", ["declined", "expired"])
+@pytest.mark.parametrize("submit_trimmed", [False, True])
+def test_replacement_accepts_unchanged_whitespace_project_name(
+    closed_status: str, submit_trimmed: bool,
+) -> None:
+    project_name = "  Smith drainage repair \t"
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": project_name, "status": "opportunity"},
+    )
+    assert project_response.status_code == 201, project_response.text
+    project = project_response.json()
+    assert project["name"] == project_name
+    original_response = client.post(
+        "/api/v1/customer-quotes",
+        json={**_payload(), "project_id": project["id"], "project_name": project_name},
+    )
+    assert original_response.status_code == 201, original_response.text
+    original = original_response.json()
+    closed_response = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/status",
+        json={"expected_revision": 1, "status": closed_status},
+    )
+    assert closed_response.status_code == 200, closed_response.text
+    closed = closed_response.json()
+    project_before = client.get(f"/api/v1/projects/{project['id']}").json()
+
+    replacement = client.post(
+        f"/api/v1/customer-quotes/{original['id']}/revisions",
+        json={
+            **_payload(), "expected_revision": closed["record_revision"],
+            "project_name": project_name.strip() if submit_trimmed else project_name,
+        },
+    )
+    assert replacement.status_code == 201, replacement.text
+    assert replacement.json()["project_id"] == project["id"]
+    assert replacement.json()["project_name"] == project_name
+    assert replacement.json()["id"] != original["id"]
+    assert client.get(f"/api/v1/projects/{project['id']}").json() == project_before
+    assert client.get(f"/api/v1/customer-quotes/{original['id']}").json() == closed

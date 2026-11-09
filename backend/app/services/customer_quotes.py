@@ -540,7 +540,7 @@ def revise_customer_quote(
     if source.status not in {CustomerQuoteStatus.declined.value, CustomerQuoteStatus.expired.value}:
         raise AppError("Only declined or expired quotes can start a replacement draft.", status_code=409)
     project = _load_project(db, source.project_id)
-    if payload.project_name.strip() != project.name:
+    if payload.project_name.strip() != project.name.strip():
         raise AppError(
             "A replacement quote stays linked to its existing project. "
             "Keep the current project name, or rename it in the Project Workspace before revising.",
