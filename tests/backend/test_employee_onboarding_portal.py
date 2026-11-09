@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -346,3 +346,58 @@ def test_invalid_decrypted_packet_is_reported_as_unavailable(monkeypatch) -> Non
 
     with pytest.raises(OnboardingDataUnavailable):
         decrypt_packet("encrypted-packet")
+
+
+@pytest.mark.parametrize("review_action", ["approve", "request-corrections"])
+def test_expired_invitation_does_not_strand_submitted_packet(review_action: str) -> None:
+    client, testing_session, onboarding_id = _client()
+    invitation = client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite")
+    token = _token(invitation.json()["invite_url"])
+    client.post("/api/v1/auth/logout")
+    submitted = client.post(
+        f"/api/v1/employee-onboarding/portal/{token}/submit",
+        json={"packet": _packet(), "acknowledgement": True, "signature_name": "Alex Worker"},
+    )
+    assert submitted.status_code == 200
+    with testing_session() as db:
+        record = db.get(EmployeeOnboarding, UUID(onboarding_id))
+        record.invitation_expires_at = datetime.now(UTC) - timedelta(hours=1)
+        encrypted_packet = record.encrypted_portal_data
+        submitted_at = record.submitted_at
+        db.commit()
+
+    for _ in range(2):
+        assert client.get(f"/api/v1/employee-onboarding/portal/{token}").status_code == 404
+    assert client.put(
+        f"/api/v1/employee-onboarding/portal/{token}/progress", json={"packet": _packet()},
+    ).status_code == 404
+    with testing_session() as db:
+        record = db.get(EmployeeOnboarding, UUID(onboarding_id))
+        assert record.status == "submitted"
+        assert record.encrypted_portal_data == encrypted_packet
+        assert record.submitted_at == submitted_at
+
+    client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@ironhousecontracting.com", "password": "correct-horse-battery-staple"},
+    )
+    assert client.get(f"/api/v1/employee-onboarding/{onboarding_id}/packet").status_code == 200
+    response = client.post(
+        f"/api/v1/employee-onboarding/{onboarding_id}/{review_action}",
+        json={"note": "Please correct your address."} if review_action == "request-corrections" else None,
+    )
+    assert response.status_code == 200
+
+
+def test_expired_unsubmitted_invitation_is_still_marked_expired() -> None:
+    client, testing_session, onboarding_id = _client()
+    invitation = client.post(f"/api/v1/employee-onboarding/{onboarding_id}/invite")
+    token = _token(invitation.json()["invite_url"])
+    with testing_session() as db:
+        record = db.get(EmployeeOnboarding, UUID(onboarding_id))
+        record.invitation_expires_at = datetime.now(UTC) - timedelta(hours=1)
+        db.commit()
+    client.post("/api/v1/auth/logout")
+    assert client.get(f"/api/v1/employee-onboarding/portal/{token}").status_code == 404
+    with testing_session() as db:
+        assert db.get(EmployeeOnboarding, UUID(onboarding_id)).status == "invitation_expired"

@@ -266,8 +266,10 @@ def resolve_token(db: Session, token: str) -> EmployeeOnboarding | None:
     ):
         return None
     if record.invitation_expires_at is None or as_utc(record.invitation_expires_at) < utcnow():
-        record.status = OnboardingStatus.INVITATION_EXPIRED.value
-        db.commit()
+        # Token expiry must not erase a submitted packet awaiting management review.
+        if record.status in EMPLOYEE_EDITABLE_STATUSES:
+            record.status = OnboardingStatus.INVITATION_EXPIRED.value
+            db.commit()
         return None
     return record
 

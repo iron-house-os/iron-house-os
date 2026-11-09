@@ -61,3 +61,27 @@ test("invited employee completes actual IHOS forms on a mobile-safe portal", asy
   await expect(page.getByText("1 of 8 forms saved")).toBeVisible();
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 });
+
+
+test("edited saved onboarding forms remain unsaved until explicitly saved or discarded", async ({ page }, testInfo) => {
+  const packet = {
+    ...emptyPacket,
+    address: { street_address: "100 Main Street", unit: null, city: "Dawson Creek", province: "BC", postal_code: "V1G 1A1", country: "Canada" },
+  };
+  await page.route("**/api/v1/employee-onboarding/portal/secure-token**", async (route) => {
+    await route.fulfill({ json: { onboarding, packet } });
+  });
+  await page.goto("/employee-onboarding/secure-token");
+  await page.getByRole("button", { name: /Home address/ }).click();
+  await page.getByRole("textbox", { name: "Street address" }).fill("200 New Street");
+  await page.getByRole("button", { name: /Review and submit/ }).click();
+  await expect(page.getByRole("button", { name: "Home address: Unsaved changes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
+  await testInfo.attach("onboarding-unsaved-review", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+  await page.getByRole("button", { name: "Home address: Unsaved changes" }).click();
+  await expect(page.getByRole("textbox", { name: "Street address" })).toHaveValue("200 New Street");
+  await page.getByRole("button", { name: "Discard unsaved changes" }).click();
+  await expect(page.getByRole("textbox", { name: "Street address" })).toHaveValue("100 Main Street");
+  await page.getByRole("button", { name: /Review and submit/ }).click();
+  await expect(page.getByRole("button", { name: "Home address: Saved" })).toBeVisible();
+});
