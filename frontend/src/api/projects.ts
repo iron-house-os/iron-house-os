@@ -297,12 +297,12 @@ export const projectStatuses: ProjectStatus[] = [
 ];
 
 export const projectsApi = {
-  list: (status?: string, includeDeleted = false) => {
+  list: (status?: string, includeDeleted = false, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (includeDeleted) params.set("include_deleted", "true");
     const suffix = params.size ? `?${params.toString()}` : "";
-    return request<ProjectList>(`/projects${suffix}`);
+    return request<ProjectList>(`/projects${suffix}`, { signal });
   },
   create: (payload: ProjectCreatePayload) =>
     request<Project>("/projects", {

@@ -62,13 +62,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const suppliersApi = {
-  list: (params: { search?: string; category?: string; service_area?: string }) => {
+  list: (params: { search?: string; category?: string; service_area?: string }, signal?: AbortSignal) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value) query.set(key, value);
     });
     const suffix = query.toString() ? `?${query.toString()}` : "";
-    return request<SupplierList>(`/suppliers${suffix}`);
+    return request<SupplierList>(`/suppliers${suffix}`, { signal });
   },
   create: (payload: SupplierCreatePayload) =>
     request<Supplier>("/suppliers", {

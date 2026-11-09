@@ -85,6 +85,53 @@ describe("dashboard loading", () => {
     expect(screen.getByText("Real project")).toBeTruthy();
   });
 
+  it("aborts timed-out transport requests before retrying", async () => {
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    vi.mocked(projectsApi.list).mockImplementation((_status, _deleted, signal) => {
+      signals.push(signal!);
+      return new Promise((_resolve, reject) => {
+        signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+    render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+    await act(async () => { await Promise.resolve(); });
+    expect(signals[0].aborted).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(signals[0].aborted).toBe(true);
+    await act(async () => { (screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).click(); });
+    expect(signals).toHaveLength(2);
+    expect(signals[1].aborted).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
+  it("aborts all pending section requests on unmount and clears timeout work", async () => {
+    vi.useFakeTimers();
+    vi.mocked(projectsApi.list).mockReturnValue(new Promise(() => {}));
+    vi.mocked(suppliersApi.list).mockReturnValue(new Promise(() => {}));
+    vi.mocked(rfqPackagesApi.list).mockReturnValue(new Promise(() => {}));
+    const view = render(<MemoryRouter><DashboardPage /></MemoryRouter>);
+    const signals = [
+      vi.mocked(projectsApi.list).mock.calls[0][2]!,
+      vi.mocked(suppliersApi.list).mock.calls[0][1]!,
+      vi.mocked(rfqPackagesApi.list).mock.calls[0][1]!,
+    ];
+    expect(signals.every((signal) => !signal.aborted)).toBe(true);
+    await act(async () => { view.unmount(); });
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("aborts superseded StrictMode requests without affecting the current refresh", async () => {
+    const oldProjects = deferred<Awaited<ReturnType<typeof projectsApi.list>>>();
+    vi.mocked(projectsApi.list).mockReturnValueOnce(oldProjects.promise).mockResolvedValue(projectList("Current project"));
+    render(<StrictMode><MemoryRouter><DashboardPage /></MemoryRouter></StrictMode>);
+    expect(await screen.findByText("Current project")).toBeTruthy();
+    expect(vi.mocked(projectsApi.list).mock.calls[0][2]?.aborted).toBe(true);
+    expect(vi.mocked(projectsApi.list).mock.calls[1][2]?.aborted).toBe(false);
+  });
+
   it("ignores an older response after StrictMode restarts the effect", async () => {
     const oldProjects = deferred<Awaited<ReturnType<typeof projectsApi.list>>>();
     vi.mocked(projectsApi.list).mockReturnValueOnce(oldProjects.promise).mockResolvedValue(projectList("Current project"));
