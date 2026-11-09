@@ -56,6 +56,7 @@ export function EmployeeOnboardingPortalPage() {
   const [record, setRecord] = useState<OnboardingRecord | null>(null);
   const [packet, setPacket] = useState<PortalPacket | null>(null);
   const [drafts, setDrafts] = useState<FormDrafts | null>(null);
+  const [dirtySections, setDirtySections] = useState<FormSection[]>([]);
   const [activeSection, setActiveSection] = useState<FormSection | "review">("personal_information");
   const [acknowledged, setAcknowledged] = useState(false);
   const [signatureName, setSignatureName] = useState("");
@@ -73,6 +74,8 @@ export function EmployeeOnboardingPortalPage() {
       setPacket(result.packet);
       setDrafts(buildDrafts(result.onboarding, result.packet));
       setSignatureName(result.packet.signature_name ?? "");
+      setDirtySections([]);
+      setAcknowledged(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Invitation is invalid, revoked, or expired.");
     } finally {
@@ -83,23 +86,39 @@ export function EmployeeOnboardingPortalPage() {
   useEffect(() => { void load(); }, [load]);
 
   const savedSections = useMemo(
-    () => FORM_SECTIONS.filter(([key]) => packet?.[key] !== null).map(([key]) => key),
-    [packet],
+    () => FORM_SECTIONS.filter(([key]) => packet?.[key] != null && !dirtySections.includes(key)).map(([key]) => key),
+    [packet, dirtySections],
   );
   const submitted = record ? ["submitted", "approved", "active"].includes(record.status) : false;
 
   function updateDraft<Key extends FormSection>(key: Key, value: FormDrafts[Key]) {
+    if (saving) return;
     setDrafts((current) => current ? { ...current, [key]: value } : current);
+    setDirtySections((current) => current.includes(key) ? current : [...current, key]);
+    setAcknowledged(false);
+    setSignatureName("");
+    setMessage(null);
+  }
+
+  function discardSection() {
+    if (!record || !packet || activeSection === "review" || saving) return;
+    const section = activeSection;
+    setDrafts((current) => current ? { ...current, [section]: buildDrafts(record, packet)[section] } : current);
+    setDirtySections((current) => current.filter((key) => key !== section));
+    setMessage(null);
+    setError(null);
   }
 
   async function saveSection(event: FormEvent) {
     event.preventDefault();
-    if (!packet || !drafts || activeSection === "review") return;
+    if (!packet || !drafts || activeSection === "review" || saving) return;
     setSaving(true); setError(null); setMessage(null);
     try {
       const candidate = { ...packet, [activeSection]: drafts[activeSection], signature_name: null, signed_at: null };
       const result = await employeeOnboardingApi.savePortalProgress(token, candidate);
       setRecord(result.onboarding); setPacket(result.packet);
+      setDrafts((current) => current ? { ...current, [activeSection]: buildDrafts(result.onboarding, result.packet)[activeSection] } : current);
+      setDirtySections((current) => current.filter((key) => key !== activeSection));
       setMessage(`${sectionLabel(activeSection)} saved securely in IHOS.`);
       const index = FORM_SECTIONS.findIndex(([key]) => key === activeSection);
       setActiveSection(index === FORM_SECTIONS.length - 1 ? "review" : FORM_SECTIONS[index + 1][0]);
@@ -110,7 +129,11 @@ export function EmployeeOnboardingPortalPage() {
   }
 
   async function submit() {
-    if (!packet) return;
+    if (!packet || saving) return;
+    if (dirtySections.length || savedSections.length !== FORM_SECTIONS.length) {
+      setError("Save or discard unsaved changes in every form before submitting.");
+      return;
+    }
     setSaving(true); setError(null); setMessage(null);
     try {
       const result = await employeeOnboardingApi.submitPortal(token, packet, acknowledged, signatureName);
@@ -145,14 +168,14 @@ export function EmployeeOnboardingPortalPage() {
           {submitted ? <section className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900 shadow-sm"><CheckCircle2 className="mt-0.5 h-5 w-5" /><div><h2 className="font-semibold">Submitted for review</h2><p className="mt-1 text-sm">Management must still approve the record and complete orientation, qualification, and deployment controls before activation.</p></div></section> :
             <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
               <nav aria-label="Onboarding forms" className="h-fit rounded-xl border border-iron-100 bg-white p-3 shadow-sm">
-                {FORM_SECTIONS.map(([key, label], index) => <button key={key} type="button" onClick={() => setActiveSection(key)} className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${activeSection === key ? "bg-brand-gold font-semibold text-brand-black" : "text-iron-700 hover:bg-iron-50"}`}><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${savedSections.includes(key) ? "bg-emerald-100 text-emerald-800" : "bg-iron-100"}`}>{savedSections.includes(key) ? "✓" : index + 1}</span><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4" /></button>)}
-                <button type="button" onClick={() => setActiveSection("review")} className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${activeSection === "review" ? "bg-brand-gold font-semibold" : "text-iron-700 hover:bg-iron-50"}`}><span className="grid h-6 w-6 place-items-center rounded-full bg-iron-100 text-xs font-bold">9</span><span className="flex-1">Review and submit</span><ChevronRight className="h-4 w-4" /></button>
+                {FORM_SECTIONS.map(([key, label], index) => <button key={key} type="button" disabled={saving} onClick={() => setActiveSection(key)} className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${activeSection === key ? "bg-brand-gold font-semibold text-brand-black" : "text-iron-700 hover:bg-iron-50"}`}><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${savedSections.includes(key) ? "bg-emerald-100 text-emerald-800" : "bg-iron-100"}`}>{savedSections.includes(key) ? "✓" : index + 1}</span><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4" /></button>)}
+                <button type="button" disabled={saving} onClick={() => setActiveSection("review")} className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${activeSection === "review" ? "bg-brand-gold font-semibold" : "text-iron-700 hover:bg-iron-50"}`}><span className="grid h-6 w-6 place-items-center rounded-full bg-iron-100 text-xs font-bold">9</span><span className="flex-1">Review and submit</span><ChevronRight className="h-4 w-4" /></button>
               </nav>
 
-              {activeSection === "review" ? <ReviewSection record={record} savedSections={savedSections} acknowledged={acknowledged} signatureName={signatureName} saving={saving} onAcknowledged={setAcknowledged} onSignatureName={setSignatureName} onSection={setActiveSection} onSubmit={() => void submit()} /> :
+              {activeSection === "review" ? <ReviewSection record={record} dirtySections={dirtySections} savedSections={savedSections} acknowledged={acknowledged} signatureName={signatureName} saving={saving} onAcknowledged={setAcknowledged} onSignatureName={setSignatureName} onSection={setActiveSection} onSubmit={() => void submit()} /> :
                 <form onSubmit={saveSection} className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
                   <SectionHeading title={sectionLabel(activeSection)} saved={savedSections.includes(activeSection)} />
-                  <div className="mt-5">
+                  <fieldset disabled={saving} className="mt-5">
                     {activeSection === "personal_information" ? <PersonalForm record={record} value={drafts.personal_information} onChange={(value) => updateDraft("personal_information", value)} /> : null}
                     {activeSection === "address" ? <AddressForm value={drafts.address} onChange={(value) => updateDraft("address", value)} /> : null}
                     {activeSection === "emergency_contact" ? <EmergencyForm value={drafts.emergency_contact} onChange={(value) => updateDraft("emergency_contact", value)} /> : null}
@@ -161,7 +184,8 @@ export function EmployeeOnboardingPortalPage() {
                     {activeSection === "employment_agreements" ? <AgreementsForm record={record} value={drafts.employment_agreements} onChange={(value) => updateDraft("employment_agreements", value)} /> : null}
                     {activeSection === "certifications" ? <CertificationsForm value={drafts.certifications} onChange={(value) => updateDraft("certifications", value)} /> : null}
                     {activeSection === "ppe_requirements" ? <PPEForm value={drafts.ppe_requirements} onChange={(value) => updateDraft("ppe_requirements", value)} /> : null}
-                  </div>
+                  </fieldset>
+                  {dirtySections.includes(activeSection) ? <button type="button" disabled={saving} onClick={discardSection} className="mt-4 min-h-11 rounded-md border border-iron-100 px-4 text-sm font-semibold">Discard unsaved changes</button> : null}
                   <button disabled={saving} className="mt-6 min-h-11 rounded-md bg-brand-gold px-5 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{saving ? "Saving securely…" : "Save and continue"}</button>
                 </form>}
             </div>}
@@ -228,9 +252,9 @@ function PPEForm({ value, onChange }: { value: FormDrafts["ppe_requirements"]; o
   return <div className="space-y-5"><fieldset><legend className="text-sm font-semibold">Will this position require site PPE?</legend><div className="mt-2 flex gap-4"><Radio checked={value.site_ppe_required} label="Yes" onChange={() => onChange({ ...value, site_ppe_required: true })} /><Radio checked={!value.site_ppe_required} label="No / office only" onChange={() => onChange({ ...value, site_ppe_required: false, boot_size: null, glove_size: null, shirt_size: null, trouser_size: null })} /></div></fieldset>{value.site_ppe_required ? <div className="grid gap-4 sm:grid-cols-2"><Field label="Work boot size"><input required value={value.boot_size ?? ""} onChange={(event) => onChange({ ...value, boot_size: event.target.value })} /></Field><Field label="Glove size"><input required value={value.glove_size ?? ""} onChange={(event) => onChange({ ...value, glove_size: event.target.value })} /></Field><Field label="Shirt / high-visibility size"><input required value={value.shirt_size ?? ""} onChange={(event) => onChange({ ...value, shirt_size: event.target.value })} /></Field><Field label="Trouser size"><input required value={value.trouser_size ?? ""} onChange={(event) => onChange({ ...value, trouser_size: event.target.value })} /></Field></div> : null}<Check checked={value.prescription_safety_glasses} label="I require prescription safety-glasses accommodation." onChange={(checked) => onChange({ ...value, prescription_safety_glasses: checked })} /><Check checked={value.respirator_fit_test_required} label="I may require respirator fit testing." onChange={(checked) => onChange({ ...value, respirator_fit_test_required: checked })} /><Field label="PPE notes or accommodation request"><textarea rows={4} value={value.notes ?? ""} onChange={(event) => onChange({ ...value, notes: event.target.value || null })} /></Field><p className="text-xs leading-5 text-iron-500">Management must verify PPE and any required fit testing before deployment. This form is a sizing and needs record, not proof of issue or competency.</p></div>;
 }
 
-function ReviewSection({ record, savedSections, acknowledged, signatureName, saving, onAcknowledged, onSignatureName, onSection, onSubmit }: { record: OnboardingRecord; savedSections: FormSection[]; acknowledged: boolean; signatureName: string; saving: boolean; onAcknowledged: (value: boolean) => void; onSignatureName: (value: string) => void; onSection: (value: FormSection) => void; onSubmit: () => void }) {
+function ReviewSection({ record, dirtySections, savedSections, acknowledged, signatureName, saving, onAcknowledged, onSignatureName, onSection, onSubmit }: { record: OnboardingRecord; dirtySections: FormSection[]; savedSections: FormSection[]; acknowledged: boolean; signatureName: string; saving: boolean; onAcknowledged: (value: boolean) => void; onSignatureName: (value: string) => void; onSection: (value: FormSection) => void; onSubmit: () => void }) {
   const complete = savedSections.length === FORM_SECTIONS.length;
-  return <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionHeading title="Review and submit" saved={false} /><p className="mt-2 text-sm text-iron-600">Confirm every employee-completed form is saved. Safety orientation, qualification verification, management approval, and portal activation remain separate IHOS controls.</p><div className="mt-5 grid gap-2">{FORM_SECTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => onSection(key)} className="flex min-h-11 items-center justify-between rounded-md border border-iron-100 px-3 text-left text-sm"><span>{label}</span><span className={savedSections.includes(key) ? "font-semibold text-emerald-700" : "font-semibold text-red-700"}>{savedSections.includes(key) ? "Saved" : "Required"}</span></button>)}</div><div className="mt-5 rounded-md bg-iron-50 p-4"><Check required checked={acknowledged} label="I certify that the information I provided is correct and complete to the best of my knowledge, and I understand that submitting sends this onboarding packet to Iron House management for review." onChange={onAcknowledged} /><Field label="Electronic signature — type your full legal name"><input required value={signatureName} onChange={(event) => onSignatureName(event.target.value)} placeholder={`${record.legal_first_name} ${record.legal_last_name}`} /></Field></div><button type="button" disabled={saving || !complete || !acknowledged || !signatureName.trim()} onClick={onSubmit} className="mt-5 min-h-11 rounded-md bg-brand-gold px-5 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{saving ? "Submitting securely…" : "Submit for management review"}</button></section>;
+  return <section className="rounded-xl border border-iron-100 bg-white p-5 shadow-sm"><SectionHeading title="Review and submit" saved={false} /><p className="mt-2 text-sm text-iron-600">Confirm every employee-completed form is saved. Safety orientation, qualification verification, management approval, and portal activation remain separate IHOS controls.</p>{dirtySections.length ? <p role="alert" className="mt-3 text-sm text-amber-800">Save or discard unsaved changes in every form before submitting.</p> : null}<div className="mt-5 grid gap-2">{FORM_SECTIONS.map(([key, label]) => <button key={key} type="button" onClick={() => onSection(key)} className="flex min-h-11 items-center justify-between rounded-md border border-iron-100 px-3 text-left text-sm"><span>{label}</span><span className={savedSections.includes(key) ? "font-semibold text-emerald-700" : "font-semibold text-red-700"}>{dirtySections.includes(key) ? "Unsaved changes" : savedSections.includes(key) ? "Saved" : "Required"}</span></button>)}</div><div className="mt-5 rounded-md bg-iron-50 p-4"><Check required checked={acknowledged} label="I certify that the information I provided is correct and complete to the best of my knowledge, and I understand that submitting sends this onboarding packet to Iron House management for review." onChange={onAcknowledged} /><Field label="Electronic signature — type your full legal name"><input required value={signatureName} onChange={(event) => onSignatureName(event.target.value)} placeholder={`${record.legal_first_name} ${record.legal_last_name}`} /></Field></div><button type="button" disabled={saving || !complete || !acknowledged || !signatureName.trim()} onClick={onSubmit} className="mt-5 min-h-11 rounded-md bg-brand-gold px-5 py-2 text-sm font-semibold text-brand-black disabled:opacity-50">{saving ? "Submitting securely…" : "Submit for management review"}</button></section>;
 }
 
 function buildDrafts(record: OnboardingRecord, packet: PortalPacket): FormDrafts {

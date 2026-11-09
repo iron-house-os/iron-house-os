@@ -102,4 +102,66 @@ describe("EmployeeOnboardingPortalPage", () => {
       }),
     ));
   });
+  it("blocks stale submission after editing a saved address until the new value is saved", async () => {
+    const user = userEvent.setup();
+    vi.mocked(employeeOnboardingApi.portalRecord).mockResolvedValue({ onboarding: invitationRecord, packet: completePacket });
+    renderPortal();
+    await user.click(await screen.findByRole("button", { name: /Home address/ }));
+    const address = screen.getByRole("textbox", { name: "Street address" });
+    await user.clear(address);
+    await user.type(address, "200 New Street");
+    await user.click(screen.getByRole("button", { name: /Review and submit/ }));
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /I certify that the information I provided/i }));
+    await user.type(screen.getByRole("textbox", { name: /Electronic signature/i }), "Alex Operator");
+    expect(screen.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
+    expect(employeeOnboardingApi.submitPortal).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Home address Unsaved changes" }));
+    expect(screen.getByRole("textbox", { name: "Street address" })).toHaveValue("200 New Street");
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+    await screen.findByRole("heading", { name: "Emergency contact" });
+    await user.click(screen.getByRole("button", { name: /Review and submit/ }));
+    await user.click(screen.getByRole("button", { name: "Submit for management review" }));
+    await waitFor(() => expect(employeeOnboardingApi.submitPortal).toHaveBeenCalledWith(
+      "secure-token", expect.objectContaining({ address: expect.objectContaining({ street_address: "200 New Street" }) }), true, "Alex Operator",
+    ));
+  });
+
+  it("keeps failed saves dirty and lets the employee explicitly discard edits", async () => {
+    const user = userEvent.setup();
+    vi.mocked(employeeOnboardingApi.portalRecord).mockResolvedValue({ onboarding: invitationRecord, packet: completePacket });
+    vi.mocked(employeeOnboardingApi.savePortalProgress).mockRejectedValueOnce(new Error("Save failed"));
+    renderPortal();
+    await user.click(await screen.findByRole("button", { name: /Home address/ }));
+    await user.type(screen.getByRole("textbox", { name: "Street address" }), " changed");
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
+    await user.click(screen.getByRole("button", { name: /Review and submit/ }));
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Home address Unsaved changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard unsaved changes" }));
+    expect(screen.getByRole("textbox", { name: "Street address" })).toHaveValue("100 Main Street");
+    await user.click(screen.getByRole("button", { name: /Review and submit/ }));
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /I certify that the information I provided/i }));
+    await user.type(screen.getByRole("textbox", { name: /Electronic signature/i }), "Alex Operator");
+    await user.click(screen.getByRole("button", { name: "Submit for management review" }));
+    await waitFor(() => expect(employeeOnboardingApi.submitPortal).toHaveBeenCalledWith("secure-token", completePacket, true, "Alex Operator"));
+  });
+
+  it("keeps other edited sections dirty when saving one section", async () => {
+    const user = userEvent.setup();
+    vi.mocked(employeeOnboardingApi.portalRecord).mockResolvedValue({ onboarding: invitationRecord, packet: completePacket });
+    renderPortal();
+    await user.click(await screen.findByRole("button", { name: /Home address/ }));
+    await user.type(screen.getByRole("textbox", { name: "Street address" }), " changed");
+    await user.click(screen.getByRole("button", { name: /Personal information/ }));
+    await user.type(screen.getByRole("textbox", { name: "Mobile phone" }), "9");
+    await user.click(screen.getByRole("button", { name: "Save and continue" }));
+    await screen.findByRole("heading", { name: "Home address" });
+    await user.click(screen.getByRole("button", { name: /Review and submit/ }));
+    expect(screen.getByRole("button", { name: "Home address Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit for management review" })).toBeDisabled();
+  });
+
 });
