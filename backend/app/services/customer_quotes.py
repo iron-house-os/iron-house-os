@@ -539,12 +539,24 @@ def revise_customer_quote(
         raise AppError("This quote changed in another session. Reload before revising.", status_code=409)
     if source.status not in {CustomerQuoteStatus.declined.value, CustomerQuoteStatus.expired.value}:
         raise AppError("Only declined or expired quotes can start a replacement draft.", status_code=409)
+    project = _load_project(db, source.project_id)
+    if payload.project_name.strip() != project.name.strip():
+        raise AppError(
+            "A replacement quote stays linked to its existing project. "
+            "Keep the current project name, or rename it in the Project Workspace before revising.",
+            status_code=422,
+        )
     values = payload.model_dump(exclude={"expected_revision"})
     values["project_id"] = source.project_id
-    values["notes"] = (
-        f"Revision of {source.quote_number} (record {source.id}, revision {source.record_revision}).\n"
-        + (payload.notes or "")
-    )[:10_000]
+    predecessor = f"Revision of {source.quote_number} (record {source.id}, revision {source.record_revision}).\n"
+    notes = predecessor + (payload.notes or "")
+    if len(notes) > 10_000:
+        raise AppError(
+            f"Replacement quote notes must be at most {10_000 - len(predecessor)} characters "
+            "to leave room for the predecessor reference. No notes have been saved or truncated.",
+            status_code=422,
+        )
+    values["notes"] = notes
     # The original row, its approval snapshot, generated document URL and issue
     # evidence remain unchanged. The new row must pass review/approval afresh.
     return create_customer_quote(db, CustomerQuoteCreate(**values), actor_email)

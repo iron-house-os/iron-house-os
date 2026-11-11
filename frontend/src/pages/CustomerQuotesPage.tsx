@@ -345,7 +345,7 @@ export function CustomerQuotesPage() {
 
       <form onSubmit={submit} className="space-y-5 rounded-xl border border-iron-100 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `${editing.status === "declined" || editing.status === "expired" ? "New revision" : "Edit"} ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form. Closed quotes create a separately numbered draft and preserve the original.</p></div>
+          <div><h2 className="text-xl font-semibold text-iron-950">{editing ? `${editing.status === "declined" || editing.status === "expired" ? "New revision" : "Edit"} ${editing.quote_number}` : "New verbal quote intake"}</h2><p className="mt-1 text-sm text-iron-500">Required information is saved in IHOS; nothing is sent or accepted by this form. Closed quotes create a separately numbered draft and preserve the original. A replacement keeps the existing project name; rename it in the Project Workspace first if needed.</p></div>
           {editing ? <button type="button" onClick={reset} className="rounded-md border border-iron-200 px-3 py-2 text-sm font-semibold">Cancel edit</button> : null}
         </div>
         <ol aria-label="Quote intake stages" className="grid gap-2 sm:grid-cols-4">
@@ -357,7 +357,7 @@ export function CustomerQuotesPage() {
         </ol>
 
         {intakeStage === 0 ? <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Project / work name" value={projectName} onChange={setProjectName} required />
+          <Field label="Project / work name" value={projectName} onChange={setProjectName} readOnly={editing?.status === "declined" || editing?.status === "expired"} required />
           <Field label="Customer / company" value={customerName} onChange={setCustomerName} required />
           <Field label="Customer email" type="email" value={customerEmail} onChange={setCustomerEmail} />
           <Field label="Customer phone" value={customerPhone} onChange={setCustomerPhone} />
@@ -445,8 +445,8 @@ export function CustomerQuotesPage() {
   }
 }
 
-function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
-  return <label className="grid gap-1 text-sm font-medium text-iron-700">{label}<input required={required} type={type} step={type === "number" ? "0.01" : undefined} min={type === "number" ? "0" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>;
+function Field({ label, value, onChange, type = "text", required = false, readOnly = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean; readOnly?: boolean }) {
+  return <label className="grid gap-1 text-sm font-medium text-iron-700">{label}<input required={required} readOnly={readOnly} type={type} step={type === "number" ? "0.01" : undefined} min={type === "number" ? "0" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-md border border-iron-200 px-3 py-2" /></label>;
 }
 
 function Total({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) {

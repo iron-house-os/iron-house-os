@@ -231,6 +231,7 @@ describe("CustomerQuotesPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Start new revision" }));
     expect(screen.getByRole("heading", { name: "New revision Q-2026-001" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project / work name")).toHaveAttribute("readonly");
     expect(screen.queryByRole("button", { name: "Accept / award" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark sent" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark declined" })).not.toBeInTheDocument();
