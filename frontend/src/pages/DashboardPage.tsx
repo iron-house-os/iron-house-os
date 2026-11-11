@@ -27,23 +27,29 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refreshVersion = useRef(0);
+  const pendingRequests = useRef(new Set<AbortController>());
 
   async function refresh() {
     const version = ++refreshVersion.current;
+    pendingRequests.current.forEach((controller) => controller.abort());
+    pendingRequests.current.clear();
     setIsLoading(true);
     setError(null);
     const errors: string[] = [];
     async function loadSection<K extends keyof DashboardState>(
-      key: K, label: string, request: () => Promise<{ items: DashboardState[K] }>,
+      key: K, label: string, request: (signal: AbortSignal) => Promise<{ items: DashboardState[K] }>,
     ) {
-      let timeout: number | undefined;
+      const controller = new AbortController();
+      pendingRequests.current.add(controller);
+      const timeout = window.setTimeout(() => controller.abort(), SECTION_TIMEOUT_MS);
+      let onAbort: (() => void) | undefined;
       try {
-        const result = await Promise.race([
-          request(),
-          new Promise<never>((_, reject) => {
-            timeout = window.setTimeout(() => reject(new Error("Dashboard request timed out")), SECTION_TIMEOUT_MS);
-          }),
-        ]);
+        // Keep cleanup bounded even if a transport ignores AbortSignal.
+        const cancelled = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new DOMException("Dashboard request cancelled", "AbortError"));
+          controller.signal.addEventListener("abort", onAbort, { once: true });
+        });
+        const result = await Promise.race([request(controller.signal), cancelled]);
         if (refreshVersion.current === version) {
           setState((previous) => ({ ...previous, [key]: result.items }));
         }
@@ -53,20 +59,26 @@ export function DashboardPage() {
           setError(`Unable to refresh ${errors.join(", ")}. Other sections remain available; retry Refresh.`);
         }
       } finally {
-        if (timeout !== undefined) window.clearTimeout(timeout);
+        window.clearTimeout(timeout);
+        if (onAbort) controller.signal.removeEventListener("abort", onAbort);
+        pendingRequests.current.delete(controller);
       }
     }
     await Promise.all([
-      loadSection("projects", "projects", () => projectsApi.list()),
-      loadSection("suppliers", "suppliers", () => suppliersApi.list({})),
-      loadSection("rfqs", "RFQs", () => rfqPackagesApi.list()),
+      loadSection("projects", "projects", (signal) => projectsApi.list(undefined, false, signal)),
+      loadSection("suppliers", "suppliers", (signal) => suppliersApi.list({}, signal)),
+      loadSection("rfqs", "RFQs", (signal) => rfqPackagesApi.list(undefined, signal)),
     ]);
     if (refreshVersion.current === version) setIsLoading(false);
   }
 
   useEffect(() => {
     void refresh();
-    return () => { refreshVersion.current += 1; };
+    return () => {
+      refreshVersion.current += 1;
+      pendingRequests.current.forEach((controller) => controller.abort());
+      pendingRequests.current.clear();
+    };
   }, []);
 
   const activeProjects = state.projects.filter((project) => !["completed", "archived"].includes(project.status));

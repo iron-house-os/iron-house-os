@@ -179,9 +179,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const rfqPackagesApi = {
-  list: (projectId?: string) => {
+  list: (projectId?: string, signal?: AbortSignal) => {
     const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
-    return request<RFQPackageList>(`/rfqs${query}`);
+    return request<RFQPackageList>(`/rfqs${query}`, { signal });
   },
   create: (payload: RFQPackageCreatePayload) =>
     request<RFQPackage>("/rfqs", {
