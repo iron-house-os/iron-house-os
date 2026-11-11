@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "source_issue": 411,
+  "prepared_on": "2026-10-18",
+  "production_written": false,
+  "instructions": "Recheck live inventory and Drive source/addenda; preview each entry. Resolve conflicts using exact reviewed existing_project_id; never infer award or job number. This is data for the private connector, NOT the legacy financial importer.",
+  "records": [
+    {
+      "source_folder_id": "1l26x8d9PI-7HwubgCXfjG-Q3KdmZC8Pl",
+      "name": "Coquitlam School District — General Contractor Prequalification",
+      "tender_number": "27-06N",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1qx6dXKGqFpu3Y9wGG6UBU1h_YOqChgIS",
+      "name": "Yukon — General Plumbing Repairs and Maintenance",
+      "tender_number": "RFB-2026-7-5478",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1M8cWl1sdII3B4FP0Il20vy2DE1YqnC6M",
+      "name": "Abbotsford — Discovery Trail West",
+      "tender_number": "1220-2026-4201",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1g8Exq96W-3vPlqQme-Gj-ok2tNrHGU6O",
+      "name": "Harrison Hot Springs — Alder Avenue and McCombs Drive Storm Sewer Upgrades",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1f3q6gLUUD-A4NqnxMeWtIGFVpRC_WAgs",
+      "name": "Hornby Island — Tribune Bay Parking",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1XGelH8QnECpKLmVFM61GkcKyQBIQ0BfP",
+      "name": "Surrey Centre Block Phase 1 — TP1.1 Civil Works",
+      "tender_number": "2220091 / TP1.1",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1o3PuLbm_PMxOXR1mVRRORnGNj5sBRs9x",
+      "name": "Delta — Derwent Way Sidewalk Construction",
+      "tender_number": "26-198",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1DJvQ-wGRxKS_EbnW6vG9aabyH8WnZwZu",
+      "name": "Ucluelet — Multi-Purpose Court",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "17rXXSUE1sl_akucTQJuvWARhQYo4tFJw",
+      "name": "Surrey — Road Restoration Services — Water Operations",
+      "tender_number": "1220-040-2026-080",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "17GSPlwu5yGX2ZE_D99pET7Sehb7hsgDl",
+      "name": "Surrey — District Energy System Expansion",
+      "tender_number": "5525-001-11",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1_IWE0RduCOshldKsBF8OGVDLZdt43l4a",
+      "name": "Surrey — 32 Avenue Pond Restoration",
+      "tender_number": "1717-058-31",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1D6FhAhSJwbyQaipeH2-Z8vTQ4vqNdMiH",
+      "name": "Lytton First Nation — Nohomeen Berm",
+      "tender_number": "24-3028C",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1e3n2pm-AVPJDSU9iJnZoj4FKtvgP2zQr",
+      "name": "Ridgeview Park Playground and Splash Pad",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1Jmlzhiq0YhhpMhm3AM9sGz1Vp9UkZ7Il",
+      "name": "Jas Telus",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1s-cOa0Arng7FB1sa7Bf0Ducw4hqrAwzS",
+      "name": "Lytton FN culverts",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "13e_CHHMMJXE_XN-9JhS-xG_EssxzopN-",
+      "name": "26-204 - Township of Langley - Drainage Culverts Condition Assessment - Due 2026-08-26",
+      "tender_number": null,
+      "aliases": [
+        "Langley culvert"
+      ]
+    },
+    {
+      "source_folder_id": "1kpPZSTPwxwGaxdk7BMF3vvRezw0EpLu0",
+      "name": "Yorkson Park",
+      "tender_number": "26-207",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1xF8DFji3oQfDxzhbNZjB4coKbXICDkxU",
+      "name": "Hope GC erosion control",
+      "tender_number": "2026-LCI-02",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1x8jdyiBthezgTOHUrluRJXy8AHff9vaT",
+      "name": "City of Fernie - 2026 Sanitary Manhole Infiltration Repair",
+      "tender_number": null,
+      "aliases": [
+        "Fernie Manholes",
+        "Sani manhole repair Fernie"
+      ]
+    },
+    {
+      "source_folder_id": "15tpur5YZr-UzF7I_zlNemhTGEWhOwsyg",
+      "name": "Village of Cumberland - 2026 Sewer Separation - ITT-2602",
+      "tender_number": null,
+      "aliases": [
+        "Cumberland sewer separation"
+      ]
+    },
+    {
+      "source_folder_id": "1OTshIHFPyj4UR_NyjH957-_HJ2FjhBo4",
+      "name": "Hillcrest Avenue Storm Rehabilitation - 2311-30196-00",
+      "tender_number": null,
+      "aliases": [
+        "Edward sewer"
+      ]
+    },
+    {
+      "source_folder_id": "14gJumcOdON6NZH6AyrYw3rEjLtTZjXQl",
+      "name": "Q26 335 - Firehall 3 Concrete Driveway",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1c8bVsnECh-fgKLdc_sAx-fyEWpl2QGkC",
+      "name": "Parksville",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1E9HmYXU39jghxu0xNorCqsEegV7cui3N",
+      "name": "Braidwood",
+      "tender_number": "C26-085",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "14RLoWDd7OZ0aeIa60QQu9yB-U2vmWXcM",
+      "name": "McLeod Lake Watermain",
+      "tender_number": "1827-05",
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1Oeov9EaULG-h5Cfcrru7oaJFkLnBFmXM",
+      "name": "Cassidys",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1rD6tekhy7se2oBgNbR4G3qTcmkFjkev9",
+      "name": "Elk River FSR",
+      "tender_number": null,
+      "aliases": []
+    },
+    {
+      "source_folder_id": "1SlGpPpOsdbsaQyihZkDSgIqOsaEIZhb4",
+      "name": "TFN - Multi-Use Pathway on Tsawwassen Drive",
+      "tender_number": "2026-003",
+      "aliases": [
+        "TFN path"
+      ]
+    },
+    {
+      "source_folder_id": "1nBDbFY39zN5yiDDlyj6hR88Asjmxi783",
+      "name": "Downes Rd MOT",
+      "tender_number": null,
+      "aliases": []
+    }
+  ]
+}
