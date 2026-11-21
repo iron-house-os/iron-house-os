@@ -1,0 +1,64 @@
+name: Verify production NGINX repair
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: iron-house-os-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, ihos-production]
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Collect read-only evidence for issue 430
+        shell: bash
+        run: |
+          missing=0
+          get() {
+            curl --noproxy '*' --fail --silent --show-error --max-time 15 \
+              --resolve os.ironhousecivil.com:443:127.0.0.1 "$@"
+          }
+          get 'https://os.ironhousecivil.com/health' || missing=1
+          get 'https://os.ironhousecivil.com/readiness' | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          print("Origin release:", data["checks"]["release_id"])
+          sys.exit(data["status"] != "ready")
+          ' || missing=1
+
+          protocol=$(get --http2 --output /dev/null --write-out '%{http_version}' \
+            'https://os.ironhousecivil.com/health') || protocol=unknown
+          printf 'Origin HTTP version: %s\n' "$protocol"
+          [[ "$protocol" == 1.1 ]] || missing=1
+
+          dpkg-query -W -f='${Package} ${Version}\n' 'nginx*' 2>/dev/null || missing=1
+          master=$(systemctl show nginx.service --property MainPID --value)
+          if [[ "$master" =~ ^[1-9][0-9]*$ ]] && cmp -s "/proc/$master/exe" /usr/sbin/nginx; then
+            echo 'Active NGINX master matches the installed binary.'
+          else
+            echo 'Active NGINX master could not be matched to the installed binary.'
+            missing=1
+          fi
+
+          state=/var/lib/iron-house-os/deploy-agent/last-success.json
+          if [[ -r "$state" ]]; then
+            python3 -c '
+          import json, re, sys
+          data = json.load(sys.stdin)
+          for key, value in data.items():
+              if isinstance(value, str) and re.fullmatch(r"(?:sha256:)?[0-9a-f]{40,64}", value):
+                  print(f"{key}: {value}")
+          ' < "$state" || missing=1
+          else
+            echo 'Deploy-agent state is unavailable to the runner.'
+            missing=1
+          fi
+
+          echo 'Review the package revision against USN-9159-1 and confirm the frontend image ID, version, and authenticated smoke using deployment evidence.'
+          exit "$missing"
