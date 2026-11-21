@@ -96,7 +96,7 @@ def test_cutover_installs_failure_recovery_before_maintenance_mutation() -> None
     compose_build = '"${compose[@]}" build'
     compose_recreate = "\nrecreate_production_stack\n\nreadiness_url="
 
-    assert "previous_gateway=$(mktemp)" in cutover
+    assert "previous_gateway" not in cutover
     assert "application_ready=0" in cutover
     assert cutover.index(trap) < cutover.rindex(maintenance)
     assert cutover.index(compose_build) < cutover.rindex(maintenance)

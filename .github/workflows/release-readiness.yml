@@ -276,9 +276,15 @@ jobs:
           bash -n ops/digitalocean/cutover.sh scripts/verify_s3_targets.sh scripts/upload_backup_s3.sh
           docker run --rm \
             -v "$PWD/ops/digitalocean/nginx-maintenance.conf:/etc/nginx/conf.d/default.conf:ro" \
-            nginx:1.27-alpine nginx -t
+            nginx:1.30.7-alpine@sha256:caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3 nginx -t
       - name: Start production stack
         run: docker compose --env-file .env.production.example -f docker-compose.production.yml up -d --build --wait
+      - name: Verify running frontend NGINX
+        run: |
+          version=$(docker compose --env-file .env.production.example -f docker-compose.production.yml exec -T frontend nginx -v 2>&1)
+          test "$version" = "nginx version: nginx/1.30.7"
+          container=$(docker compose --env-file .env.production.example -f docker-compose.production.yml ps -q frontend)
+          docker inspect --format '{{.Image}}' "$container"
       - name: Prove Build 208 PostgreSQL upgrade
         run: |
           database_url="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/ihos_build_208_upgrade"
