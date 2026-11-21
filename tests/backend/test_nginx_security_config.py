@@ -24,13 +24,22 @@ def test_nginx_configs_do_not_enable_http2(path: str) -> None:
 
 def test_frontend_uses_patched_immutable_nginx_image() -> None:
     dockerfile = (ROOT / "frontend/Dockerfile").read_text()
-    image = re.search(
-        r"^FROM nginx:(\d+)\.(\d+)\.(\d+)-alpine@sha256:[0-9a-f]{64}$",
-        dockerfile,
-        re.MULTILINE,
+    stages = re.findall(r"^FROM\s+(\S+)", dockerfile, re.MULTILINE | re.IGNORECASE)
+    assert stages[-1] == (
+        "nginx:1.30.7-alpine@sha256:"
+        "caf4e1e032a20f9c3c5e28fc7f25ffd768ad8677b4975c54193075997b3a97e3"
     )
-    assert image is not None
-    major, minor, patch = map(int, image.groups())
-    assert (major, minor) > (1, 31) or (
-        (major, minor) == (1, 31) and patch >= 9
-    ) or ((major, minor) == (1, 30) and patch >= 7)
+    assert 'RUN test "$(nginx -v 2>&1)" = "nginx version: nginx/1.30.7"' in dockerfile
+
+
+def test_cutover_recovery_preserves_security_and_verifies_runtime() -> None:
+    cutover = (ROOT / "ops/digitalocean/cutover.sh").read_text()
+    recovery = cutover.split("rollback_maintenance() {", 1)[1].split("trap rollback_maintenance", 1)[0]
+    assert "ops/digitalocean/nginx-live.conf" in recovery
+    assert "ops/digitalocean/nginx-maintenance.conf" in recovery
+    assert "previous_gateway" not in recovery
+    assert 'python3 scripts/patch_nginx_host.py' in cutover
+    assert cutover.index("scripts/scheduled_backup.sh") < cutover.index("python3 scripts/patch_nginx_host.py")
+    assert cutover.index("python3 scripts/patch_nginx_host.py") < cutover.index("gateway_mutated=1")
+    assert 'exec -T frontend nginx -v' in cutover
+    assert "frontend_image_id=$(docker inspect" in cutover

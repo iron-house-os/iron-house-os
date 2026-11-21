@@ -213,6 +213,7 @@ IHOS_BACKUP_ROOT=/var/backups/iron-house-os \
 IHOS_BACKUP_NAME="pre-cutover-$stamp" \
 IHOS_BACKUP_LOCK_WAIT_SECONDS=300 \
 scripts/scheduled_backup.sh
+python3 scripts/patch_nginx_host.py
 certbot certonly \
   --webroot \
   --webroot-path /var/www/letsencrypt \
@@ -223,25 +224,18 @@ certbot certonly \
   --keep-until-expiring
 
 gateway_config=/etc/nginx/sites-available/iron-house-os
-previous_gateway=$(mktemp)
-previous_gateway_present=0
-if [[ -f "$gateway_config" ]]; then
-  cp --preserve=mode "$gateway_config" "$previous_gateway"
-  previous_gateway_present=1
-fi
 gateway_mutated=0
 application_ready=0
 rollback_maintenance() {
   status=$?
   if ((status != 0 && gateway_mutated == 1)); then
-    if ((application_ready == 1 && previous_gateway_present == 1)); then
-      install -m 0644 "$previous_gateway" "$gateway_config"
+    if ((application_ready == 1)); then
+      install -m 0644 ops/digitalocean/nginx-live.conf "$gateway_config"
     else
       install -m 0644 ops/digitalocean/nginx-maintenance.conf "$gateway_config"
     fi
     nginx -t >/dev/null && systemctl reload nginx
   fi
-  rm -f "$previous_gateway"
   exit "$status"
 }
 trap rollback_maintenance EXIT
@@ -282,6 +276,10 @@ if ((readiness_ready != 1)); then
   exit 1
 fi
 application_ready=1
+frontend_nginx_version=$("${compose[@]}" exec -T frontend nginx -v 2>&1)
+[[ "$frontend_nginx_version" == "nginx version: nginx/1.30.7" ]]
+frontend_image_id=$(docker inspect --format '{{.Image}}' "$("${compose[@]}" ps -q frontend)")
+echo "Verified frontend $frontend_nginx_version image $frontend_image_id"
 
 install -m 0644 ops/digitalocean/nginx-live.conf "$gateway_config"
 nginx -t
@@ -314,6 +312,9 @@ cat >"$acceptance" <<EOF
 - Pre-cutover recovery point: s3://$IHOS_BACKUP_S3_BUCKET/${IHOS_BACKUP_S3_PREFIX:-recovery-bundles}/pre-cutover-$stamp.tar.gz
 - Release evidence: $evidence_file
 - Observed health/readiness: passed
+- Frontend NGINX: $frontend_nginx_version
+- Running frontend image: $frontend_image_id
+- Host NGINX: Ubuntu security package verified and restarted
 - Authenticated smoke result: passed
 - Document upload/download result: passed by full local smoke
 - TLS result: passed
@@ -322,7 +323,6 @@ cat >"$acceptance" <<EOF
 - Decision time (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 chmod 0600 "$acceptance"
-rm -f "$previous_gateway"
 trap - EXIT
 echo "Release $release_sha live cutover passed: https://$domain"
 echo "Operator acceptance: $acceptance"

@@ -1,0 +1,52 @@
+name: Install approved NGINX security repair
+
+on:
+  workflow_run:
+    workflows: [Release readiness]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: iron-house-os-nginx-repair-430
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch the approved repair through Production deploy
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      EVIDENCE_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - name: Verify the exact merged repair and dispatch existing protected deployment
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[0-9]+$ ]]
+          repair=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/431")
+          if [[ "$(jq -r .merged <<<"$repair")" != true ||
+                "$(jq -r .merge_commit_sha <<<"$repair")" != "$RELEASE_SHA" ]]; then
+            echo "This release is outside the owner-approved NGINX repair."
+            exit 0
+          fi
+          [[ "$(jq -r .base.ref <<<"$repair")" == main ]]
+          [[ "$(jq -r .head.ref <<<"$repair")" == agent/security/430-nginx-http2 ]]
+          [[ "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)" == "$RELEASE_SHA" ]]
+          previous=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/production-deploy.yml/runs?event=workflow_dispatch&head_sha=${RELEASE_SHA}&per_page=100")
+          if jq -e '.workflow_runs | length > 0' <<<"$previous" >/dev/null; then
+            echo "A production run already exists for this exact repair."
+            exit 0
+          fi
+          gh workflow run production-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f release_sha="$RELEASE_SHA" -f evidence_run_id="$EVIDENCE_RUN_ID"
